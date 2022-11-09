@@ -8,6 +8,7 @@ import (
 	dbEditCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/edit"
 	dbFetchCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/fetch"
 	dbSearchCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/search"
+	dbUploadCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/upload"
 )
 
 func NewCmdDB() *cobra.Command {
@@ -30,6 +31,7 @@ func NewCmdDB() *cobra.Command {
 	cmd.AddCommand(dbEditCmd.NewCmdEdit())
 	cmd.AddCommand(dbFetchCmd.NewCmdFetch())
 	cmd.AddCommand(dbSearchCmd.NewCmdSearch())
+	cmd.AddCommand(dbUploadCmd.NewCmdUpload())
 
 	return cmd
 }

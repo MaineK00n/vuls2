@@ -1,0 +1,124 @@
+package db
+
+import (
+	"github.com/pkg/errors"
+
+	"github.com/MaineK00n/vuls2/pkg/db/boltdb"
+	"github.com/MaineK00n/vuls2/pkg/db/rdb"
+	"github.com/MaineK00n/vuls2/pkg/db/redis"
+	"github.com/MaineK00n/vuls2/pkg/types"
+)
+
+type options struct {
+}
+
+type Option interface {
+	apply(*options)
+}
+
+type DB struct {
+	name   string
+	driver Driver
+}
+
+type Driver interface {
+	Close() error
+
+	PutVulnerability(string, string, types.Vulnerability) error
+	PutPackage(string, string, map[string]types.Packages) error
+	PutCPEConfiguration(string, string, map[string]types.CPEConfigurations) error
+	PutRedHatRepoToCPE(string, string, types.RepositoryToCPE) error
+
+	// GetVulnerability([]string) (map[string]map[string]types.Vulnerability, error)
+	// GetPackage([]string) (map[string]map[string][]types.Package, error)
+	// GetCPEConfiguration([]string) (map[string]map[string][]types.CPEConfiguration, error)
+	// GetRedHatRepositoryCPE([]string) (map[string][]string, error)
+}
+
+func (db *DB) Name() string {
+	return db.name
+}
+
+func Open(dbType, dbPath string, debug bool, opts ...Option) (*DB, error) {
+	switch dbType {
+	case "boltdb":
+		d, err := boltdb.Open(dbPath, debug)
+		if err != nil {
+			return nil, errors.Wrap(err, "open boltdb")
+		}
+		return &DB{name: dbType, driver: d}, nil
+	case "sqlite3", "mysql", "postgres":
+		d, err := rdb.Open(dbType, dbPath, debug)
+		if err != nil {
+			return nil, errors.Wrap(err, "open rdb")
+		}
+		return &DB{name: dbType, driver: d}, nil
+	case "redis":
+		d, err := redis.Open(dbPath, debug)
+		if err != nil {
+			return nil, errors.Wrap(err, "open rdb")
+		}
+		return &DB{name: dbType, driver: d}, nil
+	default:
+		return nil, errors.Errorf(`unexpected dbType. accepts: ["boltdb", "sqlite3", "mysql", "postgres", "redis"], received: "%s"`, dbType)
+	}
+}
+
+func (db *DB) Close() error {
+	if err := db.driver.Close(); err != nil {
+		return errors.Wrapf(err, "close %s", db.name)
+	}
+	return nil
+}
+
+func (db *DB) PutVulnerability(src, key string, value types.Vulnerability) error {
+	if err := db.driver.PutVulnerability(src, key, value); err != nil {
+		return errors.Wrapf(err, "put vulnerability")
+	}
+	return nil
+}
+
+func (db *DB) PutPackage(src, key string, value map[string]types.Packages) error {
+	if err := db.driver.PutPackage(src, key, value); err != nil {
+		return errors.Wrapf(err, "put package")
+	}
+	return nil
+}
+
+func (db *DB) PutCPEConfiguration(src, key string, value map[string]types.CPEConfigurations) error {
+	if err := db.driver.PutCPEConfiguration(src, key, value); err != nil {
+		return errors.Wrapf(err, "put cpe configuration")
+	}
+	return nil
+}
+
+func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) error {
+	if err := db.driver.PutRedHatRepoToCPE(src, key, value); err != nil {
+		return errors.Wrapf(err, "put repository to cpe")
+	}
+	return nil
+}
+
+// func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
+// 	rs, err := db.driver.GetVulnerability(ids)
+// 	if err != nil {
+// 		return nil, errors.Wrapf(err, "get vulnerability")
+// 	}
+// 	return rs, nil
+// }
+
+// func (db *DB) GetPackage(names []string) (map[string]map[string][]types.Package, error) {
+// 	rs, err := db.driver.GetPackage(names)
+// 	if err != nil {
+// 		return nil, errors.Wrapf(err, "get package")
+// 	}
+// 	return rs, nil
+// }
+
+// func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {
+// 	rs, err := db.driver.GetCPEConfiguration(cpes)
+// 	if err != nil {
+// 		return nil, errors.Wrapf(err, "get cpe configuration")
+// 	}
+// 	return rs, nil
+// }
