@@ -6,7 +6,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/rdb"
 	"github.com/MaineK00n/vuls2/pkg/db/redis"
-	"github.com/MaineK00n/vuls2/pkg/types"
+	"github.com/MaineK00n/vuls2/pkg/db/types"
 )
 
 type options struct {

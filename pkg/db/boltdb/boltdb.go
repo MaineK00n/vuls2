@@ -9,7 +9,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/exp/maps"
 
-	"github.com/MaineK00n/vuls2/pkg/types"
+	"github.com/MaineK00n/vuls2/pkg/db/types"
 )
 
 type options struct {

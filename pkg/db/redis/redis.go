@@ -4,7 +4,7 @@ import (
 	"github.com/go-redis/redis/v9"
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/types"
+	"github.com/MaineK00n/vuls2/pkg/db/types"
 )
 
 type options struct {

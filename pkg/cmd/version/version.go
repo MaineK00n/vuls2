@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	version  string
-	revision string
+	Version  string
+	Revision string
 )
 
 func NewCmdVersion() *cobra.Command {
@@ -18,7 +18,7 @@ func NewCmdVersion() *cobra.Command {
 		Short: "Print the version",
 		Args:  cobra.NoArgs,
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Fprintf(os.Stdout, "vuls %s %s\n", version, revision)
+			fmt.Fprintf(os.Stdout, "vuls %s %s\n", Version, Revision)
 		},
 	}
 	return cmd

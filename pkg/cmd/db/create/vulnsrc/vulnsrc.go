@@ -11,7 +11,7 @@ import (
 	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/types"
+	"github.com/MaineK00n/vuls2/pkg/db/types"
 )
 
 func ToVulsVulnerability(src Vulnerability) types.Vulnerability {
