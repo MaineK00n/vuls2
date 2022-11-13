@@ -128,12 +128,11 @@ func exec(ctx context.Context, path string, args []string) error {
 			if !ok {
 				return errors.Wrapf(err, "not found %s in %s", host.Name, path)
 			}
-			host.Config.Detect = hc.Detect
+			host.Config.Detect = &hc.Detect
 
 			host.ScannedCves = nil
 
 			if err := detect.Detect(ctx, &host); err != nil {
-				log.LoggerFromContext(ctx).With(zap.String("host", host.Name)).Error("failed to scan", zap.Error(err))
 				host.Error = err.Error()
 			}
 

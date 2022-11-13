@@ -82,15 +82,13 @@ func exec(ctx context.Context, path string, args []string) error {
 				User:      h.User,
 				SSHConfig: h.SSHConfig,
 				SSHKey:    h.SSHKey,
-				Scan:      h.Scan,
+				Scan:      &h.Scan,
 			},
 		})
 	}
 
-	// TODO goroutine
 	for i := range hosts {
 		if err := scan.Scan(ctx, &hosts[i]); err != nil {
-			log.LoggerFromContext(ctx).With(zap.String("host", hosts[i].Name)).Error("failed to scan", zap.Error(err))
 			hosts[i].Error = err.Error()
 		}
 	}

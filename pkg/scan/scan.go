@@ -14,10 +14,6 @@ import (
 )
 
 func Scan(ctx context.Context, host *types.Host) error {
-	if err := Validate(host.Config); err != nil {
-		return errors.Wrap(err, "validate config for scan")
-	}
-
 	ah := scanTypes.AnalyzerHost{Host: host}
 	if ah.Host.Config.Scan.OSPkg != nil {
 		ah.Analyzers = append(ah.Analyzers, os.Analyzer{})
@@ -48,21 +44,5 @@ func Scan(ctx context.Context, host *types.Host) error {
 	if err != nil {
 		return errors.Wrapf(err, "analyze %s", ah.Host.Name)
 	}
-	return nil
-}
-
-func Validate(c types.Config) error {
-	switch c.Type {
-	case "local":
-	case "remote":
-	case "ssh-config":
-	default:
-		return errors.Errorf("%s is not implemented", c.Type)
-	}
-
-	if c.Scan == nil {
-		return errors.Errorf("%s is not set Scan Config")
-	}
-
 	return nil
 }

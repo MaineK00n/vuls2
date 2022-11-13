@@ -112,30 +112,6 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 		} else {
 			return 0, stdoutBuf.String(), stderrBuf.String(), nil
 		}
-	case "ssh-config":
-		sshBinPath, err := exec.LookPath("ssh")
-		if err != nil {
-			return 0, "", "", errors.Wrap(err, "look path to ssh")
-		}
-		args := []string{"-tt", "-F", *h.Config.SSHConfig, *h.Config.Host, fmt.Sprintf("stty cols 1000; %s", cmd)}
-
-		execCmd := exec.CommandContext(ctx, sshBinPath, args...)
-		var stdoutBuf, stderrBuf bytes.Buffer
-		execCmd.Stdout = &stdoutBuf
-		execCmd.Stderr = &stderrBuf
-		if err := execCmd.Run(); err != nil {
-			if e, ok := err.(*exec.ExitError); ok {
-				if s, ok := e.Sys().(syscall.WaitStatus); ok {
-					return s.ExitStatus(), stdoutBuf.String(), stderrBuf.String(), nil
-				} else {
-					return 998, stdoutBuf.String(), stderrBuf.String(), nil
-				}
-			} else {
-				return 999, stdoutBuf.String(), stderrBuf.String(), nil
-			}
-		} else {
-			return 0, stdoutBuf.String(), stderrBuf.String(), nil
-		}
 	default:
 		return 0, "", "", errors.Errorf("%s is not implemented", h.Config.Type)
 	}
@@ -145,9 +121,6 @@ type Packages struct {
 	Kernel Kernel                           `json:"kernel,omitempty"`
 	OSPkg  map[string]Package               `json:"os_pkg,omitempty"`
 	CPE    map[string]common.WellFormedName `json:"cpe,omitempty"`
-	// LangPkg LangPkg
-	// Lockfile Lockfile
-	// WordPress WordPress
 	// KB KB
 }
 
@@ -180,11 +153,9 @@ type VulnInfo struct {
 }
 
 type AffectedPackage struct {
-	Name       string `json:"name,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Status     string `json:"status,omitempty"`
-	AffectedIn string `json:"affected_in,omitempty"`
-	FixedIn    string `json:"fixed_in,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Source string `json:"source,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 type Config struct {
@@ -196,5 +167,4 @@ type Config struct {
 	SSHKey    *string        `json:"ssh_key,omitempty"`
 	Scan      *config.Scan   `json:"scan,omitempty"`
 	Detect    *config.Detect `json:"detect,omitempty"`
-	Report    *config.Report `json:"report,omitempty"`
 }

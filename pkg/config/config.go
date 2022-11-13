@@ -40,44 +40,18 @@ func Open(path string) (Config, error) {
 			User:      h.User,
 			SSHConfig: h.SSHConfig,
 			SSHKey:    h.SSHKey,
-			Scan:      src.Scan,
-			Detect:    src.Detect,
-			Report:    src.Report,
+			Scan:      h.Scan,
+			Detect:    h.Detect,
 		}
-		if h.User == nil {
-			h.User = &u.Name
+		if c.User == nil {
+			c.User = &u.Name
 		}
-
-		if h.Scan != nil {
-			c.Scan = h.Scan
-		}
-		if c.Scan != nil && c.Scan.ResultDir == "" {
+		if c.Scan.ResultDir == "" {
 			c.Scan.ResultDir = filepath.Join(pwd, "results")
 		}
-		if c.Scan != nil && c.Scan.LogDir == "" {
-			c.Scan.LogDir = "/var/log/vuls"
-		}
-
-		if h.Detect != nil {
-			c.Detect = h.Detect
-		}
-		if c.Detect != nil && c.Detect.ResultDir == "" {
+		if c.Detect.ResultDir == "" {
 			c.Detect.ResultDir = filepath.Join(pwd, "results")
 		}
-		if c.Detect != nil && c.Detect.LogDir == "" {
-			c.Detect.LogDir = "/var/log/vuls"
-		}
-
-		if h.Report != nil {
-			c.Report = h.Report
-		}
-		if c.Report != nil && c.Report.ResultDir == "" {
-			c.Report.ResultDir = filepath.Join(pwd, "results")
-		}
-		if c.Report != nil && c.Report.LogDir == "" {
-			c.Report.LogDir = "/var/log/vuls"
-		}
-
 		config.Hosts[n] = c
 	}
 
