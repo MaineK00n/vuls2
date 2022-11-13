@@ -19,11 +19,12 @@ import (
 )
 
 type DBFetchOption struct {
-	Path string
+	Path      string
+	PlainHTTP bool
 }
 
 const (
-	defaultVulsDBRepository = "localhost:5000/vuls-db"
+	defaultVulsDBRepository = "ghcr.io/mainek00n/vuls-data/vuls-db"
 	defaultTag              = "latest"
 	vulsDBConfigMediaType   = "application/vnd.vuls.vuls.db"
 	vulsDBLayerMediaType    = "application/vnd.vuls.vuls.db.layer.v1.tar+gzip"
@@ -43,7 +44,7 @@ func NewCmdFetch() *cobra.Command {
 			if len(args) > 0 {
 				p = args[0]
 			}
-			return fetch(context.Background(), p, opts.Path)
+			return fetch(context.Background(), p, opts.Path, opts.PlainHTTP)
 		},
 		Example: heredoc.Doc(`
 			$ vuls db fetch
@@ -52,16 +53,19 @@ func NewCmdFetch() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&opts.Path, "path", "p", "vuls.db", "path to fetch Vuls DB")
+	cmd.Flags().BoolVarP(&opts.PlainHTTP, "plain-http", "", false, "container registry is provided with plain http")
 
 	return cmd
 }
 
-func fetch(ctx context.Context, ref, dbpath string) error {
+func fetch(ctx context.Context, ref, dbpath string, plainHTTP bool) error {
 	repo, err := remote.NewRepository(ref)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	repo.PlainHTTP = true
+	if plainHTTP {
+		repo.PlainHTTP = true
+	}
 
 	desc, err := repo.Resolve(ctx, defaultTag)
 	if err != nil {
