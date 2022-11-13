@@ -35,7 +35,7 @@ func NewCmdDetect() *cobra.Command {
 		Short: "Vuls detect vulnerabilities",
 		RunE: func(_ *cobra.Command, args []string) error {
 			if err := exec(context.Background(), opts.Config, args); err != nil {
-				return errors.Wrap(err, "failed to scan")
+				return errors.Wrap(err, "failed to detect")
 			}
 
 			return nil
