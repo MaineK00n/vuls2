@@ -351,7 +351,7 @@ func toAdvBucket(path string) (string, error) {
 	case "debian":
 		switch ss[1] {
 		case "oval", "tracker":
-			return fmt.Sprintf("%s %s", ss[0], ss[2]), nil
+			return fmt.Sprintf("%s:%s", ss[0], ss[2]), nil
 		default:
 			return "", errors.Errorf(`unexpected debian advisory type. accepts: ["oval", "tracker"], received: "%s"`, ss[1])
 		}

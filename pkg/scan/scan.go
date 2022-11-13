@@ -27,21 +27,21 @@ func Scan(ctx context.Context, host *types.Host) error {
 	}
 
 	var (
-		index int
-		err   error
+		err error
 	)
 	for {
 		if len(ah.Analyzers) == 0 {
 			break
 		}
-		a := ah.Analyzers[index]
+		a := ah.Analyzers[0]
 		if err = a.Analyze(ctx, &ah); err != nil {
 			break
 		}
-		ah.Analyzers = ah.Analyzers[index+1:]
+		ah.Analyzers = ah.Analyzers[1:]
 	}
 
-	ah.Host.ScannedAt = time.Now()
+	t := time.Now()
+	ah.Host.ScannedAt = &t
 	ah.Host.ScannedVersion = version.Version
 	ah.Host.ScannedRevision = version.Revision
 

@@ -29,8 +29,8 @@ type Driver interface {
 	PutCPEConfiguration(string, string, map[string]types.CPEConfigurations) error
 	PutRedHatRepoToCPE(string, string, types.RepositoryToCPE) error
 
-	// GetVulnerability([]string) (map[string]map[string]types.Vulnerability, error)
-	// GetPackage([]string) (map[string]map[string][]types.Package, error)
+	GetVulnerability([]string) (map[string]map[string]types.Vulnerability, error)
+	GetPackage(string, string, string) (map[string]map[string]map[string]types.Package, error)
 	// GetCPEConfiguration([]string) (map[string]map[string][]types.CPEConfiguration, error)
 	// GetRedHatRepositoryCPE([]string) (map[string][]string, error)
 }
@@ -99,21 +99,21 @@ func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) e
 	return nil
 }
 
-// func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
-// 	rs, err := db.driver.GetVulnerability(ids)
-// 	if err != nil {
-// 		return nil, errors.Wrapf(err, "get vulnerability")
-// 	}
-// 	return rs, nil
-// }
+func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
+	rs, err := db.driver.GetVulnerability(ids)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get vulnerability")
+	}
+	return rs, nil
+}
 
-// func (db *DB) GetPackage(names []string) (map[string]map[string][]types.Package, error) {
-// 	rs, err := db.driver.GetPackage(names)
-// 	if err != nil {
-// 		return nil, errors.Wrapf(err, "get package")
-// 	}
-// 	return rs, nil
-// }
+func (db *DB) GetPackage(family, release string, name string) (map[string]map[string]map[string]types.Package, error) {
+	rs, err := db.driver.GetPackage(family, release, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get package")
+	}
+	return rs, nil
+}
 
 // func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {
 // 	rs, err := db.driver.GetCPEConfiguration(cpes)

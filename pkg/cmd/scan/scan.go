@@ -89,9 +89,8 @@ func exec(ctx context.Context, path string, args []string) error {
 
 	// TODO goroutine
 	for i := range hosts {
-		l := log.LoggerFromContext(ctx).With(zap.String("host", hosts[i].Name))
-		l.Info("scan...")
 		if err := scan.Scan(ctx, &hosts[i]); err != nil {
+			log.LoggerFromContext(ctx).With(zap.String("host", hosts[i].Name)).Error("failed to scan", zap.Error(err))
 			hosts[i].Error = err.Error()
 		}
 	}

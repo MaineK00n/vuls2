@@ -244,11 +244,85 @@ func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) e
 }
 
 func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
-	return nil, nil
+	r := map[string]map[string]types.Vulnerability{}
+	if err := db.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("vulnerability"))
+		if b == nil {
+			return nil
+		}
+		for _, id := range ids {
+			vb := b.Bucket([]byte(id))
+			if vb == nil {
+				return nil
+			}
+			r[string(id)] = map[string]types.Vulnerability{}
+			if err := vb.ForEach(func(src, bs []byte) error {
+				var v types.Vulnerability
+				if err := json.Unmarshal(bs, &v); err != nil {
+					return errors.Wrapf(err, "decode %s/%s", string(id), string(src))
+				}
+				r[string(id)][string(src)] = v
+
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
-func (db *DB) GetPackage(names []string) (map[string]map[string][]types.Package, error) {
-	return nil, nil
+func (db *DB) GetPackage(family, release string, name string) (map[string]map[string]map[string]types.Package, error) {
+	r := map[string]map[string]map[string]types.Package{}
+	if err := db.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(family))
+		if b == nil {
+			return nil
+		}
+		switch family {
+		case "debian", "ubuntu":
+			b = b.Bucket([]byte(release))
+			if b == nil {
+				return nil
+			}
+			b = b.Bucket([]byte(name))
+			if b == nil {
+				return nil
+			}
+
+			if err := b.ForEach(func(cveid, _ []byte) error {
+				vb := b.Bucket(cveid)
+				r[string(cveid)] = map[string]map[string]types.Package{}
+				if err := vb.ForEach(func(src, bs []byte) error {
+					var v map[string]types.Package
+					if err := json.Unmarshal(bs, &v); err != nil {
+						return errors.Wrapf(err, "decode %s/%s", string(cveid), string(src))
+					}
+					r[string(cveid)][string(src)] = v
+
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		default:
+			return errors.New("not implemented")
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {

@@ -56,7 +56,7 @@ func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulner
 	return nil, nil
 }
 
-func (db *DB) GetPackage(names []string) (map[string]map[string][]types.Package, error) {
+func (db *DB) GetPackage(family, release string, name string) (map[string]map[string]map[string]types.Package, error) {
 	return nil, nil
 }
 

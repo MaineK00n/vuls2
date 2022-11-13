@@ -7,6 +7,7 @@ require (
 	github.com/go-redis/redis/v9 v9.0.0-rc.1
 	github.com/hashicorp/go-version v1.6.0
 	github.com/knqyf263/go-cpe v0.0.0-20201213041631-54f6ab28673f
+	github.com/knqyf263/go-deb-version v0.0.0-20190517075300-09fca494f03d
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.6.1

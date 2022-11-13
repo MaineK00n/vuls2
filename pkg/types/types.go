@@ -18,22 +18,28 @@ import (
 )
 
 type Host struct {
-	Name    string
-	Family  string
-	Release string
+	Name    string `json:"name,omitempty"`
+	Family  string `json:"family,omitempty"`
+	Release string `json:"release,omitempty"`
 
-	ScannedAt       time.Time
-	ScannedVersion  string
-	ScannedRevision string
+	ScannedAt       *time.Time `json:"scanned_at,omitempty"`
+	ScannedVersion  string     `json:"scanned_version,omitempty"`
+	ScannedRevision string     `json:"scanned_revision,omitempty"`
 
-	ReportedVersion  string
-	ReportedRevision string
-	Error            string
+	DetecteddAt      *time.Time `json:"detectedd_at,omitempty"`
+	DetectedVersion  string     `json:"detected_version,omitempty"`
+	DetectedRevision string     `json:"detected_revision,omitempty"`
 
-	Packages    Packages
-	ScannedCves []VulnInfo
+	ReportedAt       *time.Time `json:"reported_at,omitempty"`
+	ReportedVersion  string     `json:"reported_version,omitempty"`
+	ReportedRevision string     `json:"reported_revision,omitempty"`
 
-	Config Config
+	Error string `json:"error,omitempty"`
+
+	Packages    Packages            `json:"packages,omitempty"`
+	ScannedCves map[string]VulnInfo `json:"scanned_cves,omitempty"`
+
+	Config Config `json:"config,omitempty"`
 }
 
 func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, string, error) {
@@ -136,9 +142,9 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 }
 
 type Packages struct {
-	Kernel Kernel
-	OSPkg  map[string]Package
-	CPE    map[string]common.WellFormedName
+	Kernel Kernel                           `json:"kernel,omitempty"`
+	OSPkg  map[string]Package               `json:"os_pkg,omitempty"`
+	CPE    map[string]common.WellFormedName `json:"cpe,omitempty"`
 	// LangPkg LangPkg
 	// Lockfile Lockfile
 	// WordPress WordPress
@@ -146,49 +152,49 @@ type Packages struct {
 }
 
 type Kernel struct {
-	Version         string
-	Release         string
-	RebootRrequired bool
+	Version         string `json:"version,omitempty"`
+	Release         string `json:"release,omitempty"`
+	RebootRrequired bool   `json:"reboot_rrequired,omitempty"`
 }
 
 type Package struct {
-	Name            string
-	Version         string
-	Release         string
-	NewVersion      string
-	NewRelease      string
-	Arch            string
-	Vendor          string
-	Repository      string
-	ModularityLabel string
+	Name            string `json:"name,omitempty"`
+	Version         string `json:"version,omitempty"`
+	Release         string `json:"release,omitempty"`
+	NewVersion      string `json:"new_version,omitempty"`
+	NewRelease      string `json:"new_release,omitempty"`
+	Arch            string `json:"arch,omitempty"`
+	Vendor          string `json:"vendor,omitempty"`
+	Repository      string `json:"repository,omitempty"`
+	ModularityLabel string `json:"modularity_label,omitempty"`
 
-	SrcName    string
-	SrcVersion string
-	SrcArch    string
+	SrcName    string `json:"src_name,omitempty"`
+	SrcVersion string `json:"src_version,omitempty"`
+	SrcArch    string `json:"src_arch,omitempty"`
 }
 
 type VulnInfo struct {
-	ID               string
-	Content          types.Vulnerability
-	AffectedPackages []AffectedPackage
+	ID               string                         `json:"id,omitempty"`
+	Content          map[string]types.Vulnerability `json:"content,omitempty"`
+	AffectedPackages []AffectedPackage              `json:"affected_packages,omitempty"`
 }
 
 type AffectedPackage struct {
-	Name       string
-	Source     string
-	Status     string
-	AffectedIn string
-	FixedIn    string
+	Name       string `json:"name,omitempty"`
+	Source     string `json:"source,omitempty"`
+	Status     string `json:"status,omitempty"`
+	AffectedIn string `json:"affected_in,omitempty"`
+	FixedIn    string `json:"fixed_in,omitempty"`
 }
 
 type Config struct {
-	Type      string  `json:"type"`
-	Host      *string `json:"host"`
-	Port      *string `json:"port"`
-	User      *string `json:"user"`
-	SSHConfig *string `json:"ssh_config"`
-	SSHKey    *string `json:"ssh_key"`
-	Scan      *config.Scan
-	Detect    *config.Detect
-	Report    *config.Report
+	Type      string         `json:"type,omitempty"`
+	Host      *string        `json:"host,omitempty"`
+	Port      *string        `json:"port,omitempty"`
+	User      *string        `json:"user,omitempty"`
+	SSHConfig *string        `json:"ssh_config,omitempty"`
+	SSHKey    *string        `json:"ssh_key,omitempty"`
+	Scan      *config.Scan   `json:"scan,omitempty"`
+	Detect    *config.Detect `json:"detect,omitempty"`
+	Report    *config.Report `json:"report,omitempty"`
 }
