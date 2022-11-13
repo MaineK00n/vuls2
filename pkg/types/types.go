@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/knqyf263/go-cpe/common"
 	"github.com/pkg/errors"
 
 	"github.com/MaineK00n/vuls2/pkg/config"
@@ -25,16 +24,16 @@ type Host struct {
 	ScannedAt       *time.Time `json:"scanned_at,omitempty"`
 	ScannedVersion  string     `json:"scanned_version,omitempty"`
 	ScannedRevision string     `json:"scanned_revision,omitempty"`
+	ScanError       string     `json:"scan_error,omitempty"`
 
 	DetecteddAt      *time.Time `json:"detectedd_at,omitempty"`
 	DetectedVersion  string     `json:"detected_version,omitempty"`
 	DetectedRevision string     `json:"detected_revision,omitempty"`
+	DetectError      string     `json:"detect_error,omitempty"`
 
 	ReportedAt       *time.Time `json:"reported_at,omitempty"`
 	ReportedVersion  string     `json:"reported_version,omitempty"`
 	ReportedRevision string     `json:"reported_revision,omitempty"`
-
-	Error string `json:"error,omitempty"`
 
 	Packages    Packages            `json:"packages,omitempty"`
 	ScannedCves map[string]VulnInfo `json:"scanned_cves,omitempty"`
@@ -118,9 +117,9 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 }
 
 type Packages struct {
-	Kernel Kernel                           `json:"kernel,omitempty"`
-	OSPkg  map[string]Package               `json:"os_pkg,omitempty"`
-	CPE    map[string]common.WellFormedName `json:"cpe,omitempty"`
+	Kernel Kernel             `json:"kernel,omitempty"`
+	OSPkg  map[string]Package `json:"os_pkg,omitempty"`
+	CPE    map[string]CPE     `json:"cpe,omitempty"`
 	// KB KB
 }
 
@@ -144,6 +143,11 @@ type Package struct {
 	SrcName    string `json:"src_name,omitempty"`
 	SrcVersion string `json:"src_version,omitempty"`
 	SrcArch    string `json:"src_arch,omitempty"`
+}
+
+type CPE struct {
+	CPE       string `json:"cpe,omitempty"`
+	RunningOn string `json:"running_on,omitempty"`
 }
 
 type VulnInfo struct {

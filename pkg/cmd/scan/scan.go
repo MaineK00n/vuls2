@@ -89,7 +89,7 @@ func exec(ctx context.Context, path string, args []string) error {
 
 	for i := range hosts {
 		if err := scan.Scan(ctx, &hosts[i]); err != nil {
-			hosts[i].Error = err.Error()
+			hosts[i].ScanError = err.Error()
 		}
 	}
 
@@ -121,11 +121,15 @@ func exec(ctx context.Context, path string, args []string) error {
 	fmt.Println("Scan Summary")
 	fmt.Println("============")
 	for _, h := range hosts {
-		if h.Error != "" {
-			fmt.Printf("%s : error msg: %s\n", h.Name, h.Error)
+		name := h.Name
+		if h.Family != "" && h.Release != "" {
+			name = fmt.Sprintf("%s (%s %s)", h.Name, h.Family, h.Release)
+		}
+		if h.ScanError != "" {
+			fmt.Printf("%s : error msg: %s\n", name, h.ScanError)
 			continue
 		}
-		fmt.Printf("%s (%s %s): success ospkg: %d installed\n", h.Name, h.Family, h.Release, len(h.Packages.OSPkg))
+		fmt.Printf("%s: success ospkg: %d, cpe: %d installed\n", name, len(h.Packages.OSPkg), len(h.Packages.CPE))
 	}
 
 	return nil

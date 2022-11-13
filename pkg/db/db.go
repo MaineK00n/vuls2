@@ -31,8 +31,7 @@ type Driver interface {
 
 	GetVulnerability([]string) (map[string]map[string]types.Vulnerability, error)
 	GetPackage(string, string, string) (map[string]map[string]map[string]types.Package, error)
-	// GetCPEConfiguration([]string) (map[string]map[string][]types.CPEConfiguration, error)
-	// GetRedHatRepositoryCPE([]string) (map[string][]string, error)
+	GetCPEConfiguration(string) (map[string]map[string]map[string][]types.CPEConfiguration, error)
 }
 
 func (db *DB) Name() string {
@@ -115,10 +114,10 @@ func (db *DB) GetPackage(family, release string, name string) (map[string]map[st
 	return rs, nil
 }
 
-// func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {
-// 	rs, err := db.driver.GetCPEConfiguration(cpes)
-// 	if err != nil {
-// 		return nil, errors.Wrapf(err, "get cpe configuration")
-// 	}
-// 	return rs, nil
-// }
+func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[string]map[string][]types.CPEConfiguration, error) {
+	rs, err := db.driver.GetCPEConfiguration(partvendorproduct)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get cpe configuration")
+	}
+	return rs, nil
+}

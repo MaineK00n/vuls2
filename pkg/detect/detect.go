@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/MaineK00n/vuls2/pkg/cmd/version"
+	"github.com/MaineK00n/vuls2/pkg/detect/cpe"
 	"github.com/MaineK00n/vuls2/pkg/detect/debian"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/ubuntu"
@@ -14,8 +15,8 @@ import (
 )
 
 func Detect(ctx context.Context, host *types.Host) error {
-	if host.Error != "" {
-		return errors.Errorf("scan error: %s", host.Error)
+	if host.ScanError != "" {
+		return nil
 	}
 
 	var detectors []detectTypes.Detector
@@ -28,6 +29,9 @@ func Detect(ctx context.Context, host *types.Host) error {
 		default:
 			return errors.New("not implemented")
 		}
+	}
+	if len(host.Packages.CPE) > 0 {
+		detectors = append(detectors, cpe.Detector{})
 	}
 
 	var err error

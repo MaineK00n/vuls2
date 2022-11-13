@@ -93,6 +93,6 @@ func (db *DB) GetPackage(family, release string, name string) (map[string]map[st
 	return nil, nil
 }
 
-func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {
+func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[string]map[string][]types.CPEConfiguration, error) {
 	return nil, nil
 }

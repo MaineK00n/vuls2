@@ -325,6 +325,42 @@ func (db *DB) GetPackage(family, release string, name string) (map[string]map[st
 	return r, nil
 }
 
-func (db *DB) GetCPEConfiguration(cpes []string) (map[string]map[string][]types.CPEConfiguration, error) {
-	return nil, nil
+func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[string]map[string][]types.CPEConfiguration, error) {
+	r := map[string]map[string]map[string][]types.CPEConfiguration{}
+	if err := db.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("cpe"))
+		if b == nil {
+			return nil
+		}
+		b = b.Bucket([]byte(partvendorproduct))
+		if b == nil {
+			return nil
+		}
+
+		if err := b.ForEach(func(cveid, _ []byte) error {
+			vb := b.Bucket(cveid)
+			r[string(cveid)] = map[string]map[string][]types.CPEConfiguration{}
+			if err := vb.ForEach(func(src, bs []byte) error {
+				var v map[string][]types.CPEConfiguration
+				if err := json.Unmarshal(bs, &v); err != nil {
+					return errors.Wrapf(err, "decode cpe/%s/%s/%s", partvendorproduct, string(cveid), string(src))
+				}
+				r[string(cveid)][string(src)] = v
+
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }

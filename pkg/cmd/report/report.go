@@ -129,6 +129,11 @@ func exec(ctx context.Context, format string, args []string) error {
 				return errors.Wrapf(err, "decode %s", path)
 			}
 
+			name := host.Name
+			if host.Family != "" && host.Release != "" {
+				name = fmt.Sprintf("%s (%s %s)", host.Name, host.Family, host.Release)
+			}
+
 			for id, vinfo := range host.ScannedCves {
 				r := result{
 					cveid: id,
@@ -145,6 +150,7 @@ func exec(ctx context.Context, format string, args []string) error {
 					if officialCont.EPSS != nil {
 						r.epss = officialCont.EPSS.EPSS
 					}
+					r.kev = officialCont.KEV
 				}
 
 				for _, p := range vinfo.AffectedPackages {
@@ -155,7 +161,7 @@ func exec(ctx context.Context, format string, args []string) error {
 					})
 				}
 
-				rs[fmt.Sprintf("%s (%s %s)", host.Name, host.Family, host.Release)] = append(rs[fmt.Sprintf("%s (%s %s)", host.Name, host.Family, host.Release)], r)
+				rs[name] = append(rs[name], r)
 			}
 
 			return nil
@@ -184,7 +190,11 @@ func formatOneline(rs map[string][]result) {
 		status := map[string]int{}
 		for _, l := range lines {
 			for _, p := range l.packages {
-				status[p.status]++
+				s := p.status
+				if p.status == "" {
+					s = "(none)"
+				}
+				status[s]++
 			}
 		}
 

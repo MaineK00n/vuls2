@@ -133,11 +133,20 @@ func exec(ctx context.Context, path string, args []string) error {
 			host.ScannedCves = nil
 
 			if err := detect.Detect(ctx, &host); err != nil {
-				host.Error = err.Error()
+				host.DetectError = err.Error()
 			}
 
-			detectCVEs[fmt.Sprintf("%s (%s %s)", host.Name, host.Family, host.Release)] = result{
-				error: host.Error,
+			name := host.Name
+			if host.Family != "" && host.Release != "" {
+				name = fmt.Sprintf("%s (%s %s)", host.Name, host.Family, host.Release)
+			}
+			errstr := host.DetectError
+			if host.ScanError != "" {
+				errstr = fmt.Sprintf("scan error: %s", host.ScanError)
+			}
+
+			detectCVEs[name] = result{
+				error: errstr,
 				nCVEs: len(host.ScannedCves),
 			}
 
