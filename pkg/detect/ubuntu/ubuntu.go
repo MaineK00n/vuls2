@@ -11,6 +11,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/types"
 	"github.com/MaineK00n/vuls2/pkg/types"
+	"github.com/MaineK00n/vuls2/pkg/util"
 )
 
 type Detector struct{}
@@ -68,6 +69,7 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 									Source: fmt.Sprintf("%s:%s", datasrc, id),
 									Status: p.Status,
 								})
+								vinfo.AffectedPackages = util.Unique(vinfo.AffectedPackages)
 								host.ScannedCves[cveid] = vinfo
 							}
 						}
@@ -81,6 +83,7 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 							Source: fmt.Sprintf("%s:%s", datasrc, id),
 							Status: p.Status,
 						})
+						vinfo.AffectedPackages = util.Unique(vinfo.AffectedPackages)
 						host.ScannedCves[cveid] = vinfo
 					case "not-affected", "DNE":
 					}

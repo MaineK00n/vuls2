@@ -1,12 +1,12 @@
-package debian
+package windows
 
 import (
 	"context"
 	"fmt"
 
-	version "github.com/knqyf263/go-deb-version"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/MaineK00n/vuls2/pkg/db"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/types"
@@ -17,7 +17,7 @@ import (
 type Detector struct{}
 
 func (d Detector) Name() string {
-	return "debian detector"
+	return "windows detector"
 }
 
 func (d Detector) Detect(ctx context.Context, host *types.Host) error {
@@ -31,13 +31,33 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 	}
 	defer vulndb.Close()
 
-	srcpkgs := map[string]string{}
-	for _, p := range host.Packages.OSPkg {
-		srcpkgs[p.SrcName] = p.SrcVersion
+	supercedences, err := vulndb.GetSupercedence(host.Packages.KB)
+	if err != nil {
+		return errors.Wrap(err, "get supercedence")
 	}
 
-	for srcname, srcver := range srcpkgs {
-		pkgs, err := vulndb.GetPackage(host.Family, host.Release, srcname)
+	var unapplied []string
+	for _, kbs := range supercedences {
+		var applied bool
+		for _, kb := range kbs {
+			if slices.Contains(host.Packages.KB, kb) {
+				applied = true
+				break
+			}
+		}
+		if !applied {
+			unapplied = append(unapplied, kbs...)
+		}
+	}
+	unapplied = util.Unique(unapplied)
+
+	products, err := vulndb.GetKBtoProduct(host.Release, unapplied)
+	if err != nil {
+		return errors.Wrap(err, "get product from kb")
+	}
+
+	for _, product := range products {
+		pkgs, err := vulndb.GetPackage(host.Family, host.Release, product)
 		if err != nil {
 			return errors.Wrap(err, "get package")
 		}
@@ -47,25 +67,14 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 				for id, p := range ps {
 					switch p.Status {
 					case "fixed":
-						for _, andVs := range p.Version {
-							affected := true
-							for _, v := range andVs {
-								r, err := compare(v.Operator, srcver, v.Version)
-								if err != nil {
-									return errors.Wrap(err, "compare")
-								}
-								if !r {
-									affected = false
-									break
-								}
-							}
-							if affected {
+						for _, v := range p.Version {
+							if slices.Contains(unapplied, v[0].Version) {
 								vinfo, ok := host.ScannedCves[cveid]
 								if !ok {
 									host.ScannedCves[cveid] = types.VulnInfo{ID: cveid}
 								}
 								vinfo.AffectedPackages = append(vinfo.AffectedPackages, types.AffectedPackage{
-									Name:   srcname,
+									Name:   fmt.Sprintf("%s: KB%s", product, v[0].Version),
 									Source: fmt.Sprintf("%s:%s", datasrc, id),
 									Status: p.Status,
 								})
@@ -73,19 +82,18 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 								host.ScannedCves[cveid] = vinfo
 							}
 						}
-					case "open":
+					case "unfixed":
 						vinfo, ok := host.ScannedCves[cveid]
 						if !ok {
 							host.ScannedCves[cveid] = types.VulnInfo{ID: cveid}
 						}
 						vinfo.AffectedPackages = append(vinfo.AffectedPackages, types.AffectedPackage{
-							Name:   srcname,
+							Name:   product,
 							Source: fmt.Sprintf("%s:%s", datasrc, id),
 							Status: p.Status,
 						})
 						vinfo.AffectedPackages = util.Unique(vinfo.AffectedPackages)
 						host.ScannedCves[cveid] = vinfo
-					case "not affected":
 					}
 				}
 			}
@@ -106,46 +114,4 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 	}
 
 	return nil
-}
-
-func compare(operator, srcver, ver string) (bool, error) {
-	v1, err := version.NewVersion(srcver)
-	if err != nil {
-		return false, errors.Wrap(err, "parse version")
-	}
-	v2, err := version.NewVersion(ver)
-	if err != nil {
-		return false, errors.Wrap(err, "parse version")
-	}
-
-	r := v1.Compare(v2)
-	switch operator {
-	case "eq":
-		if r == 0 {
-			return true, nil
-		}
-		return false, nil
-	case "lt":
-		if r < 0 {
-			return true, nil
-		}
-		return false, nil
-	case "le":
-		if r <= 0 {
-			return true, nil
-		}
-		return false, nil
-	case "gt":
-		if r > 0 {
-			return true, nil
-		}
-		return false, nil
-	case "ge":
-		if r >= 0 {
-			return true, nil
-		}
-		return false, nil
-	default:
-		return false, errors.New("not supported operator")
-	}
 }

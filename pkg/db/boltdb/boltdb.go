@@ -3,6 +3,7 @@ package boltdb
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -143,6 +144,41 @@ func (db *DB) PutPackage(src, key string, value map[string]types.Packages) error
 			}
 		}
 
+		if name == "windows" {
+			kbToProduct := map[string][]string{}
+			for n, ps := range value {
+				for _, p := range ps.Package {
+					for _, v := range p.Version {
+						if _, err := strconv.Atoi(v[0].Version); err != nil {
+							continue
+						}
+						kbToProduct[v[0].Version] = append(kbToProduct[v[0].Version], n)
+					}
+				}
+			}
+
+			b, err := tx.CreateBucketIfNotExists([]byte("windows_kb_to_product"))
+			if err != nil {
+				return errors.Wrap(err, "create windows_kb_to_product bucket")
+			}
+
+			if version == "" {
+				return errors.Errorf(`unexpected key. accepts: "<osname>:<version>", received: "%s"`, key)
+			}
+			b, err = b.CreateBucketIfNotExists([]byte(version))
+			if err != nil {
+				return errors.Wrapf(err, "create %s/%s bucket", name, version)
+			}
+
+			for kb, ps := range kbToProduct {
+				bs, err := json.Marshal(ps)
+				if err != nil {
+					return errors.Wrap(err, "marshal json")
+				}
+				b.Put([]byte(kb), bs)
+			}
+		}
+
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update db")
@@ -243,6 +279,34 @@ func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) e
 	return nil
 }
 
+func (db *DB) PutWindowsSupercedence(src, key string, value types.Supercedence) error {
+	if err := db.conn.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(key))
+		if err != nil {
+			return errors.Wrapf(err, "create %s bucket", key)
+		}
+		for kb, supercedences := range value {
+			kbb, err := b.CreateBucketIfNotExists([]byte(kb))
+			if err != nil {
+				return errors.Wrapf(err, "create %s/%s bucket", key, kb)
+			}
+			bs, err := json.Marshal(supercedences)
+			if err != nil {
+				return errors.Wrap(err, "marshal json")
+			}
+
+			if err := kbb.Put([]byte(src), bs); err != nil {
+				return errors.Wrapf(err, "put %s", key)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "update db")
+	}
+	return nil
+}
+
 func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
 	r := map[string]map[string]types.Vulnerability{}
 	if err := db.conn.View(func(tx *bolt.Tx) error {
@@ -285,7 +349,7 @@ func (db *DB) GetPackage(family, release string, name string) (map[string]map[st
 			return nil
 		}
 		switch family {
-		case "debian", "ubuntu":
+		case "debian", "ubuntu", "windows":
 			b = b.Bucket([]byte(release))
 			if b == nil {
 				return nil
@@ -357,6 +421,66 @@ func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[stri
 			return err
 		}
 
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (db *DB) GetSupercedence(kbs []string) (map[string][]string, error) {
+	r := map[string][]string{}
+	if err := db.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("windows_supercedence"))
+		if b == nil {
+			return nil
+		}
+		for _, kb := range kbs {
+			kbb := b.Bucket([]byte(kb))
+			if kbb == nil {
+				continue
+			}
+			if err := kbb.ForEach(func(_, v []byte) error {
+				var ss []string
+				if err := json.Unmarshal(v, &ss); err != nil {
+					return errors.Wrapf(err, "decode windows_supercedence/%s", kb)
+				}
+				r[kb] = append(r[kb], ss...)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (db *DB) GetKBtoProduct(release string, kbs []string) ([]string, error) {
+	var r []string
+	if err := db.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("windows_kb_to_product"))
+		if b == nil {
+			return nil
+		}
+		b = b.Bucket([]byte(release))
+		if b == nil {
+			return nil
+		}
+		for _, kb := range kbs {
+			if bs := b.Get([]byte(kb)); len(bs) > 0 {
+				var ps []string
+				if err := json.Unmarshal(bs, &ps); err != nil {
+					return errors.Wrapf(err, "decode windows_kb_to_product/%s/%s", release, kb)
+				}
+				r = append(r, ps...)
+			}
+		}
 		return nil
 	}); err != nil {
 		return nil, err

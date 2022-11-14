@@ -11,6 +11,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/detect/debian"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/ubuntu"
+	"github.com/MaineK00n/vuls2/pkg/detect/windows"
 	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
@@ -29,6 +30,9 @@ func Detect(ctx context.Context, host *types.Host) error {
 		default:
 			return errors.New("not implemented")
 		}
+	}
+	if len(host.Packages.KB) > 0 {
+		detectors = append(detectors, windows.Detector{})
 	}
 	if len(host.Packages.CPE) > 0 {
 		detectors = append(detectors, cpe.Detector{})

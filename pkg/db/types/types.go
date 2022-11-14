@@ -81,3 +81,5 @@ type Version struct {
 }
 
 type RepositoryToCPE map[string][]string
+
+type Supercedence map[string][]string

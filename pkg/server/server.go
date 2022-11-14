@@ -15,12 +15,13 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/scan/ospkg/apk"
 	"github.com/MaineK00n/vuls2/pkg/scan/ospkg/dpkg"
 	"github.com/MaineK00n/vuls2/pkg/scan/ospkg/rpm"
+	"github.com/MaineK00n/vuls2/pkg/scan/systeminfo"
 	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
 type scanContents struct {
 	Contents []struct {
-		ContentType string `json:"content_type,omitempty"`
+		ContentType string `json:"type,omitempty"`
 		Content     string `json:"content,omitempty"`
 	} `json:"contents,omitempty"`
 }
@@ -44,6 +45,15 @@ func Scan() echo.HandlerFunc {
 				}
 				h.Family = family
 				h.Release = release
+			case "systeminfo":
+				family, release, kbs, err := systeminfo.ParseSysteminfo(cont.Content)
+				if err != nil {
+					h.ScanError = err.Error()
+					return c.JSON(http.StatusInternalServerError, h)
+				}
+				h.Family = family
+				h.Release = release
+				h.Packages.KB = kbs
 			case "apk":
 				pkgs, err := apk.ParseInstalledPackage(cont.Content)
 				if err != nil {

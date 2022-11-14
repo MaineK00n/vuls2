@@ -131,6 +131,7 @@ func exec(ctx context.Context, path string, args []string) error {
 			host.Config.Detect = &hc.Detect
 
 			host.ScannedCves = nil
+			host.DetectError = ""
 
 			if err := detect.Detect(ctx, &host); err != nil {
 				host.DetectError = err.Error()

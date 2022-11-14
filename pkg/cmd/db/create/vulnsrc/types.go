@@ -260,3 +260,10 @@ type Version struct {
 }
 
 type RepositoryToCPE map[string][]string
+
+type Supercedence struct {
+	KBID         string `json:"KBID,omitempty"`
+	Supersededby struct {
+		KBIDs []string `json:"KBIDs,omitempty"`
+	} `json:"Supersededby,omitempty"`
+}

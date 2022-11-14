@@ -609,3 +609,11 @@ func toVulnsrcCPEtoVulsCPE(s CPE) types.CPE {
 func ToVulsRepositoryToCPE(src RepositoryToCPE) types.RepositoryToCPE {
 	return types.RepositoryToCPE(src)
 }
+
+func ToVulsSupercedences(src []Supercedence) types.Supercedence {
+	ss := types.Supercedence{}
+	for _, s := range src {
+		ss[s.KBID] = s.Supersededby.KBIDs
+	}
+	return ss
+}

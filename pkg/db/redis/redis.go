@@ -52,6 +52,10 @@ func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) e
 	return nil
 }
 
+func (db *DB) PutWindowsSupercedence(src, key string, value types.Supercedence) error {
+	return nil
+}
+
 func (db *DB) GetVulnerability(ids []string) (map[string]map[string]types.Vulnerability, error) {
 	return nil, nil
 }
@@ -61,5 +65,13 @@ func (db *DB) GetPackage(family, release string, name string) (map[string]map[st
 }
 
 func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[string]map[string][]types.CPEConfiguration, error) {
+	return nil, nil
+}
+
+func (db *DB) GetSupercedence(kb []string) (map[string][]string, error) {
+	return nil, nil
+}
+
+func (db *DB) GetKBtoProduct(release string, kb []string) ([]string, error) {
 	return nil, nil
 }

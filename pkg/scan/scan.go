@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"runtime"
 	"time"
 
 	"github.com/pkg/errors"
@@ -9,6 +10,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/cmd/version"
 	"github.com/MaineK00n/vuls2/pkg/scan/cpe"
 	"github.com/MaineK00n/vuls2/pkg/scan/os"
+	"github.com/MaineK00n/vuls2/pkg/scan/systeminfo"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	"github.com/MaineK00n/vuls2/pkg/types"
 )
@@ -16,7 +18,11 @@ import (
 func Scan(ctx context.Context, host *types.Host) error {
 	ah := scanTypes.AnalyzerHost{Host: host}
 	if ah.Host.Config.Scan.OSPkg != nil {
-		ah.Analyzers = append(ah.Analyzers, os.Analyzer{})
+		if runtime.GOOS == "windows" {
+			ah.Analyzers = append(ah.Analyzers, systeminfo.Analyzer{})
+		} else {
+			ah.Analyzers = append(ah.Analyzers, os.Analyzer{})
+		}
 	}
 	if len(ah.Host.Config.Scan.CPE) > 0 {
 		ah.Analyzers = append(ah.Analyzers, cpe.Analyzer{})

@@ -28,10 +28,13 @@ type Driver interface {
 	PutPackage(string, string, map[string]types.Packages) error
 	PutCPEConfiguration(string, string, map[string]types.CPEConfigurations) error
 	PutRedHatRepoToCPE(string, string, types.RepositoryToCPE) error
+	PutWindowsSupercedence(string, string, types.Supercedence) error
 
 	GetVulnerability([]string) (map[string]map[string]types.Vulnerability, error)
 	GetPackage(string, string, string) (map[string]map[string]map[string]types.Package, error)
 	GetCPEConfiguration(string) (map[string]map[string]map[string][]types.CPEConfiguration, error)
+	GetSupercedence([]string) (map[string][]string, error)
+	GetKBtoProduct(string, []string) ([]string, error)
 }
 
 func (db *DB) Name() string {
@@ -93,7 +96,14 @@ func (db *DB) PutCPEConfiguration(src, key string, value map[string]types.CPECon
 
 func (db *DB) PutRedHatRepoToCPE(src, key string, value types.RepositoryToCPE) error {
 	if err := db.driver.PutRedHatRepoToCPE(src, key, value); err != nil {
-		return errors.Wrapf(err, "put repository to cpe")
+		return errors.Wrap(err, "put repository to cpe")
+	}
+	return nil
+}
+
+func (db *DB) PutWindowsSupercedence(src, key string, value types.Supercedence) error {
+	if err := db.driver.PutWindowsSupercedence(src, key, value); err != nil {
+		return errors.Wrap(err, "put supercedence")
 	}
 	return nil
 }
@@ -118,6 +128,22 @@ func (db *DB) GetCPEConfiguration(partvendorproduct string) (map[string]map[stri
 	rs, err := db.driver.GetCPEConfiguration(partvendorproduct)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get cpe configuration")
+	}
+	return rs, nil
+}
+
+func (db *DB) GetSupercedence(kb []string) (map[string][]string, error) {
+	rs, err := db.driver.GetSupercedence(kb)
+	if err != nil {
+		return nil, errors.Wrap(err, "get supercedence")
+	}
+	return rs, nil
+}
+
+func (db *DB) GetKBtoProduct(release string, kb []string) ([]string, error) {
+	rs, err := db.driver.GetKBtoProduct(release, kb)
+	if err != nil {
+		return nil, errors.Wrap(err, "get product from kb")
 	}
 	return rs, nil
 }

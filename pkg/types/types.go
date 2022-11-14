@@ -120,7 +120,7 @@ type Packages struct {
 	Kernel Kernel             `json:"kernel,omitempty"`
 	OSPkg  map[string]Package `json:"ospkg,omitempty"`
 	CPE    map[string]CPE     `json:"cpe,omitempty"`
-	// KB KB
+	KB     []string           `json:"kb,omitempty"`
 }
 
 type Kernel struct {

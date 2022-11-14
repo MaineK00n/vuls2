@@ -134,6 +134,28 @@ func create(src, dbpath string) error {
 				if err := db.PutPackage(srcType, bucket, pkgs); err != nil {
 					return errors.Wrap(err, "put package")
 				}
+			case "windows":
+				if strings.Contains(p, "supercedence.json") {
+					var supercedences []vulnsrc.Supercedence
+					if err := json.Unmarshal(bs, &supercedences); err != nil {
+						return errors.Wrapf(err, "unnmarshal json. path: %s", path)
+					}
+					if err := db.PutWindowsSupercedence(srcType, bucket, vulnsrc.ToVulsSupercedences(supercedences)); err != nil {
+						return errors.Wrap(err, "put supercedence")
+					}
+					break
+				}
+				var src vulnsrc.DetectPackage
+				if err := json.Unmarshal(bs, &src); err != nil {
+					return errors.Wrapf(err, "unmarshal json. path: %s", path)
+				}
+				pkgs, err := vulnsrc.ToVulsPackage(src, advType)
+				if err != nil {
+					return errors.Wrap(err, "to vuls package")
+				}
+				if err := db.PutPackage(srcType, bucket, pkgs); err != nil {
+					return errors.Wrap(err, "put package")
+				}
 			default:
 				var src vulnsrc.DetectPackage
 				if err := json.Unmarshal(bs, &src); err != nil {
@@ -182,14 +204,14 @@ func create(src, dbpath string) error {
 
 func toAdvType(path string) (string, error) {
 	ss := strings.Split(path, string(os.PathSeparator))
-	if len(ss) < 3 {
+	if len(ss) < 3 && ss[0] != "windows" {
 		return "", errors.Errorf(`unexpected path. accepts: "[<os name>, <library name>, "nvd", "jvn"]/**/*.json*", received: "%s"`, path)
 	}
 
 	switch ss[0] {
 	case "alma", "alpine", "amazon", "epel", "fedora", "oracle", "rocky":
 		return fmt.Sprintf("%s:%s", ss[0], ss[1]), nil
-	case "arch", "freebsd", "gentoo", "conan", "erlang", "nvd", "jvn":
+	case "arch", "freebsd", "gentoo", "windows", "conan", "erlang", "nvd", "jvn":
 		return ss[0], nil
 	case "debian":
 		switch ss[1] {
@@ -226,15 +248,6 @@ func toAdvType(path string) (string, error) {
 			return "ubuntu_security_tracker", nil
 		default:
 			return "", errors.Errorf(`unexpected debian advisory type. accepts: ["oval", "tracker"], received: "%s"`, ss[1])
-		}
-	case "windows":
-		switch ss[1] {
-		case "bulletin":
-			return "windows_bulletin", nil
-		case "cvrf":
-			return "windows_cvrf", nil
-		default:
-			return "", errors.Errorf(`unexpected windows advisory type. accepts: ["bulletin", "cvrf"], received: "%s"`, ss[1])
 		}
 	case "cargo":
 		switch ss[1] {
@@ -339,7 +352,7 @@ func toAdvType(path string) (string, error) {
 
 func toAdvBucket(path string) (string, error) {
 	ss := strings.Split(path, string(os.PathSeparator))
-	if len(ss) < 3 {
+	if len(ss) < 3 && ss[0] != "windows" {
 		return "", errors.Errorf(`unexpected path. accepts: "[<os name>, <library name>, "nvd", "jvn"]/**/*.json*", received: "%s"`, path)
 	}
 
@@ -388,12 +401,10 @@ func toAdvBucket(path string) (string, error) {
 			return "", errors.Errorf(`unexpected debian advisory type. accepts: ["oval", "tracker"], received: "%s"`, ss[1])
 		}
 	case "windows":
-		switch ss[1] {
-		case "bulletin", "cvrf":
-			return fmt.Sprintf("%s:%s", ss[0], ss[2]), nil
-		default:
-			return "", errors.Errorf(`unexpected windows advisory type. accepts: ["bulletin", "cvrf"], received: "%s"`, ss[1])
+		if strings.Contains(path, "supercedence.json") {
+			return "windows_supercedence", nil
 		}
+		return fmt.Sprintf("%s:%s", ss[0], ss[1]), nil
 	case "nvd", "jvn":
 		return "cpe", nil
 	default:
