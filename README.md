@@ -10,6 +10,8 @@ Please use the master branch if you want to use it stably, as destructive change
 
 ```console
 $ go install github.com/future-architect/vuls/cmd/vuls@nightly
+$ vuls version
+vuls nightly 2ef5390
 ```
 
 ### 2. DB Fetch
