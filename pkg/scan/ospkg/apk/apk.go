@@ -30,7 +30,7 @@ func (a Analyzer) Analyze(ctx context.Context, ah *scanTypes.AnalyzerHost) error
 		return errors.Errorf("exit status is %d", status)
 	}
 
-	ah.Host.Packages.OSPkg, err = parseInstalledPackage(stdout)
+	ah.Host.Packages.OSPkg, err = ParseInstalledPackage(stdout)
 	if err != nil {
 		return errors.Wrap(err, "parse installed package")
 	}
@@ -38,7 +38,7 @@ func (a Analyzer) Analyze(ctx context.Context, ah *scanTypes.AnalyzerHost) error
 	return nil
 }
 
-func parseInstalledPackage(stdout string) (map[string]types.Package, error) {
+func ParseInstalledPackage(stdout string) (map[string]types.Package, error) {
 	pkgs := map[string]types.Package{}
 
 	scanner := bufio.NewScanner(strings.NewReader(stdout))

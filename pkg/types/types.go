@@ -118,7 +118,7 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 
 type Packages struct {
 	Kernel Kernel             `json:"kernel,omitempty"`
-	OSPkg  map[string]Package `json:"os_pkg,omitempty"`
+	OSPkg  map[string]Package `json:"ospkg,omitempty"`
 	CPE    map[string]CPE     `json:"cpe,omitempty"`
 	// KB KB
 }

@@ -32,7 +32,7 @@ func (a Analyzer) Analyze(ctx context.Context, ah *types.AnalyzerHost) error {
 		return errors.Errorf("exit status is %d", status)
 	}
 
-	ah.Host.Family, ah.Host.Release, err = parseOSRelease(stdout)
+	ah.Host.Family, ah.Host.Release, err = ParseOSRelease(stdout)
 	if err != nil {
 		return errors.Wrap(err, "parse /etc/os-release")
 	}
@@ -53,7 +53,7 @@ func (a Analyzer) Analyze(ctx context.Context, ah *types.AnalyzerHost) error {
 	return nil
 }
 
-func parseOSRelease(stdout string) (string, string, error) {
+func ParseOSRelease(stdout string) (string, string, error) {
 	var family, versionID string
 	scanner := bufio.NewScanner(strings.NewReader(stdout))
 	for scanner.Scan() {
