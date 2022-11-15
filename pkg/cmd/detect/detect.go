@@ -81,7 +81,7 @@ func exec(ctx context.Context, path string, args []string) error {
 				continue
 			}
 
-			t, err := time.Parse(time.RFC3339, f.Name())
+			t, err := time.Parse("2006-01-02T150405-0700", f.Name())
 			if err != nil {
 				continue
 			}
@@ -95,7 +95,7 @@ func exec(ctx context.Context, path string, args []string) error {
 			return e1.After(e2)
 		})
 
-		args = append(args, filepath.Join(pwd, "results", ds[0].Format(time.RFC3339)))
+		args = append(args, filepath.Join(pwd, "results", ds[0].Format("2006-01-02T150405-0700")))
 	}
 
 	type result struct {

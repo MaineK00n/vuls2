@@ -51,12 +51,15 @@ func (d Detector) Detect(ctx context.Context, host *types.Host) error {
 	}
 	unapplied = util.Unique(unapplied)
 
-	products, err := vulndb.GetKBtoProduct(host.Release, unapplied)
+	products, err := vulndb.GetKBtoProduct(host.Release, append(host.Packages.KB, unapplied...))
 	if err != nil {
 		return errors.Wrap(err, "get product from kb")
 	}
+	if !slices.Contains(products, host.Release) {
+		products = append(products, host.Release)
+	}
 
-	for _, product := range products {
+	for _, product := range util.Unique(products) {
 		pkgs, err := vulndb.GetPackage(host.Family, host.Release, product)
 		if err != nil {
 			return errors.Wrap(err, "get package")

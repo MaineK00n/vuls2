@@ -16,7 +16,7 @@ type Analyzer struct {
 }
 
 func (a Analyzer) Name() string {
-	return "os analyzer"
+	return "systeminfo analyzer"
 }
 
 func (a Analyzer) Analyze(ctx context.Context, ah *types.AnalyzerHost) error {

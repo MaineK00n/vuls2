@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -48,6 +49,9 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 	switch h.Config.Type {
 	case "local":
 		execCmd := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
+		if runtime.GOOS == "windows" {
+			execCmd = exec.CommandContext(ctx, cmd)
+		}
 		var stdoutBuf, stderrBuf bytes.Buffer
 		execCmd.Stdout = &stdoutBuf
 		execCmd.Stderr = &stderrBuf
@@ -92,7 +96,11 @@ func (h *Host) Exec(ctx context.Context, cmd string, sudo bool) (int, string, st
 		if h.Config.SSHKey != nil {
 			args = append(args, "-i", *h.Config.SSHKey, "-o", "PasswordAuthentication=no")
 		}
-		args = append(args, *h.Config.Host, fmt.Sprintf("stty cols 1000; %s", cmd))
+		if runtime.GOOS == "windows" {
+			args = append(args, *h.Config.Host, cmd)
+		} else {
+			args = append(args, *h.Config.Host, fmt.Sprintf("stty cols 1000; %s", cmd))
+		}
 
 		execCmd := exec.CommandContext(ctx, sshBinPath, args...)
 		var stdoutBuf, stderrBuf bytes.Buffer

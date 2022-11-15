@@ -2,6 +2,7 @@ package init
 
 import (
 	"os"
+	"path/filepath"
 	"text/template"
 
 	"github.com/MakeNowJust/heredoc"
@@ -43,7 +44,7 @@ func generateConfigTemplate() error {
 		`{
 	"server": {
 		"listen": "127.0.0.1:5515",
-		"path": "{{.pwd}}/vuls.db"
+		"path": "{{.dbpath}}"
 	},
 	"hosts": {
 		"local": {
@@ -54,8 +55,8 @@ func generateConfigTemplate() error {
 				}
 			},
 			"detect": {
-				"path": "{{.pwd}}/vuls.db",
-				"result_dir": "{{.pwd}}/results"
+				"path": "{{.dbpath}}",
+				"result_dir": "{{.results}}"
 			}
 		},
 		"remote": {
@@ -63,16 +64,16 @@ func generateConfigTemplate() error {
 			"host": "127.0.0.1",
 			"port": "22",
 			"user": "vuls",
-			"ssh_config": "{{.home}}/.ssh/config",
-			"ssh_key": "{{.home}}/.ssh/id_rsa",
+			"ssh_config": "{{.sshconfig}}",
+			"ssh_key": "{{.sshkey}}",
 			"scan": {
 				"ospkg": {
 					"root": false
 				}
 			},
 			"detect": {
-				"path": "{{.pwd}}/vuls.db",
-				"result_dir": "{{.pwd}}/results"
+				"path": "{{.dbpath}}",
+				"result_dir": "{{.results}}"
 			}
 		},
 		"cpe": {
@@ -85,15 +86,15 @@ func generateConfigTemplate() error {
 				]
 			},
 			"detect": {
-				"path": "{{.pwd}}/vuls.db",
-				"result_dir": "{{.pwd}}/results"
+				"path": "{{.dbpath}}",
+				"result_dir": "{{.results}}"
 			}
 		}
 	}
 }
 `)
 
-	if err := t.Execute(os.Stdout, map[string]string{"pwd": pwd, "home": home}); err != nil {
+	if err := t.Execute(os.Stdout, map[string]string{"dbpath": filepath.Join(pwd, "vuls.db"), "results": filepath.Join(pwd, "results"), "sshconfig": filepath.Join(home, ".ssh", "config"), "sshkey": filepath.Join(home, ".ssh", "id_rsa")}); err != nil {
 		return errors.Wrap(err, "output config template")
 	}
 	return nil

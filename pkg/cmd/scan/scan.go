@@ -96,7 +96,7 @@ func exec(ctx context.Context, path string, args []string) error {
 	now := time.Now()
 	for _, h := range hosts {
 		if err := func() error {
-			resultDir := filepath.Join(h.Config.Scan.ResultDir, now.Format(time.RFC3339))
+			resultDir := filepath.Join(h.Config.Scan.ResultDir, now.Format("2006-01-02T150405-0700"))
 			if err := os.MkdirAll(resultDir, os.ModePerm); err != nil {
 				return errors.Wrapf(err, "mkdir %s", resultDir)
 			}
@@ -129,7 +129,7 @@ func exec(ctx context.Context, path string, args []string) error {
 			fmt.Printf("%s : error msg: %s\n", name, h.ScanError)
 			continue
 		}
-		fmt.Printf("%s: success ospkg: %d, cpe: %d installed\n", name, len(h.Packages.OSPkg), len(h.Packages.CPE))
+		fmt.Printf("%s: success ospkg: %d, cpe: %d, KB %d installed\n", name, len(h.Packages.OSPkg), len(h.Packages.CPE), len(h.Packages.KB))
 	}
 
 	return nil
