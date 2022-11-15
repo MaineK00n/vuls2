@@ -18,6 +18,7 @@
 
 # Vuls
 vuls
+!cmd/vuls
 vuls.db
 config.json
 results
