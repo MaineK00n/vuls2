@@ -1,0 +1,121 @@
+7. build cwe
+8. fetch, build capec, attack
+9. fetch build redhat/api
+10. fetch build epel, fedora, gentoo, rocky
+11. fetch build library
+
+vuls config.json template
+---
+{
+    "scan": {
+        "ospkg": {
+            "root": false,
+            "offline": false
+        },
+        "langpkg": {},
+        "lockfile": {
+            "find": false,
+            "path": []
+        },
+        "wordpress": {
+            "root": "",
+            "path": "",
+            "user": "",
+            "doc_root": ""
+        },
+        "cpe": [],
+        "sbom": [],
+        "port": {
+            "type": "builtin", // ["builtin", "nmap"]
+            "nmap": {}
+        },
+        "timeout_unit": 300,
+        "timeout_scan": 7200,
+        "result_dir": "$PWD/results",
+        "log_dir": "/var/log/vuls",
+        "debug": false
+    },
+    "detect": {
+        "path": "path/to/vuls.db",
+        "cpe": {
+            "match": "strict", // "strict", "standard", "vendor_product"
+        },
+        "result_dir": "$PWD/results",
+        "log_dir": "/var/log/vuls",
+        "debug": false
+    },
+    "report": {
+        "stdout": "oneline", // ["oneline", "list", "full"]
+        "localfile": [
+            "json",
+            "xml",
+            "csv",
+            "cyclonedx-json",
+            "cyclonedx-xml"
+        ],
+        "aws": {},
+        "gcp": {},
+        "azure": {},
+        "syslog": {},
+        "http": {},
+        "email": {},
+        "slack": {},
+        "chatwork": {},
+        "googlechat": {},
+        "telegram": {},
+        "ignore": {
+            "cvss-under": 0,
+            "id": [],
+            "package": [],
+        },
+        "result_dir": "$PWD/results",
+        "log_dir": "/var/log/vuls",
+        "debug": false
+    },
+    "server": {
+        "listen": "127.0.0.1:5515",
+        "path": "path/to/vuls.db",
+        "scan": {
+            "compress": "gzip" // ["gzip", "bzip2", "xz"]
+        },
+        "detect": {
+            "compress": "gzip" // ["gzip", "bzip2", "xz"]
+        },
+        "report": {
+            "format": "json", // ["json", "xml", "csv", "cyclonedx-json", "cyclonedx-xml"],
+            "compress": "gzip" // ["gzip", "bzip2", "xz"]
+        },
+        "log_dir": "/var/log/vuls",
+        "debug": false
+    },
+    "hosts": {
+        "local": {
+            "type": "local",
+        },
+        "remote": {
+            "type": "remote", // [local, remote, ssh-config, cidr, sbom, docker, lxd, lxc]
+            "host": "127.0.0.1", // local: none, remote: ip address, ssh-config: host name, cidr: cidr range, sbom: file path, docker: ${running} or container id, name, lxd: ${running} or container id, name , lxc: ${running} or container id, name
+            "port": "22", // local: none, remote: port, ssh-config: none, cidr: port, sbom: none, docker: none, lxd: none, lxc: none
+            "user": "vuls", // local: none, remote: required, ssh-config: none, cidr: required, sbom: none, docker: none, lxd: none, lxc: none
+            "ssh_config": "/home/mainek00n/.ssh/config", // local: none, remote: optional, ssh-config: required, cidr: optional, sbom: none, docker: none, lxd: none, lxc: none
+            "ssh_key": "/home/mainek00n/.ssh/id_rsa", // local: none, remote: ssh key path, ssh-config: none, cidr: ssh key path, sbom: none, docker: none, lxd: none, lxc: none
+            "scan": {
+                "ospkg": {
+                    "root": true
+                },
+                "cpe": [
+                    {
+                        "cpe": "",
+                        "running_on": ""
+                    }
+                ]
+            },
+            "detect": {
+                "path": "path/to/vuls.db"
+            },
+            "report": {
+                "stdout": "list"
+            }
+        }
+    }
+}
