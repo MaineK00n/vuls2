@@ -4,15 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
+	"github.com/knqyf263/go-cpe/common"
+	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
@@ -100,7 +104,7 @@ func (c *Connection) GetVulnerabilityDatas() (<-chan types.VulnerabilityData, er
 }
 
 func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, error) {
-	var data types.VulnerabilityData
+	roots := types.VulnerabilityRoot{ID: id}
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		vb := tx.Bucket([]byte("vulnerability"))
 		if vb == nil {
@@ -112,16 +116,167 @@ func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, 
 			return errors.Errorf("bucket:%q is not exists", "vulnerability:root")
 		}
 
-		bs := vrb.Get([]byte(id))
-		if len(bs) == 0 {
-			return nil
+		if bs := vrb.Get([]byte(id)); len(bs) > 0 {
+			if err := util.Unmarshal(bs, true, &roots); err != nil {
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", id))
+			}
 		}
 
-		var root types.VulnerabilityRoot
-		if err := util.Unmarshal(bs, true, &root); err != nil {
-			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", id))
+		vab := vb.Bucket([]byte("advisory"))
+		if vab == nil {
+			return errors.Errorf("bucket:%q is not exists", "vulnerability:advisory")
 		}
-		data.ID = root.ID
+
+		vaab := vab.Bucket([]byte(id))
+		if vaab != nil {
+			if err := vaab.ForEachBucket(func(sk []byte) error {
+				vaasb := vaab.Bucket(sk)
+				if vaasb == nil {
+					return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("vulnerability:advisory:%s", sk))
+				}
+
+				if err := vaasb.ForEach(func(rk, _ []byte) error {
+					if !slices.ContainsFunc(roots.Advisories, func(e []string) bool {
+						return slices.Equal(e, []string{id, string(sk), string(rk)})
+					}) {
+						roots.Advisories = append(roots.Advisories, []string{id, string(sk), string(rk)})
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrapf(err, "walk %s", fmt.Sprintf("vulnerability:advisory:%s:%s", id, sk))
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "walk %s", fmt.Sprintf("vulnerability:advisory:%s", id))
+			}
+		}
+
+		vvb := vb.Bucket([]byte("vulnerability"))
+		if vvb == nil {
+			return errors.Errorf("bucket:%q is not exists", "vulnerability:vulnerability")
+		}
+
+		vvvb := vvb.Bucket([]byte(id))
+		if vvvb != nil {
+			if err := vvvb.ForEachBucket(func(sk []byte) error {
+				vvvsb := vvvb.Bucket(sk)
+				if vvvsb == nil {
+					return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("vulnerability:vulnerability:%s", sk))
+				}
+
+				if err := vvvsb.ForEach(func(rk, _ []byte) error {
+					if !slices.ContainsFunc(roots.Vulnerabilities, func(e []string) bool {
+						return slices.Equal(e, []string{id, string(sk), string(rk)})
+					}) {
+						roots.Vulnerabilities = append(roots.Vulnerabilities, []string{id, string(sk), string(rk)})
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrapf(err, "walk %s", fmt.Sprintf("vulnerability:vulnerability:%s:%s", id, sk))
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "walk %s", fmt.Sprintf("vulnerability:vulnerability:%s", id))
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var ds [][]string
+	for _, qs := range roots.Advisories {
+		if len(qs) != 3 {
+			return nil, errors.Errorf("unexpected advisory queries. expected: %q, actual: %q", []string{"<Advisory ID>", "<Source ID>", "<Root ID>"}, qs)
+		}
+
+		if slices.ContainsFunc(roots.Detections, func(e []string) bool {
+			return slices.Equal(e[:2], []string{qs[2], qs[1]})
+		}) {
+			continue
+		}
+
+		if !slices.ContainsFunc(ds, func(e []string) bool {
+			return slices.Equal(e, []string{qs[2], qs[1]})
+		}) {
+			ds = append(ds, []string{qs[2], qs[1]})
+		}
+
+		if !slices.Contains(roots.DataSources, qs[1]) {
+			roots.DataSources = append(roots.DataSources, qs[1])
+		}
+	}
+	for _, qs := range roots.Vulnerabilities {
+		if len(qs) != 3 {
+			return nil, errors.Errorf("unexpected vulnerability queries. expected: %q, actual: %q", []string{"<CVE ID>", "<Source ID>", "<Root ID>"}, qs)
+		}
+
+		if slices.ContainsFunc(roots.Detections, func(e []string) bool {
+			return slices.Equal(e[:2], []string{qs[2], qs[1]})
+		}) {
+			continue
+		}
+
+		if !slices.ContainsFunc(ds, func(e []string) bool {
+			return slices.Equal(e, []string{qs[2], qs[1]})
+		}) {
+			ds = append(ds, []string{qs[2], qs[1]})
+		}
+
+		if !slices.Contains(roots.DataSources, qs[1]) {
+			roots.DataSources = append(roots.DataSources, qs[1])
+		}
+	}
+
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		db := tx.Bucket([]byte("detection"))
+		if db == nil {
+			return errors.Errorf("bucket:%q is not exists", "detection")
+		}
+
+		for _, qs := range ds {
+			if len(qs) != 2 {
+				return errors.Errorf("unexpected detection prefix queries. expected: %q, actual: %q", []string{"<Root ID>", "<Source ID>"}, qs)
+			}
+
+			drb := db.Bucket([]byte(qs[0]))
+			if drb == nil {
+				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("detection:%s", qs[0]))
+			}
+
+			drsb := drb.Bucket([]byte(qs[1]))
+			if drsb == nil {
+				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("detection:%s:%s", qs[0], qs[1]))
+			}
+
+			if err := drsb.ForEach(func(k, _ []byte) error {
+				if !slices.ContainsFunc(roots.Detections, func(e []string) bool {
+					return slices.Equal(e, []string{qs[0], qs[1], string(k)})
+				}) {
+					roots.Detections = append(roots.Detections, []string{qs[0], qs[1], string(k)})
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "walk %s", fmt.Sprintf("detection:%s:%s", qs[0], qs[1]))
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return c.getVulnerabilityData(roots)
+}
+
+func (c *Connection) getVulnerabilityData(root types.VulnerabilityRoot) (*types.VulnerabilityData, error) {
+	var data types.VulnerabilityData
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		vb := tx.Bucket([]byte("vulnerability"))
+		if vb == nil {
+			return errors.Errorf("bucket:%q is not exists", "vulnerability")
+		}
 
 		am := map[string]types.VulnerabilityDataAdvisory{}
 		for _, qs := range root.Advisories {
@@ -215,39 +370,39 @@ func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, 
 
 		dm := map[detectionTypes.Ecosystem]types.VulnerabilityDataDetection{}
 		for _, qs := range root.Detections {
-			if len(qs) != 4 {
-				return errors.Errorf("unexpected detection queries. expected: %q, actual: %q", []string{"<Ecosystem>", "<Package name | CPE>", "<Root ID>", "<Source ID>"}, qs)
+			if len(qs) != 3 {
+				return errors.Errorf("unexpected detection queries. expected: %q, actual: %q", []string{"<Root ID>", "<Source ID>", "<Ecosystem>"}, qs)
 			}
 
-			eb := tx.Bucket([]byte(qs[0]))
-			if eb == nil {
-				return errors.Errorf("bucket:%q is not exists", qs[0])
+			db := tx.Bucket([]byte("detection"))
+			if db == nil {
+				return errors.Errorf("bucket:%q is not exists", "detection")
 			}
 
-			epb := eb.Bucket([]byte(qs[1]))
-			if epb == nil {
-				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("%s:%s", qs[0], qs[1]))
+			drb := db.Bucket([]byte(qs[0]))
+			if drb == nil {
+				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("detection:%s", qs[0]))
 			}
 
-			eprb := epb.Bucket([]byte(qs[2]))
-			if eprb == nil {
-				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("%s:%s:%s", qs[0], qs[1], qs[2]))
+			drsb := drb.Bucket([]byte(qs[1]))
+			if drsb == nil {
+				return errors.Errorf("bucket:%q is not exists", fmt.Sprintf("detection:%s:%s", qs[0], qs[1]))
 			}
 
-			var d []detectionTypes.Detection
-			if err := util.Unmarshal(eprb.Get([]byte(qs[3])), false, &d); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s:%s:%s:%s", qs[0], qs[1], qs[2], qs[3]))
+			var ca criteriaTypes.Criteria
+			if err := util.Unmarshal(drsb.Get([]byte(qs[2])), true, &ca); err != nil {
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("detection:%s:%s:%s", qs[0], qs[1], qs[2]))
 			}
 
-			dd, ok := dm[detectionTypes.Ecosystem(qs[0])]
+			dd, ok := dm[detectionTypes.Ecosystem(qs[2])]
 			if !ok {
 				dd = types.VulnerabilityDataDetection{
-					Ecosystem: detectionTypes.Ecosystem(qs[0]),
-					Contents:  map[sourceTypes.SourceID][]detectionTypes.Detection{},
+					Ecosystem: detectionTypes.Ecosystem(qs[2]),
+					Contents:  map[sourceTypes.SourceID]criteriaTypes.Criteria{},
 				}
 			}
-			dd.Contents[sourceTypes.SourceID(qs[3])] = append(dd.Contents[sourceTypes.SourceID(qs[3])], d...)
-			dm[detectionTypes.Ecosystem(qs[0])] = dd
+			dd.Contents[sourceTypes.SourceID(qs[1])] = ca
+			dm[detectionTypes.Ecosystem(qs[2])] = dd
 		}
 		for _, d := range dm {
 			data.Detections = append(data.Detections, d)
@@ -264,7 +419,11 @@ func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, 
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("datasource:%s", q))
 			}
 
-			data.DataSources = append(data.DataSources, d)
+			if !slices.ContainsFunc(data.DataSources, func(e datasourceTypes.DataSource) bool {
+				return e.ID == d.ID
+			}) {
+				data.DataSources = append(data.DataSources, d)
+			}
 		}
 
 		return nil
@@ -275,213 +434,298 @@ func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, 
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
-	tx, err := c.conn.Begin(true)
-	if err != nil {
-		return errors.Wrap(err, "start a new transaction")
-	}
-
 	roots := map[string]types.VulnerabilityRoot{}
-	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	if err := c.conn.Update(func(tx *bolt.Tx) error {
+		if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
 
-		if d.IsDir() {
-			return nil
-		}
+			if d.IsDir() {
+				return nil
+			}
 
-		f, err := os.Open(path)
-		if err != nil {
-			return errors.Wrapf(err, "open %s", path)
-		}
-		defer f.Close()
+			f, err := os.Open(path)
+			if err != nil {
+				return errors.Wrapf(err, "open %s", path)
+			}
+			defer f.Close()
 
-		var data dataTypes.Data
-		if err := json.NewDecoder(f).Decode(&data); err != nil {
-			return errors.Wrapf(err, "decode %s", path)
-		}
+			var data dataTypes.Data
+			if err := json.NewDecoder(f).Decode(&data); err != nil {
+				return errors.Wrapf(err, "decode %s", path)
+			}
 
-		ecosystems := func() []detectionTypes.Ecosystem {
-			var es []detectionTypes.Ecosystem
 			for _, d := range data.Detection {
-				es = append(es, d.Ecosystem)
-			}
-			return es
-		}()
+				db, err := tx.CreateBucketIfNotExists([]byte("detection"))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", "detection")
+				}
 
-		vb, err := tx.CreateBucketIfNotExists([]byte("vulnerability"))
-		if err != nil {
-			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability")
-		}
+				drb, err := db.CreateBucketIfNotExists([]byte(data.ID))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("detection:%s", data.ID))
+				}
 
-		vab, err := vb.CreateBucketIfNotExists([]byte("advisory"))
-		if err != nil {
-			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:advisory")
-		}
-		for _, a := range data.Advisories {
-			vaab, err := vab.CreateBucketIfNotExists([]byte(a.ID))
-			if err != nil {
-				return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:advisory:%s", a.ID))
-			}
+				drsb, err := drb.CreateBucketIfNotExists([]byte(data.DataSource))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("detection:%s:%s", data.ID, data.DataSource))
+				}
 
-			vaasb, err := vaab.CreateBucketIfNotExists([]byte(data.DataSource))
-			if err != nil {
-				return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:advisory:%s:%s", a.ID, data.DataSource))
-			}
+				bs, err := util.Marshal(d.Criteria, true)
+				if err != nil {
+					return errors.Wrap(err, "marshal criteria")
+				}
 
-			bs, err := util.Marshal(types.VulnerabilityAdvisory{
-				Content:    a,
-				Ecosystems: ecosystems,
-			}, true)
-			if err != nil {
-				return errors.Wrap(err, "marshal advisory")
-			}
+				if err := drsb.Put([]byte(d.Ecosystem), bs); err != nil {
+					return errors.Wrapf(err, "put %s", fmt.Sprintf("detection:%s:%s:%s", data.ID, data.DataSource, d.Ecosystem))
+				}
 
-			if err := vaasb.Put([]byte(data.ID), bs); err != nil {
-				return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:advisory:%s:%s:%s", a.ID, data.DataSource, data.ID))
-			}
-
-			r, ok := roots[data.ID]
-			if !ok {
-				r = types.VulnerabilityRoot{ID: data.ID}
-			}
-			r.Advisories = append(r.Advisories, []string{a.ID, string(data.DataSource), data.ID})
-			roots[data.ID] = r
-		}
-
-		vvb, err := vb.CreateBucketIfNotExists([]byte("vulnerability"))
-		if err != nil {
-			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:vulnerability")
-		}
-		for _, v := range data.Vulnerabilities {
-			vvvb, err := vvb.CreateBucketIfNotExists([]byte(v.ID))
-			if err != nil {
-				return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:vulnerability:%s", v.ID))
-			}
-
-			vvvsb, err := vvvb.CreateBucketIfNotExists([]byte(data.DataSource))
-			if err != nil {
-				return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:vulnerability:%s:%s", v.ID, data.DataSource))
-			}
-
-			bs, err := util.Marshal(types.VulnerabilityVulnerability{
-				Content:    v,
-				Ecosystems: ecosystems,
-			}, true)
-			if err != nil {
-				return errors.Wrap(err, "marshal vulnerability")
-			}
-
-			if err := vvvsb.Put([]byte(data.ID), bs); err != nil {
-				return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:vulnerability:%s:%s:%s", v.ID, data.DataSource, data.ID))
-			}
-
-			r, ok := roots[data.ID]
-			if !ok {
-				r = types.VulnerabilityRoot{ID: data.ID}
-			}
-			r.Vulnerabilities = append(r.Vulnerabilities, []string{v.ID, string(data.DataSource), data.ID})
-			roots[data.ID] = r
-
-			if v.ID != data.ID {
-				r, ok := roots[v.ID]
+				r, ok := roots[data.ID]
 				if !ok {
-					r = types.VulnerabilityRoot{ID: v.ID}
+					r = types.VulnerabilityRoot{ID: data.ID}
+				}
+				r.Detections = append(r.Detections, []string{data.ID, string(data.DataSource), string(d.Ecosystem)})
+				roots[data.ID] = r
+
+				pkgs := walkCriteria(d.Criteria)
+				slices.Sort(pkgs)
+				pkgs = slices.Compact(pkgs)
+
+				eb, err := tx.CreateBucketIfNotExists([]byte(d.Ecosystem))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", d.Ecosystem)
+				}
+				for _, p := range pkgs {
+					epb, err := eb.CreateBucketIfNotExists([]byte(p))
+					if err != nil {
+						return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("%s:%s", d.Ecosystem, p))
+					}
+
+					eprb, err := epb.CreateBucketIfNotExists([]byte(data.ID))
+					if err != nil {
+						return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("%s:%s:%s", d.Ecosystem, p, data.ID))
+					}
+
+					bs, err := util.Marshal([]string{data.ID, string(data.DataSource), string(d.Ecosystem)}, false)
+					if err != nil {
+						return errors.Wrap(err, "marshal criteria key")
+					}
+
+					if err := eprb.Put([]byte(data.DataSource), bs); err != nil {
+						return errors.Wrapf(err, "put %s", fmt.Sprintf("%s:%s:%s:%s", d.Ecosystem, p, data.ID, data.DataSource))
+					}
+				}
+			}
+
+			ecosystems := func() []detectionTypes.Ecosystem {
+				var es []detectionTypes.Ecosystem
+				for _, d := range data.Detection {
+					es = append(es, d.Ecosystem)
+				}
+				return es
+			}()
+
+			vb, err := tx.CreateBucketIfNotExists([]byte("vulnerability"))
+			if err != nil {
+				return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability")
+			}
+
+			vab, err := vb.CreateBucketIfNotExists([]byte("advisory"))
+			if err != nil {
+				return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:advisory")
+			}
+			for _, a := range data.Advisories {
+				vaab, err := vab.CreateBucketIfNotExists([]byte(a.ID))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:advisory:%s", a.ID))
+				}
+
+				vaasb, err := vaab.CreateBucketIfNotExists([]byte(data.DataSource))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:advisory:%s:%s", a.ID, data.DataSource))
+				}
+
+				bs, err := util.Marshal(types.VulnerabilityAdvisory{
+					Content:    a,
+					Ecosystems: ecosystems,
+				}, true)
+				if err != nil {
+					return errors.Wrap(err, "marshal advisory")
+				}
+
+				if err := vaasb.Put([]byte(data.ID), bs); err != nil {
+					return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:advisory:%s:%s:%s", a.ID, data.DataSource, data.ID))
+				}
+
+				r, ok := roots[data.ID]
+				if !ok {
+					r = types.VulnerabilityRoot{ID: data.ID}
+				}
+				r.Advisories = append(r.Advisories, []string{a.ID, string(data.DataSource), data.ID})
+				roots[data.ID] = r
+			}
+
+			vvb, err := vb.CreateBucketIfNotExists([]byte("vulnerability"))
+			if err != nil {
+				return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:vulnerability")
+			}
+			for _, v := range data.Vulnerabilities {
+				vvvb, err := vvb.CreateBucketIfNotExists([]byte(v.ID))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:vulnerability:%s", v.ID))
+				}
+
+				vvvsb, err := vvvb.CreateBucketIfNotExists([]byte(data.DataSource))
+				if err != nil {
+					return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:vulnerability:%s:%s", v.ID, data.DataSource))
+				}
+
+				bs, err := util.Marshal(types.VulnerabilityVulnerability{
+					Content:    v,
+					Ecosystems: ecosystems,
+				}, true)
+				if err != nil {
+					return errors.Wrap(err, "marshal vulnerability")
+				}
+
+				if err := vvvsb.Put([]byte(data.ID), bs); err != nil {
+					return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:vulnerability:%s:%s:%s", v.ID, data.DataSource, data.ID))
+				}
+
+				r, ok := roots[data.ID]
+				if !ok {
+					r = types.VulnerabilityRoot{ID: data.ID}
 				}
 				r.Vulnerabilities = append(r.Vulnerabilities, []string{v.ID, string(data.DataSource), data.ID})
-				roots[v.ID] = r
+				roots[data.ID] = r
 			}
-		}
 
-		// for _, d := range data.Detection {
-		// 	eb, err := tx.CreateBucketIfNotExists([]byte(d.Ecosystem))
-		// 	if err != nil {
-		// 		return errors.Wrapf(err, "create bucket:%q if not exists", d.Ecosystem)
-		// 	}
-		// 	d.Criteria
-		// }
+			r, ok := roots[data.ID]
+			if !ok {
+				r = types.VulnerabilityRoot{ID: data.ID}
+			}
+			r.DataSources = append(r.DataSources, string(data.DataSource))
+			roots[data.ID] = r
 
-		r, ok := roots[data.ID]
-		if !ok {
-			r = types.VulnerabilityRoot{ID: data.ID}
+			return nil
+		}); err != nil {
+			return errors.Wrapf(err, "walk %s", root)
 		}
-		r.DataSources = append(r.DataSources, string(data.DataSource))
-		roots[data.ID] = r
 
 		return nil
 	}); err != nil {
-		return errors.Wrapf(err, "walk %s", root)
+		return errors.WithStack(err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "commit transaction")
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		for i, r := range roots {
+			vb := tx.Bucket([]byte("vulnerability"))
+			if vb == nil {
+				return errors.Errorf("bucket:%q is not exists", "vulnerability")
+			}
+
+			vrb := vb.Bucket([]byte("root"))
+			if vrb == nil {
+				return nil
+			}
+
+			bs := vrb.Get([]byte(r.ID))
+			if len(bs) > 0 {
+				var v types.VulnerabilityRoot
+				if err := util.Unmarshal(bs, true, &v); err != nil {
+					return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
+				}
+				for _, as := range v.Advisories {
+					if !slices.ContainsFunc(r.Advisories, func(e []string) bool {
+						return slices.Equal(e, as)
+					}) {
+						r.Advisories = append(r.Advisories, as)
+					}
+				}
+				for _, vs := range v.Vulnerabilities {
+					if !slices.ContainsFunc(r.Vulnerabilities, func(e []string) bool {
+						return slices.Equal(e, vs)
+					}) {
+						r.Vulnerabilities = append(r.Vulnerabilities, vs)
+					}
+				}
+				for _, ds := range v.Detections {
+					if !slices.ContainsFunc(r.Detections, func(e []string) bool {
+						return slices.Equal(e, ds)
+					}) {
+						r.Detections = append(r.Detections, ds)
+					}
+				}
+				for _, d := range v.DataSources {
+					if !slices.Contains(r.DataSources, d) {
+						r.DataSources = append(r.DataSources, d)
+					}
+				}
+				roots[i] = r
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return errors.WithStack(err)
 	}
 
-	tx, err = c.conn.Begin(true)
-	if err != nil {
-		return errors.Wrap(err, "start a new transaction")
-	}
+	if err := c.conn.Update(func(tx *bolt.Tx) error {
+		for _, r := range roots {
+			vb := tx.Bucket([]byte("vulnerability"))
+			if vb == nil {
+				return errors.Errorf("bucket:%q is not exists", "vulnerability")
+			}
 
-	for _, r := range roots {
-		vb := tx.Bucket([]byte("vulnerability"))
-		if vb == nil {
-			return errors.Errorf("bucket:%q is not exists", "vulnerability")
-		}
+			vrb, err := vb.CreateBucketIfNotExists([]byte("root"))
+			if err != nil {
+				return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
+			}
 
-		vrb, err := vb.CreateBucketIfNotExists([]byte("root"))
-		if err != nil {
-			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
-		}
+			bs, err := util.Marshal(r, true)
+			if err != nil {
+				return errors.Wrap(err, "marshal root")
+			}
 
-		bs := vrb.Get([]byte(r.ID))
-		if len(bs) > 0 {
-			var v types.VulnerabilityRoot
-			if err := util.Unmarshal(bs, true, &v); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
-			}
-			for _, as := range v.Advisories {
-				if !slices.ContainsFunc(r.Advisories, func(e []string) bool {
-					return slices.Equal(e, as)
-				}) {
-					r.Advisories = append(r.Advisories, as)
-				}
-			}
-			for _, vs := range v.Vulnerabilities {
-				if !slices.ContainsFunc(r.Vulnerabilities, func(e []string) bool {
-					return slices.Equal(e, vs)
-				}) {
-					r.Vulnerabilities = append(r.Vulnerabilities, vs)
-				}
-			}
-			for _, ds := range v.Detections {
-				if !slices.ContainsFunc(r.Detections, func(e []string) bool {
-					return slices.Equal(e, ds)
-				}) {
-					r.Detections = append(r.Detections, ds)
-				}
-			}
-			for _, d := range v.DataSources {
-				if !slices.Contains(r.DataSources, d) {
-					r.DataSources = append(r.DataSources, d)
-				}
+			if err := vrb.Put([]byte(r.ID), bs); err != nil {
+				return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
 			}
 		}
-
-		bs, err = util.Marshal(r, true)
-		if err != nil {
-			return errors.Wrap(err, "marshal root")
-		}
-
-		if err := vrb.Put([]byte(r.ID), bs); err != nil {
-			return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "commit transaction")
+		return nil
+	}); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil
+}
+
+func walkCriteria(ca criteriaTypes.Criteria) []string {
+	var pkgs []string
+
+	for _, ca := range ca.Criterias {
+		pkgs = append(pkgs, walkCriteria(ca)...)
+	}
+
+	for _, co := range ca.Criterions {
+		if !co.Vulnerable {
+			continue
+		}
+
+		if co.Package.Name != "" {
+			pkgs = append(pkgs, co.Package.Name)
+		}
+		if co.Package.CPE != "" {
+			wfn, err := naming.UnbindFS(co.Package.CPE)
+			if err != nil {
+				slog.Warn("failed to unbind a formatted string to WFN", "input", co.Package.CPE)
+				continue
+			}
+			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+		}
+	}
+
+	return pkgs
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {
@@ -528,6 +772,26 @@ func (c *Connection) PutDataSource(root string) error {
 
 		if err := sb.Put([]byte(datasource.ID), bs); err != nil {
 			return errors.Wrapf(err, "put %s", fmt.Sprintf("datasource:%s", datasource.ID))
+		}
+
+		return nil
+	})
+}
+
+func (c *Connection) DeleteAll() error {
+	return c.conn.Update(func(tx *bolt.Tx) error {
+		var ns [][]byte
+		if err := tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
+			ns = append(ns, name)
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "foreach root")
+		}
+
+		for _, n := range ns {
+			if err := tx.DeleteBucket(n); err != nil {
+				return errors.Wrapf(err, "delete bucket:%q", n)
+			}
 		}
 
 		return nil

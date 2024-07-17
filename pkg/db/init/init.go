@@ -77,6 +77,11 @@ func Init(opts ...Option) error {
 	}
 	defer db.Close()
 
+	slog.Info("Delete All Data")
+	if err := db.DeleteAll(); err != nil {
+		return errors.Wrap(err, "delete all")
+	}
+
 	slog.Info("Put Metadata")
 	if err := db.PutMetadata(types.Metadata{
 		SchemaVersion: common.SchemaVersion,
