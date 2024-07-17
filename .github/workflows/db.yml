@@ -30,19 +30,19 @@ jobs:
         run: go install ./cmd/vuls
 
       - name: make db-build
-        run: make db-build
+        run: make db-build DBPATH=./vuls.db
 
       - name: Install bbolt
         run: go install go.etcd.io/bbolt/cmd/bbolt@latest
 
       - name: Install Zstd
-        run: apt-get update && apt-get install -y zstd
+        run: sudo apt-get update && sudo apt-get install -y zstd
 
       - name: compact vuls.db
         run: |
-          bbolt compact -o ~/.cache/vuls/vuls-compact.db ~/.cache/vuls/vuls.db
-          rm ~/.cache/vuls/vuls.db
-          zstd -19 --rm -o ~/.cache/vuls/vuls-compact.db -o ~/.cache/vuls/vuls.db.zst
+          bbolt compact -o ./vuls-compact.db ./vuls.db
+          mv ./vuls-compact.db ./vuls.db
+          zstd --ultra -22 -T4 --rm ./vuls.db -o ./vuls.db.zst
 
       - name: Install Oras
         run: |
@@ -61,5 +61,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload assets to GHCR
-        run: oras push ghcr.io/${{ github.repository }}:latest ~/.cache/vuls/vuls.db.zst:application/vnd.mainek00n.vuls.db.layer.v1+zstd
+      - name: Upload vuls.db to GHCR
+        run: oras push ghcr.io/mainek00n/vuls2:latest ./vuls.db.zst:application/vnd.mainek00n.vuls.db.layer.v1+zstd
+        # run: oras push ghcr.io/${{ github.repository }}:latest ./vuls.db.zst:application/vnd.mainek00n.vuls.db.layer.v1+zstd
