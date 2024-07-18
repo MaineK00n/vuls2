@@ -71,3 +71,7 @@ func (c *Connection) GetDataSource(id source.SourceID) (*datasourceTypes.DataSou
 func (c *Connection) PutDataSource(root string) error {
 	return errors.New("not implemented yet")
 }
+
+func (c *Connection) DeleteAll() error {
+	return errors.New("not implemented yet")
+}

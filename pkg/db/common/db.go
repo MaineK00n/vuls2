@@ -34,6 +34,8 @@ type DB interface {
 
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error
+
+	DeleteAll() error
 }
 
 type Config struct {
