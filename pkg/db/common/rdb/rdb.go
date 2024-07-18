@@ -82,10 +82,6 @@ func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan s
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityDatas() (<-chan types.VulnerabilityData, error) {
-	return nil, errors.New("not implemented yet")
-}
-
 func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }

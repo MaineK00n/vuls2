@@ -113,11 +113,10 @@ func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) Vul
 
 // vulnerability:root:<Root ID>
 type VulnerabilityRoot struct {
-	ID              string     `json:"id,omitempty"`
-	Advisories      [][]string `json:"advisories,omitempty"`
-	Vulnerabilities [][]string `json:"vulnerabilities,omitempty"`
-	Detections      [][]string `json:"detections,omitempty"`
-	DataSources     []string   `json:"data_sources,omitempty"`
+	ID              string   `json:"id,omitempty"`
+	Advisories      []string `json:"advisories,omitempty"`
+	Vulnerabilities []string `json:"vulnerabilities,omitempty"`
+	DataSources     []string `json:"data_sources,omitempty"`
 }
 
 // vulnerability:advisory:<Advisory ID>:<Source ID>:<Root ID> -> []VulnerabilityAdvisory
@@ -132,6 +131,8 @@ type VulnerabilityVulnerability struct {
 	Ecosystems []detectionTypes.Ecosystem       `json:"ecosystems,omitempty"`
 }
 
-// <ecosystem>:<package>:<Root ID>:<Source ID> -> []detectionTypes.Detection
+// detection:<Root ID>:<Source ID>:<ecosystem> -> criteriaTypes.Criteria
+
+// <ecosystem>:<package>:<Root ID>:<Source ID> -> detection:<Root ID>:<Source ID>:<ecosystem>
 
 // datasource:<Source ID>
