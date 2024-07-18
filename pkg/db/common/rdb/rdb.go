@@ -7,9 +7,9 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
-	"github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
@@ -67,19 +67,26 @@ func (c *Connection) Close() error {
 	return db.Close()
 }
 
-func (c *Connection) GetMetadata() (*types.Metadata, error) {
+func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) PutMetadata(metadata types.Metadata) error {
+func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan struct {
-	ID        string
-	Detection detectionTypes.Detection
-}, error) {
-	return nil, errors.New("not implemented yet")
+func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan types.VulnerabilityDataDetection, <-chan error) {
+	resCh := make(chan types.VulnerabilityDataDetection, 1)
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer close(resCh)
+		defer close(errCh)
+
+		errCh <- errors.New("not implemented yet")
+	}()
+
+	return resCh, errCh
 }
 
 func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, error) {
@@ -90,7 +97,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetDataSource(id source.SourceID) (*datasourceTypes.DataSource, error) {
+func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {
 	return nil, errors.New("not implemented yet")
 }
 

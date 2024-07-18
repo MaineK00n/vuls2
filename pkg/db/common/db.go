@@ -4,12 +4,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/redis/rueidis"
 
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/common/rdb"
 	"github.com/MaineK00n/vuls2/pkg/db/common/redis"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
@@ -21,13 +21,10 @@ type DB interface {
 	Open() error
 	Close() error
 
-	GetMetadata() (*types.Metadata, error)
-	PutMetadata(types.Metadata) error
+	GetMetadata() (*dbTypes.Metadata, error)
+	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(string, string) (<-chan struct {
-		ID        string
-		Detection detectionTypes.Detection
-	}, error)
+	GetVulnerabilityDetections(string, string) (<-chan types.VulnerabilityDataDetection, <-chan error)
 	GetVulnerabilityData(string) (*types.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 

@@ -91,13 +91,20 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	switch searchType {
 	case "detection":
 		slog.Info("Get Vulnerability Detections")
-		ch, err := db.GetVulnerabilityDetections(queries[0], queries[1])
-		if err != nil {
-			return errors.Wrap(err, "get detection")
-		}
-		for d := range ch {
-			if err := e.Encode(d); err != nil {
-				return errors.Wrapf(err, "encode %s", d.ID)
+		resCh, errCh := db.GetVulnerabilityDetections(queries[0], queries[1])
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return nil
+				}
+				if err := e.Encode(item); err != nil {
+					return errors.Wrapf(err, "encode %s %s", queries[0], queries[1])
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return errors.Wrap(err, "get detections")
+				}
 			}
 		}
 	case "data":
@@ -110,9 +117,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		if err := e.Encode(d); err != nil {
 			return errors.Wrapf(err, "encode %s", d.ID)
 		}
+
+		return nil
 	default:
 		return errors.Errorf("unexpected search type. expected: %q, actual: %q", []string{"detection", "data"}, searchType)
 	}
-
-	return nil
 }

@@ -77,7 +77,7 @@ func newDetectionCmd() *cobra.Command {
 		$ vuls db search detection arch bash
 		$ vuls db search detection nvd linux:linux
 		`),
-		Args: cobra.ExactArgs(1),
+		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if err := db.Search("detection", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
