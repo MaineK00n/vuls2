@@ -28,7 +28,6 @@ type DB interface {
 		ID        string
 		Detection detectionTypes.Detection
 	}, error)
-	GetVulnerabilityDatas() (<-chan types.VulnerabilityData, error)
 	GetVulnerabilityData(string) (*types.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 
