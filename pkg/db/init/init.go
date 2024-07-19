@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/MaineK00n/vuls2/pkg/db/common"
-	"github.com/MaineK00n/vuls2/pkg/types"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )
@@ -83,7 +83,7 @@ func Init(opts ...Option) error {
 	}
 
 	slog.Info("Put Metadata")
-	if err := db.PutMetadata(types.Metadata{
+	if err := db.PutMetadata(dbTypes.Metadata{
 		SchemaVersion: common.SchemaVersion,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now(),
