@@ -61,7 +61,7 @@ db-build:
 	make db-add REPO=vuls-data-extracted-freebsd DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-gentoo DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-netbsd DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-oracle DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-oracle DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-csaf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
