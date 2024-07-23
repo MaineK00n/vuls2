@@ -2,10 +2,6 @@ package types
 
 import (
 	"time"
-
-	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
-	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 )
 
 // boltdb: metadata:db
@@ -23,17 +19,9 @@ type VulnerabilityRoot struct {
 	DataSources     []string `json:"data_sources,omitempty"`
 }
 
-// boltdb: vulnerability:advisory:<Advisory ID>:<Source ID>:<Root ID> -> []VulnerabilityAdvisory
-type VulnerabilityAdvisory struct {
-	Content    advisoryTypes.Advisory     `json:"content,omitempty"`
-	Ecosystems []detectionTypes.Ecosystem `json:"ecosystems,omitempty"`
-}
+// boltdb: vulnerability:advisory:<Advisory ID>:<Source ID>:<Root ID> -> []advisoryTypes.Advisory
 
-// boltdb: vulnerability:vulnerability:<CVE ID>:<Source ID>:<Root ID> -> []VulnerabilityVulnerability
-type VulnerabilityVulnerability struct {
-	Content    vulnerabilityTypes.Vulnerability `json:"content,omitempty"`
-	Ecosystems []detectionTypes.Ecosystem       `json:"ecosystems,omitempty"`
-}
+// boltdb: vulnerability:vulnerability:<CVE ID>:<Source ID>:<Root ID> -> []vulnerabilityTypes.Vulnerability
 
 // boltdb: detection:<Root ID>:<Source ID>:<ecosystem> -> criteriaTypes.Criteria
 
