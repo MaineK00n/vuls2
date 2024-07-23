@@ -2,6 +2,7 @@ package init
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -62,6 +63,10 @@ func Init(opts ...Option) error {
 	}
 	for _, o := range opts {
 		o.apply(options)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(options.dbpath), 0755); err != nil {
+		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 	}
 
 	db, err := (&common.Config{
