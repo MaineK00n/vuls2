@@ -110,6 +110,10 @@ func Fetch(opts ...Option) error {
 	}
 	defer d.Close()
 
+	if err := os.MkdirAll(filepath.Dir(options.dbpath), 0755); err != nil {
+		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
+	}
+
 	f, err := os.Create(options.dbpath)
 	if err != nil {
 		return errors.Wrapf(err, "create %s", options.dbpath)
