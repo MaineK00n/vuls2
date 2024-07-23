@@ -137,7 +137,7 @@ db-build:
 .PHONY: db-add
 db-add: 
 	git clone --depth 1 https://github.com/vulsio/${REPO}.git
-	cat ${REPO}/datasource.json | jq --arg hash $$(git -C ${REPO} rev-parse HEAD) '.extracted.commit |= $$hash' > tmp
+	cat ${REPO}/datasource.json | jq --arg hash $$(git -C ${REPO} rev-parse HEAD) --arg date $$(git -C ${REPO} show -s --format=%at | xargs -I{} date -d @{} --utc +%Y-%m-%dT%TZ) '.extracted.commit |= $$hash | .extracted.date |= $$date' > tmp
 	mv tmp ${REPO}/datasource.json
 	vuls db add --dbtype ${DBTYPE} --dbpath ${DBPATH} ${REPO}
 	rm -rf ${REPO}
