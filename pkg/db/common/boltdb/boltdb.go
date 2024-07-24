@@ -41,7 +41,9 @@ func (c *Connection) Open() error {
 		return errors.New("connection config is not set")
 	}
 
-	db, err := bolt.Open(c.Config.Path, 0600, nil)
+	option := bolt.DefaultOptions
+	option.NoSync = true
+	db, err := bolt.Open(c.Config.Path, 0600, option)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -53,7 +55,12 @@ func (c *Connection) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	return c.conn.Close()
+	syncErr := c.conn.Sync()
+	closeErr := c.conn.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
