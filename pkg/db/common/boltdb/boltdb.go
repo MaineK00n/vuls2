@@ -64,7 +64,7 @@ func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
 			return errors.Errorf("bucket:%q is not exists", "metadata")
 		}
 
-		if err := util.Unmarshal(b.Get([]byte("db")), false, &v); err != nil {
+		if err := util.Unmarshal(b.Get([]byte("db")), &v); err != nil {
 			return errors.Wrap(err, "unmarshal metadata:db")
 		}
 
@@ -82,7 +82,7 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 			return errors.Wrapf(err, "create bucket:%q if not exists", "metadata")
 		}
 
-		bs, err := util.Marshal(metadata, false)
+		bs, err := util.Marshal(metadata)
 		if err != nil {
 			return errors.Wrap(err, "marshal metadata")
 		}
@@ -124,7 +124,7 @@ func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan t
 				var qs [][]string
 				if err := eprb.ForEach(func(sk, v []byte) error {
 					var k []string
-					if err := util.Unmarshal(v, false, &k); err != nil {
+					if err := util.Unmarshal(v, &k); err != nil {
 						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s:%s:%s:%s", ecosystem, key, rk, sk))
 					}
 
@@ -154,7 +154,7 @@ func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan t
 					}
 
 					var ca criteriaTypes.Criteria
-					if err := util.Unmarshal(drsb.Get([]byte(q[2])), true, &ca); err != nil {
+					if err := util.Unmarshal(drsb.Get([]byte(q[2])), &ca); err != nil {
 						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s:%s:%s:%s", "detection", q[0], q[1], q[2]))
 					}
 					m[sourceTypes.SourceID(q[1])] = map[string]criteriaTypes.Criteria{q[0]: ca}
@@ -203,7 +203,7 @@ func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, 
 
 		var root dbTypes.VulnerabilityRoot
 		if bs := vrb.Get([]byte(id)); len(bs) > 0 {
-			if err := util.Unmarshal(bs, true, &root); err != nil {
+			if err := util.Unmarshal(bs, &root); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", id))
 			}
 		}
@@ -375,7 +375,7 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 			}
 
 			var a advisoryTypes.Advisory
-			if err := util.Unmarshal(vaasb.Get([]byte(qs[2])), true, &a); err != nil {
+			if err := util.Unmarshal(vaasb.Get([]byte(qs[2])), &a); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:advisory:%s:%s:%s", qs[0], qs[1], qs[2]))
 			}
 
@@ -420,7 +420,7 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 			}
 
 			var v vulnerabilityTypes.Vulnerability
-			if err := util.Unmarshal(vvvsb.Get([]byte(qs[2])), true, &v); err != nil {
+			if err := util.Unmarshal(vvvsb.Get([]byte(qs[2])), &v); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:vulnerability:%s:%s:%s", qs[0], qs[1], qs[2]))
 			}
 
@@ -465,7 +465,7 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 			}
 
 			var ca criteriaTypes.Criteria
-			if err := util.Unmarshal(drsb.Get([]byte(qs[2])), true, &ca); err != nil {
+			if err := util.Unmarshal(drsb.Get([]byte(qs[2])), &ca); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("detection:%s:%s:%s", qs[0], qs[1], qs[2]))
 			}
 
@@ -495,7 +495,7 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 			}
 
 			var d datasourceTypes.DataSource
-			if err := util.Unmarshal(sb.Get([]byte(q)), false, &d); err != nil {
+			if err := util.Unmarshal(sb.Get([]byte(q)), &d); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("datasource:%s", q))
 			}
 
@@ -589,7 +589,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 	}
 
 	for _, d := range data.Detection {
-		bs, err := util.Marshal(d.Criteria, true)
+		bs, err := util.Marshal(d.Criteria)
 		if err != nil {
 			return errors.Wrap(err, "marshal criteria")
 		}
@@ -617,7 +617,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 				return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("%s:%s:%s", d.Ecosystem, p, data.ID))
 			}
 
-			bs, err := util.Marshal([]string{data.ID, string(data.DataSource), string(d.Ecosystem)}, false)
+			bs, err := util.Marshal([]string{data.ID, string(data.DataSource), string(d.Ecosystem)})
 			if err != nil {
 				return errors.Wrap(err, "marshal criteria key")
 			}
@@ -680,7 +680,7 @@ func putAdvisory(tx *bolt.Tx, data dataTypes.Data, roots map[string]dbTypes.Vuln
 			return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:advisory:%s:%s", a.Content.ID, data.DataSource))
 		}
 
-		bs, err := util.Marshal(a, true)
+		bs, err := util.Marshal(a)
 		if err != nil {
 			return errors.Wrap(err, "marshal advisory")
 		}
@@ -718,7 +718,7 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data, roots map[string]dbTypes
 			return errors.Wrapf(err, "create bucket:%q if not exists", fmt.Sprintf("vulnerability:vulnerability:%s:%s", v.Content.ID, data.DataSource))
 		}
 
-		bs, err := util.Marshal(v, true)
+		bs, err := util.Marshal(v)
 		if err != nil {
 			return errors.Wrap(err, "marshal vulnerability")
 		}
@@ -750,7 +750,7 @@ func putRoot(conn *bolt.DB, root dbTypes.VulnerabilityRoot) error {
 		bs := vrb.Get([]byte(root.ID))
 		if len(bs) > 0 {
 			var r dbTypes.VulnerabilityRoot
-			if err := util.Unmarshal(bs, true, &r); err != nil {
+			if err := util.Unmarshal(bs, &r); err != nil {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
 			}
 			for _, a := range r.Advisories {
@@ -785,7 +785,7 @@ func putRoot(conn *bolt.DB, root dbTypes.VulnerabilityRoot) error {
 			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
 		}
 
-		bs, err := util.Marshal(root, true)
+		bs, err := util.Marshal(root)
 		if err != nil {
 			return errors.Wrap(err, "marshal root")
 		}
@@ -810,7 +810,7 @@ func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.Da
 			return errors.Errorf("bucket:%q is not exists", "datasource")
 		}
 
-		if err := util.Unmarshal(sb.Get([]byte(id)), false, &v); err != nil {
+		if err := util.Unmarshal(sb.Get([]byte(id)), &v); err != nil {
 			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("datasource:%s", id))
 		}
 
@@ -839,7 +839,7 @@ func (c *Connection) PutDataSource(root string) error {
 			return errors.Wrapf(err, "decode %s", root)
 		}
 
-		bs, err := util.Marshal(datasource, false)
+		bs, err := util.Marshal(datasource)
 		if err != nil {
 			return errors.Wrap(err, "marshal datasource")
 		}
