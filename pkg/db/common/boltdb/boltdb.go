@@ -741,9 +741,9 @@ func putRoot(tx *bolt.Tx, root dbTypes.VulnerabilityRoot) error {
 		return errors.Errorf("bucket:%q is not exists", "vulnerability")
 	}
 
-	vrb := vb.Bucket([]byte("root"))
-	if vrb == nil {
-		return nil
+	vrb, err := vb.CreateBucketIfNotExists([]byte("root"))
+	if err != nil {
+		return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
 	}
 
 	if bs := vrb.Get([]byte(root.ID)); len(bs) > 0 {
