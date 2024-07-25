@@ -753,12 +753,12 @@ func putRoot(tx *bolt.Tx, root dbTypes.VulnerabilityRoot) error {
 		}
 		for _, a := range r.Advisories {
 			if !slices.Contains(root.Advisories, a) {
-				r.Advisories = append(r.Advisories, a)
+				root.Advisories = append(root.Advisories, a)
 			}
 		}
 		for _, v := range r.Vulnerabilities {
 			if !slices.Contains(root.Vulnerabilities, v) {
-				r.Vulnerabilities = append(r.Vulnerabilities, v)
+				root.Vulnerabilities = append(root.Vulnerabilities, v)
 			}
 		}
 		for _, d := range r.DataSources {
