@@ -514,8 +514,8 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
-	roots := map[string]dbTypes.VulnerabilityRoot{}
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
+		roots := map[string]dbTypes.VulnerabilityRoot{}
 		if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -558,15 +558,15 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 			return errors.Wrapf(err, "walk %s", root)
 		}
 
+		for _, root := range roots {
+			if err := putRoot(tx, root); err != nil {
+				return errors.Wrap(err, "put root")
+			}
+		}
+
 		return nil
 	}); err != nil {
 		return errors.WithStack(err)
-	}
-
-	for _, root := range roots {
-		if err := putRoot(c.conn, root); err != nil {
-			return errors.Wrap(err, "put root")
-		}
 	}
 
 	return nil
@@ -735,68 +735,46 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data, roots map[string]dbTypes
 	return nil
 }
 
-func putRoot(conn *bolt.DB, root dbTypes.VulnerabilityRoot) error {
-	if err := conn.View(func(tx *bolt.Tx) error {
-		vb := tx.Bucket([]byte("vulnerability"))
-		if vb == nil {
-			return errors.Errorf("bucket:%q is not exists", "vulnerability")
-		}
-
-		vrb := vb.Bucket([]byte("root"))
-		if vrb == nil {
-			return nil
-		}
-
-		bs := vrb.Get([]byte(root.ID))
-		if len(bs) > 0 {
-			var r dbTypes.VulnerabilityRoot
-			if err := util.Unmarshal(bs, &r); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
-			}
-			for _, a := range r.Advisories {
-				if !slices.Contains(root.Advisories, a) {
-					r.Advisories = append(r.Advisories, a)
-				}
-			}
-			for _, v := range r.Vulnerabilities {
-				if !slices.Contains(root.Vulnerabilities, v) {
-					r.Vulnerabilities = append(r.Vulnerabilities, v)
-				}
-			}
-			for _, d := range r.DataSources {
-				if !slices.Contains(root.DataSources, d) {
-					root.DataSources = append(root.DataSources, d)
-				}
-			}
-		}
-		return nil
-	}); err != nil {
-		return errors.Wrapf(err, "view %s", fmt.Sprintf("vulnerability:root:%s", root.ID))
+func putRoot(tx *bolt.Tx, root dbTypes.VulnerabilityRoot) error {
+	vb := tx.Bucket([]byte("vulnerability"))
+	if vb == nil {
+		return errors.Errorf("bucket:%q is not exists", "vulnerability")
 	}
 
-	if err := conn.Update(func(tx *bolt.Tx) error {
-		vb := tx.Bucket([]byte("vulnerability"))
-		if vb == nil {
-			return errors.Errorf("bucket:%q is not exists", "vulnerability")
-		}
+	vrb, err := vb.CreateBucketIfNotExists([]byte("root"))
+	if err != nil {
+		return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
+	}
 
-		vrb, err := vb.CreateBucketIfNotExists([]byte("root"))
-		if err != nil {
-			return errors.Wrapf(err, "create bucket:%q if not exists", "vulnerability:root")
+	if bs := vrb.Get([]byte(root.ID)); len(bs) > 0 {
+		var r dbTypes.VulnerabilityRoot
+		if err := util.Unmarshal(bs, &r); err != nil {
+			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability:root:%s", r.ID))
 		}
-
-		bs, err := util.Marshal(root)
-		if err != nil {
-			return errors.Wrap(err, "marshal root")
+		for _, a := range r.Advisories {
+			if !slices.Contains(root.Advisories, a) {
+				root.Advisories = append(root.Advisories, a)
+			}
 		}
-
-		if err := vrb.Put([]byte(root.ID), bs); err != nil {
-			return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:root:%s", root.ID))
+		for _, v := range r.Vulnerabilities {
+			if !slices.Contains(root.Vulnerabilities, v) {
+				root.Vulnerabilities = append(root.Vulnerabilities, v)
+			}
 		}
+		for _, d := range r.DataSources {
+			if !slices.Contains(root.DataSources, d) {
+				root.DataSources = append(root.DataSources, d)
+			}
+		}
+	}
 
-		return nil
-	}); err != nil {
-		return errors.Wrapf(err, "update %s", fmt.Sprintf("vulnerability:root:%s", root.ID))
+	bs, err := util.Marshal(root)
+	if err != nil {
+		return errors.Wrap(err, "marshal root")
+	}
+
+	if err := vrb.Put([]byte(root.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %s", fmt.Sprintf("vulnerability:root:%s", root.ID))
 	}
 
 	return nil
