@@ -514,8 +514,8 @@ func (c *Connection) getVulnerabilityData(root vulnerabilityRoot) (*types.Vulner
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
-	roots := map[string]dbTypes.VulnerabilityRoot{}
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
+		roots := map[string]dbTypes.VulnerabilityRoot{}
 		if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
