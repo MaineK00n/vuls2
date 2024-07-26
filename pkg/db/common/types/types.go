@@ -17,7 +17,10 @@ type VulnerabilityRoot struct {
 	Advisories      []string `json:"advisories,omitempty"`
 	Vulnerabilities []string `json:"vulnerabilities,omitempty"`
 	DataSources     []string `json:"data_sources,omitempty"`
+	Ecosystems      []string `json:"ecosystems,omitempty"`
 }
+
+// FIXME(shino): rewrite following lines
 
 // boltdb: vulnerability:advisory:<Advisory ID>:<Source ID>:<Root ID> -> []advisoryTypes.Advisory
 
