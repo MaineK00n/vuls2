@@ -24,8 +24,8 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(string, string) (<-chan types.VulnerabilityDataDetection, <-chan error)
-	GetVulnerabilityData(string) (*types.VulnerabilityData, error)
+	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) (<-chan types.VulnerabilityDataDetection, <-chan error)
+	GetVulnerabilityData(dbTypes.SearchDataType, string) (*types.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)

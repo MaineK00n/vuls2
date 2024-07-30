@@ -45,7 +45,7 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan types.VulnerabilityDataDetection, <-chan error) {
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan types.VulnerabilityDataDetection, <-chan error) {
 	resCh := make(chan types.VulnerabilityDataDetection, 1)
 	errCh := make(chan error, 1)
 
@@ -59,7 +59,7 @@ func (c *Connection) GetVulnerabilityDetections(ecosystem, key string) (<-chan t
 	return resCh, errCh
 }
 
-func (c *Connection) GetVulnerabilityData(id string) (*types.VulnerabilityData, error) {
+func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*types.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }
 
