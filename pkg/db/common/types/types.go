@@ -16,15 +16,16 @@ type VulnerabilityRoot struct {
 	ID              string   `json:"id,omitempty"`
 	Advisories      []string `json:"advisories,omitempty"`
 	Vulnerabilities []string `json:"vulnerabilities,omitempty"`
+	Ecosystems      []string `json:"ecosystems,omitempty"`
 	DataSources     []string `json:"data_sources,omitempty"`
 }
 
-// boltdb: vulnerability:advisory:<Advisory ID>:<Source ID>:<Root ID> -> []advisoryTypes.Advisory
+// boltdb: vulnerability:advisory:<Advisory ID> -> map[<Source ID>][<Root ID>][]advisoryTypes.Advisory
 
-// boltdb: vulnerability:vulnerability:<CVE ID>:<Source ID>:<Root ID> -> []vulnerabilityTypes.Vulnerability
+// boltdb: vulnerability:vulnerability:<CVE ID> -> map[<Source ID>][<Root ID>][]vulnerabilityTypes.Vulnerability
 
-// boltdb: detection:<Root ID>:<Source ID>:<ecosystem> -> criteriaTypes.Criteria
+// boltdb: <ecosystem>:index:<package> -> [<Root ID>]
 
-// boltdb: <ecosystem>:<package>:<Root ID>:<Source ID> -> detection:<Root ID>:<Source ID>:<ecosystem>
+// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
 
 // boltdb: datasource:<Source ID>

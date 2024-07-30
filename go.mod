@@ -12,7 +12,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/redis/rueidis v1.0.43
-	github.com/schollz/progressbar/v3 v3.14.4
+	github.com/schollz/progressbar/v3 v3.14.5
 	github.com/spf13/cobra v1.8.1
 	go.etcd.io/bbolt v1.3.10
 	gorm.io/driver/mysql v1.5.7
