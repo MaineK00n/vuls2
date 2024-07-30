@@ -32,6 +32,7 @@ type DB interface {
 	PutDataSource(string) error
 
 	DeleteAll() error
+	Initialize() error
 }
 
 type Config struct {

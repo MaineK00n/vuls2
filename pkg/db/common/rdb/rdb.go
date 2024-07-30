@@ -108,3 +108,7 @@ func (c *Connection) PutDataSource(root string) error {
 func (c *Connection) DeleteAll() error {
 	return errors.New("not implemented yet")
 }
+
+func (c *Connection) Initialize() error {
+	return errors.New("not implemented yet")
+}
