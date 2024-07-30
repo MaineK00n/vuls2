@@ -87,6 +87,11 @@ func Init(opts ...Option) error {
 		return errors.Wrap(err, "delete all")
 	}
 
+	slog.Info("Initialize DB")
+	if err := db.Initialize(); err != nil {
+		return errors.Wrap(err, "initialize")
+	}
+
 	slog.Info("Put Metadata")
 	if err := db.PutMetadata(dbTypes.Metadata{
 		SchemaVersion: common.SchemaVersion,
