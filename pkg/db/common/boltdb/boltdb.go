@@ -4,13 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
-	"github.com/knqyf263/go-cpe/common"
-	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
@@ -25,7 +22,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
 )
 
-// boltdb: metadata:db
+// boltdb: metadata:db -> dbTypes.Metadata
 
 // boltdb: vulnerability:root:<Root ID> -> vulnerabilityRoot
 
@@ -37,7 +34,7 @@ import (
 
 // boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
 
-// boltdb: datasource:<Source ID>
+// boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
 type Config struct {
 	Path string
@@ -277,38 +274,6 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 	return resCh, errCh
 }
 
-func getDetection(tx *bolt.Tx, rootID string) ([]dbTypes.VulnerabilityDataDetection, error) {
-	r, err := getRoot(tx, rootID)
-	if err != nil {
-		return nil, errors.Wrap(err, "get root")
-	}
-
-	ds := make([]dbTypes.VulnerabilityDataDetection, 0, len(r.Ecosystems))
-	for _, ecosystem := range r.Ecosystems {
-		eb := tx.Bucket([]byte(ecosystem))
-		if eb == nil {
-			return nil, errors.Errorf("bucket: %s is not exists", ecosystem)
-		}
-
-		edb := eb.Bucket([]byte("detection"))
-		if edb == nil {
-			return nil, errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> detection", ecosystem))
-		}
-
-		var m map[sourceTypes.SourceID]criteriaTypes.Criteria
-		if err := util.Unmarshal(edb.Get([]byte(rootID)), &m); err != nil {
-			return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
-		}
-
-		ds = append(ds, dbTypes.VulnerabilityDataDetection{
-			Ecosystem: detectionTypes.Ecosystem(ecosystem),
-			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
-		})
-	}
-
-	return ds, nil
-}
-
 func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
 	root := dbTypes.VulnerabilityData{ID: id}
 
@@ -318,6 +283,9 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			r, err := getRoot(tx, id)
 			if err != nil {
 				return errors.Wrap(err, "get root")
+			}
+			if r.ID == "" {
+				return nil
 			}
 
 			for _, a := range r.Advisories {
@@ -387,6 +355,9 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 					if err != nil {
 						return errors.Wrap(err, "get root")
 					}
+					if rr.ID == "" {
+						return errors.Errorf("vulnerability -> root -> %s not found", rootID)
+					}
 
 					for _, v := range rr.Vulnerabilities {
 						if !slices.Contains(r.Vulnerabilities, v) {
@@ -417,7 +388,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			}
 
 			if err := func() error {
-				resCh, errCh := c.GetVulnerabilityDetections("advisory", id)
+				resCh, errCh := c.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, id)
 				for {
 					select {
 					case item, ok := <-resCh:
@@ -468,6 +439,9 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 					if err != nil {
 						return errors.Wrap(err, "get root")
 					}
+					if rr.ID == "" {
+						return errors.Errorf("vulnerability -> root -> %s not found", rootID)
+					}
 
 					for _, a := range rr.Advisories {
 						if !slices.Contains(r.Advisories, a) {
@@ -498,7 +472,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			}
 
 			if err := func() error {
-				resCh, errCh := c.GetVulnerabilityDetections("vulnerability", id)
+				resCh, errCh := c.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, id)
 				for {
 					select {
 					case item, ok := <-resCh:
@@ -533,6 +507,38 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 	}
 
 	return &root, nil
+}
+
+func getDetection(tx *bolt.Tx, rootID string) ([]dbTypes.VulnerabilityDataDetection, error) {
+	r, err := getRoot(tx, rootID)
+	if err != nil {
+		return nil, errors.Wrap(err, "get root")
+	}
+
+	ds := make([]dbTypes.VulnerabilityDataDetection, 0, len(r.Ecosystems))
+	for _, ecosystem := range r.Ecosystems {
+		eb := tx.Bucket([]byte(ecosystem))
+		if eb == nil {
+			return nil, errors.Errorf("bucket: %s is not exists", ecosystem)
+		}
+
+		edb := eb.Bucket([]byte("detection"))
+		if edb == nil {
+			return nil, errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> detection", ecosystem))
+		}
+
+		var m map[sourceTypes.SourceID]criteriaTypes.Criteria
+		if err := util.Unmarshal(edb.Get([]byte(rootID)), &m); err != nil {
+			return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
+		}
+
+		ds = append(ds, dbTypes.VulnerabilityDataDetection{
+			Ecosystem: detectionTypes.Ecosystem(ecosystem),
+			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
+		})
+	}
+
+	return ds, nil
 }
 
 func getAdvisory(tx *bolt.Tx, id string) (map[sourceTypes.SourceID]map[string][]advisoryTypes.Advisory, error) {
@@ -692,7 +698,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> index", d.Ecosystem))
 		}
 
-		pkgs := walkCriteria(d.Criteria)
+		pkgs := util.WalkCriteria(d.Criteria)
 		slices.Sort(pkgs)
 
 		for _, p := range slices.Compact(pkgs) {
@@ -718,34 +724,6 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 	}
 
 	return nil
-}
-
-func walkCriteria(ca criteriaTypes.Criteria) []string {
-	var pkgs []string
-
-	for _, ca := range ca.Criterias {
-		pkgs = append(pkgs, walkCriteria(ca)...)
-	}
-
-	for _, co := range ca.Criterions {
-		if !co.Vulnerable {
-			continue
-		}
-
-		if co.Package.Name != "" {
-			pkgs = append(pkgs, co.Package.Name)
-		}
-		if co.Package.CPE != "" {
-			wfn, err := naming.UnbindFS(co.Package.CPE)
-			if err != nil {
-				slog.Warn("failed to unbind a formatted string to WFN", "input", co.Package.CPE)
-				continue
-			}
-			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
-		}
-	}
-
-	return pkgs
 }
 
 func putAdvisory(tx *bolt.Tx, data dataTypes.Data) error {
