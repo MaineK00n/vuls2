@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/MaineK00n/vuls2/pkg/db/common"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
@@ -89,9 +90,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	e.SetIndent("", "  ")
 	e.SetEscapeHTML(false)
 	switch searchType {
-	case "detection":
-		slog.Info("Get Vulnerability Detections")
-		resCh, errCh := db.GetVulnerabilityDetections(queries[0], queries[1])
+	case "detection-pkg":
+		slog.Info("Get Vulnerability Detections", "ecosystem", queries[0], "key", queries[1])
+		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -103,15 +104,93 @@ func Search(searchType string, queries []string, opts ...Option) error {
 				}
 			case err, ok := <-errCh:
 				if ok {
-					return errors.Wrap(err, "get detections")
+					return errors.Wrap(err, "get pkg detections")
 				}
 			}
 		}
-	case "data":
-		slog.Info("Get Vulnerability Data")
-		d, err := db.GetVulnerabilityData(queries[0])
+	case "detection-root":
+		slog.Info("Get Vulnerability Detections", "root id", queries[0])
+		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0])
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return nil
+				}
+				if err := e.Encode(item); err != nil {
+					return errors.Wrapf(err, "encode %s", queries[0])
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return errors.Wrap(err, "get root detections")
+				}
+			}
+		}
+	case "detection-advisory":
+		slog.Info("Get Vulnerability Detections", "advisory id", queries[0])
+		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0])
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return nil
+				}
+				if err := e.Encode(item); err != nil {
+					return errors.Wrapf(err, "encode %s", queries[0])
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return errors.Wrap(err, "get advisory detections")
+				}
+			}
+		}
+	case "detection-vulnerability":
+		slog.Info("Get Vulnerability Detections", "vulnerability id", queries[0])
+		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0])
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return nil
+				}
+				if err := e.Encode(item); err != nil {
+					return errors.Wrapf(err, "encode %s", queries[0])
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return errors.Wrap(err, "get vulnerability detections")
+				}
+			}
+		}
+	case "data-root":
+		slog.Info("Get Vulnerability Data", "root id", queries[0])
+		d, err := db.GetVulnerabilityData(dbTypes.SearchDataRoot, queries[0])
 		if err != nil {
-			return errors.Wrap(err, "get data")
+			return errors.Wrap(err, "get root data")
+		}
+
+		if err := e.Encode(d); err != nil {
+			return errors.Wrapf(err, "encode %s", d.ID)
+		}
+
+		return nil
+	case "data-advisory":
+		slog.Info("Get Vulnerability Data", "advisory id", queries[0])
+		d, err := db.GetVulnerabilityData(dbTypes.SearchDataAdvisory, queries[0])
+		if err != nil {
+			return errors.Wrap(err, "get advisory data")
+		}
+
+		if err := e.Encode(d); err != nil {
+			return errors.Wrapf(err, "encode %s", d.ID)
+		}
+
+		return nil
+	case "data-vulnerability":
+		slog.Info("Get Vulnerability Data", "vulnerability id", queries[0])
+		d, err := db.GetVulnerabilityData(dbTypes.SearchDataVulnerability, queries[0])
+		if err != nil {
+			return errors.Wrap(err, "get vulnerability data")
 		}
 
 		if err := e.Encode(d); err != nil {
@@ -120,6 +199,6 @@ func Search(searchType string, queries []string, opts ...Option) error {
 
 		return nil
 	default:
-		return errors.Errorf("unexpected search type. expected: %q, actual: %q", []string{"detection", "data"}, searchType)
+		return errors.Errorf("unexpected search type. expected: %q, actual: %q", []string{"detection-pkg", "detection-root", "detection-advisory", "detection-vulnerability", "data-root", "data-advisory", "data-vulnerability"}, searchType)
 	}
 }

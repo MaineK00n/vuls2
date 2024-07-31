@@ -31,7 +31,7 @@ type VulnerabilityDataVulnerability struct {
 
 type VulnerabilityDataDetection struct {
 	Ecosystem detectionTypes.Ecosystem                                   `json:"ecosystem,omitempty"`
-	Contents  map[sourceTypes.SourceID]map[string]criteriaTypes.Criteria `json:"contents,omitempty"`
+	Contents  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria `json:"contents,omitempty"`
 }
 
 func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) VulnerabilityData {
@@ -88,8 +88,10 @@ func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) Vul
 	for _, d := range data.Detections {
 		if slices.Contains(ecosystems, d.Ecosystem) {
 			filtered.Detections = append(filtered.Detections, d)
-			for id := range d.Contents {
-				srcs[id] = struct{}{}
+			for _, m := range d.Contents {
+				for id := range m {
+					srcs[id] = struct{}{}
+				}
 			}
 		}
 	}

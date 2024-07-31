@@ -4,6 +4,23 @@ import (
 	"time"
 )
 
+type SearchDetectionType string
+
+const (
+	SearchDetectionPkg           SearchDetectionType = "pkg"
+	SearchDetectionRoot          SearchDetectionType = "root"
+	SearchDetectionAdvisory      SearchDetectionType = "advisory"
+	SearchDetectionVulnerability SearchDetectionType = "vulnerability"
+)
+
+type SearchDataType string
+
+const (
+	SearchDataRoot          SearchDataType = "root"
+	SearchDataAdvisory      SearchDataType = "advisory"
+	SearchDataVulnerability SearchDataType = "vulnerability"
+)
+
 type Metadata struct {
 	SchemaVersion uint      `json:"schema_version,omitempty"`
 	CreatedBy     string    `json:"created_by,omitempty"`
