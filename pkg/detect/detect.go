@@ -8,7 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/types"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
+	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
@@ -110,7 +111,7 @@ func Detect(targets []string, opts ...Option) error {
 			}
 			defer f.Close()
 
-			var sr types.ScanResult
+			var sr scanTypes.ScanResult
 			if err := json.NewDecoder(f).Decode(&sr); err != nil {
 				return errors.Wrapf(err, "decode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "scan.json"))
 			}
@@ -142,8 +143,8 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(sr types.ScanResult) (types.DetectResult, error) {
-	return types.DetectResult{
+func detect(sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
+	return detectTypes.DetectResult{
 		JSONVersion: 0,
 		ServerUUID:  sr.ServerUUID,
 		ServerName:  sr.ServerName,

@@ -23,12 +23,11 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
-	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
 // boltdb: metadata:db
 
-// boltdb: vulnerability:root:<Root ID> -> dbTypes.VulnerabilityRoot
+// boltdb: vulnerability:root:<Root ID> -> vulnerabilityRoot
 
 // boltdb: vulnerability:advisory:<Advisory ID> -> map[<Source ID>][<Root ID>][]advisoryTypes.Advisory
 
@@ -109,8 +108,8 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	})
 }
 
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan types.VulnerabilityDataDetection, <-chan error) {
-	resCh := make(chan types.VulnerabilityDataDetection, 1)
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error) {
+	resCh := make(chan dbTypes.VulnerabilityDataDetection, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -155,7 +154,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", queries[0], rootID))
 					}
 
-					resCh <- types.VulnerabilityDataDetection{
+					resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: detectionTypes.Ecosystem(queries[0]),
 						Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
 					}
@@ -214,7 +213,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 				}
 
 				for ecosystem, m := range em {
-					resCh <- types.VulnerabilityDataDetection{
+					resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
 					}
@@ -260,7 +259,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 				}
 
 				for ecosystem, m := range em {
-					resCh <- types.VulnerabilityDataDetection{
+					resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
 					}
@@ -278,13 +277,13 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 	return resCh, errCh
 }
 
-func getDetection(tx *bolt.Tx, rootID string) ([]types.VulnerabilityDataDetection, error) {
+func getDetection(tx *bolt.Tx, rootID string) ([]dbTypes.VulnerabilityDataDetection, error) {
 	r, err := getRoot(tx, rootID)
 	if err != nil {
 		return nil, errors.Wrap(err, "get root")
 	}
 
-	ds := make([]types.VulnerabilityDataDetection, 0, len(r.Ecosystems))
+	ds := make([]dbTypes.VulnerabilityDataDetection, 0, len(r.Ecosystems))
 	for _, ecosystem := range r.Ecosystems {
 		eb := tx.Bucket([]byte(ecosystem))
 		if eb == nil {
@@ -301,7 +300,7 @@ func getDetection(tx *bolt.Tx, rootID string) ([]types.VulnerabilityDataDetectio
 			return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
 		}
 
-		ds = append(ds, types.VulnerabilityDataDetection{
+		ds = append(ds, dbTypes.VulnerabilityDataDetection{
 			Ecosystem: detectionTypes.Ecosystem(ecosystem),
 			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
 		})
@@ -310,8 +309,8 @@ func getDetection(tx *bolt.Tx, rootID string) ([]types.VulnerabilityDataDetectio
 	return ds, nil
 }
 
-func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*types.VulnerabilityData, error) {
-	root := types.VulnerabilityData{ID: id}
+func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
+	root := dbTypes.VulnerabilityData{ID: id}
 
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		switch searchType {
@@ -329,7 +328,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				if m == nil {
 					return errors.Errorf("vulnerability -> advisory -> %s not found", a)
 				}
-				root.Advisories = append(root.Advisories, types.VulnerabilityDataAdvisory{
+				root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
 					ID:       a,
 					Contents: m,
 				})
@@ -343,7 +342,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				if m == nil {
 					return errors.Errorf("vulnerability -> vulnerability -> %s not found", v)
 				}
-				root.Vulnerabilities = append(root.Vulnerabilities, types.VulnerabilityDataVulnerability{
+				root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
 					ID:       v,
 					Contents: m,
 				})
@@ -372,12 +371,12 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			if m == nil {
 				return nil
 			}
-			root.Advisories = append(root.Advisories, types.VulnerabilityDataAdvisory{
+			root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
 				ID:       id,
 				Contents: m,
 			})
 
-			var r dbTypes.VulnerabilityRoot
+			var r vulnerabilityRoot
 			for ds, mm := range m {
 				if !slices.Contains(r.DataSources, string(ds)) {
 					r.DataSources = append(r.DataSources, string(ds))
@@ -411,7 +410,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				if m == nil {
 					return errors.Errorf("vulnerability -> vulnerability -> %s not found", v)
 				}
-				root.Vulnerabilities = append(root.Vulnerabilities, types.VulnerabilityDataVulnerability{
+				root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
 					ID:       v,
 					Contents: m,
 				})
@@ -453,12 +452,12 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			if m == nil {
 				return nil
 			}
-			root.Vulnerabilities = append(root.Vulnerabilities, types.VulnerabilityDataVulnerability{
+			root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
 				ID:       id,
 				Contents: m,
 			})
 
-			var r dbTypes.VulnerabilityRoot
+			var r vulnerabilityRoot
 			for ds, mm := range m {
 				if !slices.Contains(r.DataSources, string(ds)) {
 					r.DataSources = append(r.DataSources, string(ds))
@@ -492,7 +491,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				if m == nil {
 					return errors.Errorf("vulnerability -> advisory -> %s not found", a)
 				}
-				root.Advisories = append(root.Advisories, types.VulnerabilityDataAdvisory{
+				root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
 					ID:       a,
 					Contents: m,
 				})
@@ -584,25 +583,25 @@ func getVulnerability(tx *bolt.Tx, id string) (map[sourceTypes.SourceID]map[stri
 	return m, nil
 }
 
-func getRoot(tx *bolt.Tx, id string) (dbTypes.VulnerabilityRoot, error) {
+func getRoot(tx *bolt.Tx, id string) (vulnerabilityRoot, error) {
 	vb := tx.Bucket([]byte("vulnerability"))
 	if vb == nil {
-		return dbTypes.VulnerabilityRoot{}, errors.Errorf("bucket: %s is not exists", "vulnerability")
+		return vulnerabilityRoot{}, errors.Errorf("bucket: %s is not exists", "vulnerability")
 	}
 
 	vrb := vb.Bucket([]byte("root"))
 	if vrb == nil {
-		return dbTypes.VulnerabilityRoot{}, errors.Errorf("bucket: %s is not exists", "vulnerability -> root")
+		return vulnerabilityRoot{}, errors.Errorf("bucket: %s is not exists", "vulnerability -> root")
 	}
 
 	bs := vrb.Get([]byte(id))
 	if len(bs) == 0 {
-		return dbTypes.VulnerabilityRoot{}, nil
+		return vulnerabilityRoot{}, nil
 	}
 
-	var r dbTypes.VulnerabilityRoot
+	var r vulnerabilityRoot
 	if err := util.Unmarshal(bs, &r); err != nil {
-		return dbTypes.VulnerabilityRoot{}, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability -> root -> %s", id))
+		return vulnerabilityRoot{}, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability -> root -> %s", id))
 	}
 
 	return r, nil
@@ -822,7 +821,7 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data) error {
 }
 
 func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
-	root := dbTypes.VulnerabilityRoot{
+	root := vulnerabilityRoot{
 		ID: data.ID,
 		Advisories: func() []string {
 			as := make([]string, 0, len(data.Advisories))
@@ -859,7 +858,7 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	}
 
 	if bs := vrb.Get([]byte(root.ID)); len(bs) > 0 {
-		var r dbTypes.VulnerabilityRoot
+		var r vulnerabilityRoot
 		if err := util.Unmarshal(bs, &r); err != nil {
 			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability -> root -> %s", r.ID))
 		}

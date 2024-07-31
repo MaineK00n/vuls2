@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/types"
+	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
@@ -93,10 +93,10 @@ func Scan(root string, opts ...Option) error {
 					return errors.Wrapf(err, "decode %s", filepath.Join(root, t, name))
 				}
 
-				pkgs := map[string]types.OSPackage{}
+				pkgs := map[string]scanTypes.OSPackage{}
 				for _, p := range old.SrcPackages {
 					for _, bn := range p.BinaryNames {
-						pkgs[bn] = types.OSPackage{
+						pkgs[bn] = scanTypes.OSPackage{
 							SrcName:    p.Name,
 							SrcVersion: p.Version,
 						}
@@ -115,20 +115,20 @@ func Scan(root string, opts ...Option) error {
 					pkgs[p.Name] = base
 				}
 
-				new := types.ScanResult{
+				new := scanTypes.ScanResult{
 					JSONVersion: 0,
 					ServerUUID:  id.String(),
 					ServerName:  old.ServerName,
 					Family:      old.Family,
 					Release:     old.Release,
 
-					Kernel: types.Kernel{
+					Kernel: scanTypes.Kernel{
 						Release:        old.RunningKernel.Release,
 						Version:        old.RunningKernel.Version,
 						RebootRequired: old.RunningKernel.RebootRequired,
 					},
-					OSPackages: func() []types.OSPackage {
-						ps := make([]types.OSPackage, 0, len(pkgs))
+					OSPackages: func() []scanTypes.OSPackage {
+						ps := make([]scanTypes.OSPackage, 0, len(pkgs))
 						for _, p := range pkgs {
 							ps = append(ps, p)
 						}

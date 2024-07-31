@@ -10,7 +10,6 @@ import (
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
-	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
 type Config struct {
@@ -75,8 +74,8 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan types.VulnerabilityDataDetection, <-chan error) {
-	resCh := make(chan types.VulnerabilityDataDetection, 1)
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error) {
+	resCh := make(chan dbTypes.VulnerabilityDataDetection, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -89,7 +88,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 	return resCh, errCh
 }
 
-func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*types.VulnerabilityData, error) {
+func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }
 

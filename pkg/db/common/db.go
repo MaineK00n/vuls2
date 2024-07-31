@@ -10,7 +10,6 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/common/rdb"
 	"github.com/MaineK00n/vuls2/pkg/db/common/redis"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
-	"github.com/MaineK00n/vuls2/pkg/types"
 )
 
 const (
@@ -24,8 +23,8 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) (<-chan types.VulnerabilityDataDetection, <-chan error)
-	GetVulnerabilityData(dbTypes.SearchDataType, string) (*types.VulnerabilityData, error)
+	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error)
+	GetVulnerabilityData(dbTypes.SearchDataType, string) (*dbTypes.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
