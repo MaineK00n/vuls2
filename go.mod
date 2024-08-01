@@ -3,7 +3,7 @@ module github.com/MaineK00n/vuls2
 go 1.22
 
 require (
-	github.com/MaineK00n/vuls-data-update v0.0.0-20240724101948-68486bad3edc
+	github.com/MaineK00n/vuls-data-update v0.0.0-20240801172920-44ddd4a007d4
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
@@ -57,8 +57,8 @@ require (
 	golang.org/x/term v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	modernc.org/libc v1.52.1 // indirect
+	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/sqlite v1.30.2 // indirect
+	modernc.org/sqlite v1.31.1 // indirect
 )
