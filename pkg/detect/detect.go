@@ -2,15 +2,22 @@ package detect
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
+	"github.com/knqyf263/go-cpe/common"
+	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
+	db "github.com/MaineK00n/vuls2/pkg/db/common"
+	dbtypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
+	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
 type options struct {
@@ -77,6 +84,18 @@ func Detect(targets []string, opts ...Option) error {
 		o.apply(options)
 	}
 
+	c := db.Config{
+		Type: options.dbtype,
+		Path: options.dbpath,
+
+		Debug: options.debug,
+	}
+	dbc, err := c.New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+	defer dbc.Close()
+
 	if len(targets) == 0 {
 		ds, err := os.ReadDir(options.resultsDir)
 		if err != nil {
@@ -116,7 +135,7 @@ func Detect(targets []string, opts ...Option) error {
 				return errors.Wrapf(err, "decode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "scan.json"))
 			}
 
-			dr, err := detect(sr)
+			dr, err := detect(db, sr)
 			if err != nil {
 				return errors.Wrapf(err, "detect %s", sr.ServerUUID)
 			}
@@ -143,10 +162,73 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
+func detect(db db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
+	var pkgs []string
+	for _, p := range sr.OSPackages {
+		pkgs = append(pkgs, p.Name)
+		pkgs = append(pkgs, p.SrcName)
+	}
+	slices.Sort(pkgs)
+
+	for _, q := range slices.Compact(pkgs) {
+		resCh, errCh := db.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, func() string {
+			if sr.Release == "" {
+				return sr.Family
+			}
+			return fmt.Sprintf("%s:%s", sr.Family, sr.Release)
+		}(), q)
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return detectTypes.DetectResult{}, nil
+				}
+				for rootID, m := range item.Contents {
+					for sourceID, ca := range m {
+						// check affected?
+					}
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return detectTypes.DetectResult{}, errors.Wrap(err, "get detection")
+				}
+			}
+		}
+
+	}
+
+	for _, cpe := range sr.CPE {
+		wfn, err := naming.UnbindFS(cpe)
+		if err != nil {
+			return detectTypes.DetectResult{}, errors.Wrapf(err, "unbind %q to WFN", cpe)
+		}
+
+		resCh, errCh := db.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, "cpe", fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+		for {
+			select {
+			case item, ok := <-resCh:
+				if !ok {
+					return detectTypes.DetectResult{}, nil
+				}
+				for rootID, m := range item.Contents {
+					for sourceID, ca := range m {
+						// check affected?
+					}
+				}
+			case err, ok := <-errCh:
+				if ok {
+					return detectTypes.DetectResult{}, errors.Wrap(err, "get detection")
+				}
+			}
+		}
+	}
+
 	return detectTypes.DetectResult{
 		JSONVersion: 0,
 		ServerUUID:  sr.ServerUUID,
 		ServerName:  sr.ServerName,
+
+		DetectedAt: time.Now(),
+		DetectedBy: version.String(),
 	}, nil
 }

@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type ScanResult struct {
 	JSONVersion int    `json:"json_version,omitempty"`
 	ServerUUID  string `json:"server_uuid,omitempty"`
@@ -11,8 +13,10 @@ type ScanResult struct {
 	OSPackages []OSPackage `json:"os_packages,omitempty"`
 	CPE        []string    `json:"cpe,omitempty"`
 
-	Optional map[string]interface{} `json:"optional,omitempty"`
-	Config   interface{}            `json:"config,omitempty"`
+	Optional  map[string]interface{} `json:"optional,omitempty"`
+	Config    interface{}            `json:"config,omitempty"`
+	ScannedAt time.Time              `json:"scanned_at,omitempty"`
+	ScannedBy string                 `json:"scanned_by,omitempty"`
 }
 
 type Kernel struct {
