@@ -12,6 +12,7 @@ import (
 	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
+	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria/criterion"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbtypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
@@ -163,20 +164,28 @@ func Detect(targets []string, opts ...Option) error {
 }
 
 func detect(db db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
-	var pkgs []string
+	pkgs := make(map[string][]scanTypes.OSPackage)
 	for _, p := range sr.OSPackages {
-		pkgs = append(pkgs, p.Name)
-		pkgs = append(pkgs, p.SrcName)
-	}
-	slices.Sort(pkgs)
+		bn, sn := p.Name, p.SrcName
+		if p.ModularityLabel != "" {
+			bn, sn = fmt.Sprintf("%s::%s", p.ModularityLabel, p.Name), fmt.Sprintf("%s::%s", p.ModularityLabel, p.SrcName) // modularitylabel -> <module name>:<stream>
+		}
 
-	for _, q := range slices.Compact(pkgs) {
+		if !slices.Contains(pkgs[bn], p) {
+			pkgs[bn] = append(pkgs[bn], p)
+		}
+		if !slices.Contains(pkgs[sn], p) {
+			pkgs[sn] = append(pkgs[sn], p)
+		}
+	}
+
+	for name, ps := range pkgs {
 		resCh, errCh := db.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, func() string {
 			if sr.Release == "" {
 				return sr.Family
 			}
 			return fmt.Sprintf("%s:%s", sr.Family, sr.Release)
-		}(), q)
+		}(), name)
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -185,7 +194,16 @@ func detect(db db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error)
 				}
 				for rootID, m := range item.Contents {
 					for sourceID, ca := range m {
-						// check affected?
+						for _, p := range ps {
+							ca.Contains(criterionTypes.Query{Package: &criterionTypes.QueryPackage{
+								Name:       p.Name,
+								Version:    p.Version,
+								SrcName:    p.SrcName,
+								SrcVersion: p.SrcVersion,
+								Arch:       p.Arch,
+								Repository: p.Repository,
+							}})
+						}
 					}
 				}
 			case err, ok := <-errCh:
