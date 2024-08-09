@@ -3,16 +3,20 @@ package detect
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/knqyf263/go-cpe/common"
 	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria/criterion"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbtypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
@@ -95,7 +99,19 @@ func Detect(targets []string, opts ...Option) error {
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
+	if err := dbc.Open(); err != nil {
+		return errors.Wrap(err, "open db")
+	}
 	defer dbc.Close()
+
+	slog.Info("Get Metadata")
+	meta, err := dbc.GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if meta.SchemaVersion < db.SchemaVersion {
+		return errors.Errorf("schema version is old. expected: %q, actual: %q", db.SchemaVersion, meta.SchemaVersion)
+	}
 
 	if len(targets) == 0 {
 		ds, err := os.ReadDir(options.resultsDir)
@@ -136,7 +152,8 @@ func Detect(targets []string, opts ...Option) error {
 				return errors.Wrapf(err, "decode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "scan.json"))
 			}
 
-			dr, err := detect(db, sr)
+			slog.Info("Detect", "ServerUUID", sr.ServerUUID, "scanned", latest)
+			dr, err := detect(dbc, sr)
 			if err != nil {
 				return errors.Wrapf(err, "detect %s", sr.ServerUUID)
 			}
@@ -163,80 +180,201 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(db db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
-	pkgs := make(map[string][]scanTypes.OSPackage)
-	for _, p := range sr.OSPackages {
+func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
+	pkgs := make(map[string][]int)
+	for i, p := range sr.OSPackages {
 		bn, sn := p.Name, p.SrcName
 		if p.ModularityLabel != "" {
 			bn, sn = fmt.Sprintf("%s::%s", p.ModularityLabel, p.Name), fmt.Sprintf("%s::%s", p.ModularityLabel, p.SrcName) // modularitylabel -> <module name>:<stream>
 		}
 
-		if !slices.Contains(pkgs[bn], p) {
-			pkgs[bn] = append(pkgs[bn], p)
+		if !slices.Contains(pkgs[bn], i) {
+			pkgs[bn] = append(pkgs[bn], i)
 		}
-		if !slices.Contains(pkgs[sn], p) {
-			pkgs[sn] = append(pkgs[sn], p)
+		if !slices.Contains(pkgs[sn], i) {
+			pkgs[sn] = append(pkgs[sn], i)
 		}
 	}
 
-	for name, ps := range pkgs {
-		resCh, errCh := db.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, func() string {
-			if sr.Release == "" {
-				return sr.Family
-			}
-			return fmt.Sprintf("%s:%s", sr.Family, sr.Release)
-		}(), name)
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return detectTypes.DetectResult{}, nil
+	type filtered struct {
+		criteria criteriaTypes.Criteria
+		indexes  struct {
+			pkg []int
+			cpe []int
+		}
+	}
+
+	cm := make(map[string]map[sourceTypes.SourceID]filtered)
+	for name, pkgIdxs := range pkgs {
+		if err := func() error {
+			resCh, errCh := dbc.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, func() string {
+				switch sr.Family {
+				case "oracle":
+					return fmt.Sprintf("%s:%s", sr.Family, strings.Split(sr.Release, ".")[0])
+				default:
+					if sr.Release == "" {
+						return sr.Family
+					}
+					return fmt.Sprintf("%s:%s", sr.Family, sr.Release)
 				}
-				for rootID, m := range item.Contents {
-					for sourceID, ca := range m {
-						for _, p := range ps {
-							ca.Contains(criterionTypes.Query{Package: &criterionTypes.QueryPackage{
-								Name:       p.Name,
-								Version:    p.Version,
-								SrcName:    p.SrcName,
-								SrcVersion: p.SrcVersion,
-								Arch:       p.Arch,
-								Repository: p.Repository,
-							}})
+			}(), name)
+
+			for {
+				select {
+				case item, ok := <-resCh:
+					if !ok {
+						return nil
+					}
+					for rootID, m := range item.Contents {
+						for sourceID, ca := range m {
+							for _, idx := range pkgIdxs {
+								isContains, err := ca.Contains(criterionTypes.Query{Package: &criterionTypes.QueryPackage{
+									Name: func() string {
+										if sr.OSPackages[idx].ModularityLabel != "" {
+											return fmt.Sprintf("%s::%s", sr.OSPackages[idx].ModularityLabel, sr.OSPackages[idx].Name)
+										}
+										return sr.OSPackages[idx].Name
+									}(),
+									Version: fmt.Sprintf("%s-%s", sr.OSPackages[idx].Version, sr.OSPackages[idx].Release),
+									SrcName: func() string {
+										if sr.OSPackages[idx].ModularityLabel != "" {
+											return fmt.Sprintf("%s::%s", sr.OSPackages[idx].ModularityLabel, sr.OSPackages[idx].SrcName)
+										}
+										return sr.OSPackages[idx].SrcName
+									}(),
+									SrcVersion: fmt.Sprintf("%s-%s", sr.OSPackages[idx].SrcVersion, sr.OSPackages[idx].SrcRelease),
+									Arch:       sr.OSPackages[idx].Arch,
+									Repository: sr.OSPackages[idx].Repository,
+								}})
+								if err != nil {
+									return errors.Wrap(err, "criteria contains")
+								}
+
+								if isContains {
+									if cm[rootID] == nil {
+										cm[rootID] = make(map[sourceTypes.SourceID]filtered)
+									}
+									base, ok := cm[rootID][sourceID]
+									if !ok {
+										base = filtered{criteria: ca}
+									}
+									base.indexes.pkg = append(base.indexes.pkg, idx)
+									cm[rootID][sourceID] = base
+								}
+							}
 						}
 					}
-				}
-			case err, ok := <-errCh:
-				if ok {
-					return detectTypes.DetectResult{}, errors.Wrap(err, "get detection")
-				}
-			}
-		}
-
-	}
-
-	for _, cpe := range sr.CPE {
-		wfn, err := naming.UnbindFS(cpe)
-		if err != nil {
-			return detectTypes.DetectResult{}, errors.Wrapf(err, "unbind %q to WFN", cpe)
-		}
-
-		resCh, errCh := db.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, "cpe", fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return detectTypes.DetectResult{}, nil
-				}
-				for rootID, m := range item.Contents {
-					for sourceID, ca := range m {
-						// check affected?
+				case err, ok := <-errCh:
+					if ok {
+						return errors.Wrap(err, "get detection")
 					}
 				}
-			case err, ok := <-errCh:
-				if ok {
-					return detectTypes.DetectResult{}, errors.Wrap(err, "get detection")
+			}
+		}(); err != nil {
+			return detectTypes.DetectResult{}, errors.Wrapf(err, "detect pkg: %s %s", func() string {
+				switch sr.Family {
+				case "oracle":
+					return fmt.Sprintf("%s:%s", sr.Family, strings.Split(sr.Release, ".")[0])
+				default:
+					if sr.Release == "" {
+						return sr.Family
+					}
+					return fmt.Sprintf("%s:%s", sr.Family, sr.Release)
 				}
+			}(), name)
+		}
+	}
+
+	for i, cpe := range sr.CPE {
+		if err := func() error {
+			wfn, err := naming.UnbindFS(cpe)
+			if err != nil {
+				return errors.Wrapf(err, "unbind %q to WFN", cpe)
+			}
+
+			resCh, errCh := dbc.GetVulnerabilityDetections(dbtypes.SearchDetectionPkg, "cpe", fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+			for {
+				select {
+				case item, ok := <-resCh:
+					if !ok {
+						return nil
+					}
+					for rootID, m := range item.Contents {
+						for sourceID, ca := range m {
+							isContains, err := ca.Contains(criterionTypes.Query{CPE: &cpe})
+							if err != nil {
+								return errors.Wrap(err, "criteria contains")
+							}
+
+							if isContains {
+								if cm[rootID] == nil {
+									cm[rootID] = make(map[sourceTypes.SourceID]filtered)
+								}
+								base, ok := cm[rootID][sourceID]
+								if !ok {
+									base = filtered{criteria: ca}
+								}
+								base.indexes.cpe = append(base.indexes.cpe, i)
+								cm[rootID][sourceID] = base
+							}
+						}
+					}
+				case err, ok := <-errCh:
+					if ok {
+						return errors.Wrap(err, "get detection")
+					}
+				}
+			}
+		}(); err != nil {
+			return detectTypes.DetectResult{}, errors.Wrapf(err, "detect cpe: %q", cpe)
+		}
+	}
+
+	for rootID, m := range cm {
+		for sourceID, fca := range m {
+			qs := make([]criterionTypes.Query, 0, len(fca.indexes.pkg)+len(fca.indexes.cpe))
+			for _, idx := range fca.indexes.pkg {
+				qs = append(qs, criterionTypes.Query{
+					Package: &criterionTypes.QueryPackage{
+						Name: func() string {
+							if sr.OSPackages[idx].ModularityLabel != "" {
+								return fmt.Sprintf("%s::%s", sr.OSPackages[idx].ModularityLabel, sr.OSPackages[idx].Name)
+							}
+							return sr.OSPackages[idx].Name
+						}(),
+						Version: fmt.Sprintf("%s-%s", sr.OSPackages[idx].Version, sr.OSPackages[idx].Release),
+						SrcName: func() string {
+							if sr.OSPackages[idx].ModularityLabel != "" {
+								return fmt.Sprintf("%s::%s", sr.OSPackages[idx].ModularityLabel, sr.OSPackages[idx].SrcName)
+							}
+							return sr.OSPackages[idx].SrcName
+						}(),
+						SrcVersion: fmt.Sprintf("%s-%s", sr.OSPackages[idx].SrcVersion, sr.OSPackages[idx].SrcRelease),
+						Arch:       sr.OSPackages[idx].Arch,
+						Repository: sr.OSPackages[idx].Repository,
+					},
+				})
+			}
+			for _, idx := range fca.indexes.cpe {
+				qs = append(qs, criterionTypes.Query{CPE: &sr.CPE[idx]})
+			}
+
+			ac, err := fca.criteria.Accept(qs)
+			if err != nil {
+				return detectTypes.DetectResult{}, errors.Wrap(err, "criteria accept")
+			}
+
+			isAffected, err := ac.Affected()
+			if err != nil {
+				return detectTypes.DetectResult{}, errors.Wrap(err, "criteria affected")
+			}
+
+			if isAffected {
+				bs, err := json.MarshalIndent(ac, "", "  ")
+				if err != nil {
+					return detectTypes.DetectResult{}, err
+				}
+				fmt.Printf("%s:%s\ncriteria: %s\n", rootID, sourceID, string(bs))
 			}
 		}
 	}
