@@ -129,6 +129,9 @@ db-build:
 	# make db-add REPO=vuls-data-extracted-mitre-v4 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-mitre-v5 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-msf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-nvd-api-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-api-cpe  DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-api-cpematch DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-nvd-feed-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-nvd-feed-cpe  DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-nvd-feed-cpematch DBTYPE=${DBTYPE} DBPATH=${DBPATH}
