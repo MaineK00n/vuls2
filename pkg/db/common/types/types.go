@@ -5,8 +5,8 @@ import (
 	"time"
 
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -54,11 +54,11 @@ type VulnerabilityDataVulnerability struct {
 }
 
 type VulnerabilityDataDetection struct {
-	Ecosystem detectionTypes.Ecosystem                                   `json:"ecosystem,omitempty"`
+	Ecosystem ecosystemTypes.Ecosystem                                   `json:"ecosystem,omitempty"`
 	Contents  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria `json:"contents,omitempty"`
 }
 
-func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) VulnerabilityData {
+func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) VulnerabilityData {
 	filtered := VulnerabilityData{ID: data.ID}
 	srcs := map[sourceTypes.SourceID]struct{}{}
 	for _, adv := range data.Advisories {
@@ -66,7 +66,7 @@ func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) Vul
 		for sid, m := range adv.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e detectionTypes.Ecosystem) bool {
+					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
 						return slices.Contains(ecosystems, e)
 					}) {
 						sm, ok := a.Contents[sid]
@@ -90,7 +90,7 @@ func (data VulnerabilityData) Filter(ecosystems ...detectionTypes.Ecosystem) Vul
 		for sid, m := range vuln.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e detectionTypes.Ecosystem) bool {
+					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
 						return slices.Contains(ecosystems, e)
 					}) {
 						sm, ok := v.Contents[sid]

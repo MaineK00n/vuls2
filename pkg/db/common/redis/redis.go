@@ -15,8 +15,8 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -136,7 +136,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					}
 
 					resCh <- dbTypes.VulnerabilityDataDetection{
-						Ecosystem: detectionTypes.Ecosystem(queries[0]),
+						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
 						Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: sm},
 					}
 				}
@@ -177,7 +177,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[detectionTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
 				for _, rootID := range rootIDs {
 					ds, err := c.getDetection(ctx, rootID)
 					if err != nil {
@@ -223,7 +223,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[detectionTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
 				for _, rootID := range rootIDs {
 					ds, err := c.getDetection(ctx, rootID)
 					if err != nil {
@@ -522,7 +522,7 @@ func (c *Connection) getDetection(ctx context.Context, rootID string) ([]dbTypes
 		}
 
 		ds = append(ds, dbTypes.VulnerabilityDataDetection{
-			Ecosystem: detectionTypes.Ecosystem(ecosystem),
+			Ecosystem: ecosystemTypes.Ecosystem(ecosystem),
 			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: sm},
 		})
 	}
@@ -671,7 +671,7 @@ func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) erro
 			return errors.Wrap(err, "marshal criteria")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource), string(bs)).Build()).Error(); err != nil {
+		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build()).Error(); err != nil {
 			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID), data.DataSource, string(bs))
 		}
 
@@ -752,7 +752,7 @@ func (c *Connection) putRoot(ctx context.Context, data dataTypes.Data) error {
 			}
 			return es
 		}(),
-		DataSources: []string{string(data.DataSource)},
+		DataSources: []string{string(data.DataSource.ID)},
 	}
 
 	bs, err := c.conn.Do(ctx, c.conn.B().Get().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).Build()).AsBytes()

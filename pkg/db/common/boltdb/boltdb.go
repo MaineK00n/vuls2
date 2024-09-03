@@ -13,8 +13,8 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -152,7 +152,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					}
 
 					resCh <- dbTypes.VulnerabilityDataDetection{
-						Ecosystem: detectionTypes.Ecosystem(queries[0]),
+						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
 						Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
 					}
 				}
@@ -193,7 +193,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[detectionTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
 				for _, rootID := range rootIDs {
 					ds, err := getDetection(tx, rootID)
 					if err != nil {
@@ -239,7 +239,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[detectionTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
 				for _, rootID := range rootIDs {
 					ds, err := getDetection(tx, rootID)
 					if err != nil {
@@ -533,7 +533,7 @@ func getDetection(tx *bolt.Tx, rootID string) ([]dbTypes.VulnerabilityDataDetect
 		}
 
 		ds = append(ds, dbTypes.VulnerabilityDataDetection{
-			Ecosystem: detectionTypes.Ecosystem(ecosystem),
+			Ecosystem: ecosystemTypes.Ecosystem(ecosystem),
 			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: m},
 		})
 	}
@@ -682,7 +682,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
 			}
 		}
-		m[data.DataSource] = d.Criteria
+		m[data.DataSource.ID] = d.Criteria
 
 		bs, err := util.Marshal(m)
 		if err != nil {
@@ -744,10 +744,10 @@ func putAdvisory(tx *bolt.Tx, data dataTypes.Data) error {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability -> advisory -> %s", a.Content.ID))
 			}
 		}
-		if m[string(data.DataSource)] == nil {
-			m[string(data.DataSource)] = make(map[string][]advisoryTypes.Advisory)
+		if m[string(data.DataSource.ID)] == nil {
+			m[string(data.DataSource.ID)] = make(map[string][]advisoryTypes.Advisory)
 		}
-		m[string(data.DataSource)][data.ID] = append(m[string(data.DataSource)][data.ID], a)
+		m[string(data.DataSource.ID)][data.ID] = append(m[string(data.DataSource.ID)][data.ID], a)
 
 		bs, err := util.Marshal(m)
 		if err != nil {
@@ -780,10 +780,10 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data) error {
 				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability -> vulnerability -> %s", v.Content.ID))
 			}
 		}
-		if m[string(data.DataSource)] == nil {
-			m[string(data.DataSource)] = make(map[string][]vulnerabilityTypes.Vulnerability)
+		if m[string(data.DataSource.ID)] == nil {
+			m[string(data.DataSource.ID)] = make(map[string][]vulnerabilityTypes.Vulnerability)
 		}
-		m[string(data.DataSource)][data.ID] = append(m[string(data.DataSource)][data.ID], v)
+		m[string(data.DataSource.ID)][data.ID] = append(m[string(data.DataSource.ID)][data.ID], v)
 
 		bs, err := util.Marshal(m)
 		if err != nil {
@@ -822,7 +822,7 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 			}
 			return es
 		}(),
-		DataSources: []string{string(data.DataSource)},
+		DataSources: []string{string(data.DataSource.ID)},
 	}
 
 	vb := tx.Bucket([]byte("vulnerability"))
