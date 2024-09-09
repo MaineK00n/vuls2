@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type ScanResult struct {
 	JSONVersion int    `json:"json_version,omitempty"`
 	ServerUUID  string `json:"server_uuid,omitempty"`
@@ -11,8 +13,10 @@ type ScanResult struct {
 	OSPackages []OSPackage `json:"os_packages,omitempty"`
 	CPE        []string    `json:"cpe,omitempty"`
 
-	Optional map[string]interface{} `json:"optional,omitempty"`
-	Config   interface{}            `json:"config,omitempty"`
+	Optional  map[string]interface{} `json:"optional,omitempty"`
+	Config    interface{}            `json:"config,omitempty"`
+	ScannedAt time.Time              `json:"scanned_at,omitempty"`
+	ScannedBy string                 `json:"scanned_by,omitempty"`
 }
 
 type Kernel struct {
@@ -23,6 +27,7 @@ type Kernel struct {
 
 type OSPackage struct {
 	Name            string `json:"name,omitempty"`
+	Epoch           int    `json:"epoch,omitempty"`
 	Version         string `json:"version,omitempty"`
 	Release         string `json:"release,omitempty"`
 	NewVersion      string `json:"new_version,omitempty"`
@@ -31,5 +36,7 @@ type OSPackage struct {
 	Repository      string `json:"repository,omitempty"`
 	ModularityLabel string `json:"modularity_label,omitempty"`
 	SrcName         string `json:"src_name,omitempty"`
+	SrcEpoch        int    `json:"src_epoch,omitempty"`
 	SrcVersion      string `json:"src_version,omitempty"`
+	SrcRelease      string `json:"src_release,omitempty"`
 }

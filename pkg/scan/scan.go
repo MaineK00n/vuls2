@@ -5,12 +5,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
+	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
 type options struct {
@@ -141,6 +143,9 @@ func Scan(root string, opts ...Option) error {
 						}
 						return s.CpeNames
 					}(),
+
+					ScannedAt: time.Now(),
+					ScannedBy: version.String(),
 				}
 
 				if err := os.MkdirAll(filepath.Join(options.resultsDir, id.String(), t), 0755); err != nil {
