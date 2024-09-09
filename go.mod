@@ -17,7 +17,7 @@ require (
 	go.etcd.io/bbolt v1.3.11
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
-	gorm.io/gorm v1.25.11
+	gorm.io/gorm v1.25.12
 	oras.land/oras-go/v2 v2.5.0
 )
 
