@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
@@ -42,11 +43,11 @@ func newDataCmd() *cobra.Command {
 
 func newDataRootCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -60,14 +61,15 @@ func newDataRootCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-root", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("data-root", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -76,11 +78,11 @@ func newDataRootCmd() *cobra.Command {
 
 func newDataAdvisoryCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -93,14 +95,15 @@ func newDataAdvisoryCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-advisory", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("data-advisory", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -109,11 +112,11 @@ func newDataAdvisoryCmd() *cobra.Command {
 
 func newDataVulnerabilityCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -126,14 +129,15 @@ func newDataVulnerabilityCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-vulnerability", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("data-vulnerability", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -158,11 +162,11 @@ func newDetectionCmd() *cobra.Command {
 
 func newDetectionPkgCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -176,14 +180,15 @@ func newDetectionPkgCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-pkg", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("detection-pkg", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -192,11 +197,11 @@ func newDetectionPkgCmd() *cobra.Command {
 
 func newDetectionRootCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -210,14 +215,15 @@ func newDetectionRootCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-root", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("detection-root", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -226,11 +232,11 @@ func newDetectionRootCmd() *cobra.Command {
 
 func newDetectionAdvisoryCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -243,14 +249,15 @@ func newDetectionAdvisoryCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-advisory", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("detection-advisory", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -259,11 +266,11 @@ func newDetectionAdvisoryCmd() *cobra.Command {
 
 func newDetectionVulnerabilityCmd() *cobra.Command {
 	options := struct {
-		dbtype string
+		dbtype utilflag.DBType
 		dbpath string
 		debug  bool
 	}{
-		dbtype: "boltdb",
+		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:  false,
 	}
@@ -276,14 +283,15 @@ func newDetectionVulnerabilityCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-vulnerability", args, db.WithDBType(options.dbtype), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search("detection-vulnerability", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
