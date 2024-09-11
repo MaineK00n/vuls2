@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	"github.com/MaineK00n/vuls2/pkg/detect"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
@@ -14,12 +15,12 @@ import (
 func NewCmd() *cobra.Command {
 	options := struct {
 		resultsDir string
-		dbtype     string
+		dbtype     utilflag.DBType
 		dbpath     string
 		debug      bool
 	}{
 		resultsDir: filepath.Join(utilos.UserCacheDir(), "results"),
-		dbtype:     "boltdb",
+		dbtype:     utilflag.DBTypeBoltDB,
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		debug:      false,
 	}
@@ -31,7 +32,7 @@ func NewCmd() *cobra.Command {
 		$ vuls scan results
 		`),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := detect.Detect(args, detect.WithResultsDir(options.resultsDir), detect.WithDBType(options.dbtype), detect.WithDBPath(options.dbpath), detect.WithDebug(options.debug)); err != nil {
+			if err := detect.Detect(args, detect.WithResultsDir(options.resultsDir), detect.WithDBType(options.dbtype.String()), detect.WithDBPath(options.dbpath), detect.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "detect")
 			}
 			return nil
@@ -39,7 +40,8 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&options.resultsDir, "results-dir", "", options.resultsDir, "vuls results path")
-	cmd.Flags().StringVarP(&options.dbtype, "dbtype", "", options.dbtype, "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
