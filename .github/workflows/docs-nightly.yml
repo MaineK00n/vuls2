@@ -31,5 +31,5 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
 
-      - name: Deploy the dev documents
+      - name: Deploy the nightly documents
         run: mike deploy --push nightly

@@ -1,0 +1,79 @@
+name: Release binary and docs
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to be deployed
+        required: true
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  binary:
+    name: Release Binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Tag
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+           TAG=${GITHUB_REF#refs/tags/}
+          else
+           TAG=${{ github.event.inputs.version }}
+          fi
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docs:
+    name: Release Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Tag
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+           TAG=${GITHUB_REF#refs/tags/}
+          else
+           TAG=${{ github.event.inputs.version }}
+          fi
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies
+        run: |
+          pip install -r docs/build/requirements.txt
+          rm -rf docs/build
+
+      - name: set Git config
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+      - name: Deploy the nightly documents
+        run: mike deploy --push --update-aliases "${{ env.TAG_NAME }}" latest
