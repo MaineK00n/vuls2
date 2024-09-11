@@ -16,6 +16,9 @@
 
 .vscode
 
+# goreleaser output
+dist/
+
 # Vuls
 vuls
 !cmd/vuls
