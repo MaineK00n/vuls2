@@ -1,0 +1,35 @@
+name: Deploy the nightly documentation
+on:
+  push:
+    paths:
+      - "docs/**"
+      - mkdocs.yml
+    branches:
+      - nightly
+jobs:
+  deploy:
+    name: Deploy the nightly documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies
+        run: |
+          pip install -r docs/build/requirements.txt
+          rm -rf docs/build
+
+      - name: set Git config
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+      - name: Deploy the dev documents
+        run: mike deploy --push nightly
