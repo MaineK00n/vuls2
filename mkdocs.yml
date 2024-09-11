@@ -1,0 +1,64 @@
+docs_dir: docs/
+
+# Project information
+site_name: Vuls
+site_url: https://mainek00n.github.io/vuls2/
+site_author: MaineK00n
+site_description: "Vuls: VULnerability Scanner"
+
+## Repository
+repo_name: MaineK00n/vuls2
+repo_url: https://github.com/MaineK00n/vuls2
+edit_uri: "blob/nightly/docs/"
+
+# Copyright
+copyright: Copyright &copy; 2024 - 2024 MaineK00n
+
+# Configuration
+theme:
+  name: material
+  custom_dir: docs/overrides
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.footer
+    - navigation.path
+  favicon: assets/images/vuls_icon.png
+  logo: assets/images/vuls_icon.png
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+
+# Plugins
+plugins:
+  - search
+
+# Additional configuration
+extra:
+  generator: false
+  version:
+    provider: mike
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      name: MaineK00n/vuls2
+      link: https://github.com/MaineK00n/vuls2
+    - icon: fontawesome/brands/github
+      name: MaineK00n/vuls-data-update
+      link: https://github.com/MaineK00n/vuls-data-update
+    - icon: fontawesome/brands/x-twitter
+      name: X/Twitter
+      link: https://twitter.com/vuls_en
+    - icon: fontawesome/brands/slack
+      name: Slack Invite
+      link: https://join.slack.com/t/vuls-github/shared_invite/zt-1fculjwj4-6nex2JNE7DpOSiKZ1ztDFw
+
+# Page tree
+nav:
+  - Home: index.md
+  - Getting started: getting-started/getting-started.md
