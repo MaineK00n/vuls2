@@ -14,7 +14,7 @@ import (
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/scope/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -666,20 +666,20 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 
 func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 	for _, d := range data.Detection {
-		eb, err := tx.CreateBucketIfNotExists([]byte(d.Ecosystem))
+		eb, err := tx.CreateBucketIfNotExists([]byte(d.Scope.Ecosystem))
 		if err != nil {
-			return errors.Wrapf(err, "create bucket: %s if not exists", d.Ecosystem)
+			return errors.Wrapf(err, "create bucket: %s if not exists", d.Scope.Ecosystem)
 		}
 
 		edb, err := eb.CreateBucketIfNotExists([]byte("detection"))
 		if err != nil {
-			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> detection", d.Ecosystem))
+			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> detection", d.Scope.Ecosystem))
 		}
 
 		m := make(map[sourceTypes.SourceID]criteriaTypes.Criteria)
 		if bs := edb.Get([]byte(data.ID)); len(bs) > 0 {
 			if err := util.Unmarshal(bs, &m); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", d.Scope.Ecosystem, data.ID))
 			}
 		}
 		m[data.DataSource.ID] = d.Criteria
@@ -690,12 +690,12 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 
 		if err := edb.Put([]byte(data.ID), bs); err != nil {
-			return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+			return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> detection -> %s", d.Scope.Ecosystem, data.ID))
 		}
 
 		eib, err := eb.CreateBucketIfNotExists([]byte("index"))
 		if err != nil {
-			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> index", d.Ecosystem))
+			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> index", d.Scope.Ecosystem))
 		}
 
 		pkgs := util.WalkCriteria(d.Criteria)
@@ -705,7 +705,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			var rootIDs []string
 			if bs := eib.Get([]byte(p)); len(bs) > 0 {
 				if err := util.Unmarshal(bs, &rootIDs); err != nil {
-					return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
+					return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> index -> %s", d.Scope.Ecosystem, p))
 				}
 			}
 			if !slices.Contains(rootIDs, data.ID) {
@@ -718,7 +718,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			}
 
 			if err := eib.Put([]byte(p), bs); err != nil {
-				return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
+				return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> index -> %s", d.Scope.Ecosystem, p))
 			}
 		}
 	}
@@ -818,7 +818,7 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 		Ecosystems: func() []string {
 			es := make([]string, 0, len(data.Detection))
 			for _, d := range data.Detection {
-				es = append(es, string(d.Ecosystem))
+				es = append(es, string(d.Scope.Ecosystem))
 			}
 			return es
 		}(),

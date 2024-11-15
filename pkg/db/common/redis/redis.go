@@ -16,7 +16,7 @@ import (
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/scope/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -671,16 +671,16 @@ func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) erro
 			return errors.Wrap(err, "marshal criteria")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID), data.DataSource, string(bs))
+		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Scope.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build()).Error(); err != nil {
+			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Scope.Ecosystem, data.ID), data.DataSource, string(bs))
 		}
 
 		pkgs := util.WalkCriteria(d.Criteria)
 		slices.Sort(pkgs)
 
 		for _, p := range slices.Compact(pkgs) {
-			if err := c.conn.Do(ctx, c.conn.B().Sadd().Key(fmt.Sprintf("%s#index#%s", d.Ecosystem, p)).Member(data.ID).Build()).Error(); err != nil {
-				return errors.Wrapf(err, "SADD %s %s", fmt.Sprintf("%s#index#%s", d.Ecosystem, p), data.ID)
+			if err := c.conn.Do(ctx, c.conn.B().Sadd().Key(fmt.Sprintf("%s#index#%s", d.Scope.Ecosystem, p)).Member(data.ID).Build()).Error(); err != nil {
+				return errors.Wrapf(err, "SADD %s %s", fmt.Sprintf("%s#index#%s", d.Scope.Ecosystem, p), data.ID)
 			}
 		}
 	}
@@ -748,7 +748,7 @@ func (c *Connection) putRoot(ctx context.Context, data dataTypes.Data) error {
 		Ecosystems: func() []string {
 			es := make([]string, 0, len(data.Detection))
 			for _, d := range data.Detection {
-				es = append(es, string(d.Ecosystem))
+				es = append(es, string(d.Scope.Ecosystem))
 			}
 			return es
 		}(),

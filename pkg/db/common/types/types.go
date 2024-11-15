@@ -6,7 +6,8 @@ import (
 
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	scopeTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/scope"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/scope/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -66,8 +67,8 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 		for sid, m := range adv.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
-						return slices.Contains(ecosystems, e)
+					if slices.ContainsFunc(c.Scopes, func(s scopeTypes.Scope) bool {
+						return slices.Contains(ecosystems, s.Ecosystem)
 					}) {
 						sm, ok := a.Contents[sid]
 						if !ok {
@@ -90,8 +91,8 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 		for sid, m := range vuln.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
-						return slices.Contains(ecosystems, e)
+					if slices.ContainsFunc(c.Scopes, func(s scopeTypes.Scope) bool {
+						return slices.Contains(ecosystems, s.Ecosystem)
 					}) {
 						sm, ok := v.Contents[sid]
 						if !ok {
