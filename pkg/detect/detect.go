@@ -11,7 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
@@ -202,10 +202,10 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 				}
 			}
 
-			for sourceID, fca := range mm {
+			for sourceID, fcond := range mm {
 				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
 					Ecosystem: m.Ecosystem,
-					Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.FilteredCriteria{rootID: {sourceID: fca}},
+					Contents:  map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
 				})
 			}
 
@@ -233,10 +233,10 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 				}
 			}
 
-			for sourceID, fca := range mm {
+			for sourceID, fcond := range mm {
 				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
 					Ecosystem: m.Ecosystem,
-					Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.FilteredCriteria{rootID: {sourceID: fca}},
+					Contents:  map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
 				})
 			}
 

@@ -15,8 +15,8 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -34,7 +34,7 @@ import (
 
 // redis: SET KEY: "<ecosystem>#index#<package>" MEMBER: <Root ID>
 
-// redis: HASH KEY: "<ecosystem>#detection#<Root ID>" FIELD: <Source ID> VALUE: criteriaTypes.Criteria
+// redis: HASH KEY: "<ecosystem>#detection#<Root ID>" FIELD: <Source ID> VALUE: []conditionTypes.Condition
 
 // redis: HASH KEY "datasource" FIELD: <Source ID> VALUE: datasourceTypes.DataSource
 
@@ -120,24 +120,23 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 						return errors.Wrapf(err, "HGETALL %s", fmt.Sprintf("%s#detection#%s", queries[0], rootID))
 					}
 
-					sm := make(map[sourceTypes.SourceID]criteriaTypes.Criteria)
+					sm := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
 					for k, v := range m {
 						bs, err := v.AsBytes()
 						if err != nil {
 							return errors.Wrapf(err, "as bytes %s", fmt.Sprintf("%s -> %s", fmt.Sprintf("%s#detection#%s", queries[0], rootID), k))
 						}
 
-						var c criteriaTypes.Criteria
-						if err := util.Unmarshal(bs, &c); err != nil {
+						var conds []conditionTypes.Condition
+						if err := util.Unmarshal(bs, &conds); err != nil {
 							return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> %s", fmt.Sprintf("%s#detection#%s", queries[0], rootID), k))
 						}
-
-						sm[sourceTypes.SourceID(k)] = c
+						sm[sourceTypes.SourceID(k)] = conds
 					}
 
 					resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
-						Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: sm},
+						Contents:  map[string]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: sm},
 					}
 				}
 
@@ -177,7 +176,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID][]conditionTypes.Condition)
 				for _, rootID := range rootIDs {
 					ds, err := c.getDetection(ctx, rootID)
 					if err != nil {
@@ -185,7 +184,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					}
 					for _, d := range ds {
 						if em[d.Ecosystem] == nil {
-							em[d.Ecosystem] = make(map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+							em[d.Ecosystem] = make(map[string]map[sourceTypes.SourceID][]conditionTypes.Condition)
 						}
 						for rootID, cm := range d.Contents {
 							em[d.Ecosystem][rootID] = cm
@@ -223,7 +222,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return rs
 				}()
 
-				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+				em := make(map[ecosystemTypes.Ecosystem]map[string]map[sourceTypes.SourceID][]conditionTypes.Condition)
 				for _, rootID := range rootIDs {
 					ds, err := c.getDetection(ctx, rootID)
 					if err != nil {
@@ -231,7 +230,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					}
 					for _, d := range ds {
 						if em[d.Ecosystem] == nil {
-							em[d.Ecosystem] = make(map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria)
+							em[d.Ecosystem] = make(map[string]map[sourceTypes.SourceID][]conditionTypes.Condition)
 						}
 						for rootID, cm := range d.Contents {
 							em[d.Ecosystem][rootID] = cm
@@ -506,24 +505,23 @@ func (c *Connection) getDetection(ctx context.Context, rootID string) ([]dbTypes
 			return nil, errors.Wrapf(err, "HGETALL %s", fmt.Sprintf("%s#detection#%s", ecosystem, rootID))
 		}
 
-		sm := make(map[sourceTypes.SourceID]criteriaTypes.Criteria)
+		cm := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
 		for k, v := range m {
 			bs, err := v.AsBytes()
 			if err != nil {
 				return nil, errors.Wrapf(err, "as bytes %s", fmt.Sprintf("%s -> %s", fmt.Sprintf("%s#detection#%s", ecosystem, rootID), k))
 			}
 
-			var c criteriaTypes.Criteria
-			if err := util.Unmarshal(bs, &c); err != nil {
+			var conds []conditionTypes.Condition
+			if err := util.Unmarshal(bs, &conds); err != nil {
 				return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> %s", fmt.Sprintf("%s#detection#%s", ecosystem, rootID), k))
 			}
-
-			sm[sourceTypes.SourceID(k)] = c
+			cm[sourceTypes.SourceID(k)] = conds
 		}
 
 		ds = append(ds, dbTypes.VulnerabilityDataDetection{
 			Ecosystem: ecosystemTypes.Ecosystem(ecosystem),
-			Contents:  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria{rootID: sm},
+			Contents:  map[string]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: cm},
 		})
 	}
 
@@ -665,17 +663,20 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 }
 
 func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) error {
-	for _, d := range data.Detection {
-		bs, err := util.Marshal(d.Criteria)
+	for _, d := range data.Detections {
+		bs, err := util.Marshal(d.Conditions)
 		if err != nil {
-			return errors.Wrap(err, "marshal criteria")
+			return errors.Wrap(err, "marshal conditions")
 		}
 
 		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build()).Error(); err != nil {
 			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID), data.DataSource, string(bs))
 		}
 
-		pkgs := util.WalkCriteria(d.Criteria)
+		var pkgs []string
+		for _, cond := range d.Conditions {
+			pkgs = append(pkgs, util.WalkCriteria(cond.Criteria)...)
+		}
 		slices.Sort(pkgs)
 
 		for _, p := range slices.Compact(pkgs) {
@@ -700,8 +701,8 @@ func (c *Connection) putAdvisory(ctx context.Context, data dataTypes.Data) error
 			return errors.Wrap(err, "marshal advisories")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource, data.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#advisory#%s", id), fmt.Sprintf("%s#%s", data.DataSource, data.ID), string(bs))
+		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build()).Error(); err != nil {
+			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#advisory#%s", id), fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs))
 		}
 	}
 
@@ -720,8 +721,8 @@ func (c *Connection) putVulnerability(ctx context.Context, data dataTypes.Data) 
 			return errors.Wrap(err, "marshal vulnerabilities")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource, data.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#vulnerability#%s", id), fmt.Sprintf("%s#%s", data.DataSource, data.ID), string(bs))
+		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build()).Error(); err != nil {
+			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#vulnerability#%s", id), fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs))
 		}
 	}
 
@@ -746,8 +747,8 @@ func (c *Connection) putRoot(ctx context.Context, data dataTypes.Data) error {
 			return vs
 		}(),
 		Ecosystems: func() []string {
-			es := make([]string, 0, len(data.Detection))
-			for _, d := range data.Detection {
+			es := make([]string, 0, len(data.Detections))
+			for _, d := range data.Detections {
 				es = append(es, string(d.Ecosystem))
 			}
 			return es

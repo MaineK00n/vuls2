@@ -7,9 +7,10 @@ import (
 
 	"github.com/pkg/errors"
 
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria/criterion"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
@@ -82,11 +83,11 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		}
 	}
 
-	type filtered struct {
-		criteria criteriaTypes.Criteria
-		indexes  []int
+	type prefiltered struct {
+		condition conditionTypes.Condition
+		indexes   []int
 	}
-	cm := make(map[string]map[sourceTypes.SourceID]filtered)
+	pfm := make(map[string]map[sourceTypes.SourceID]prefiltered)
 	for name, indexes := range qm {
 		if err := func() error {
 			resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystem), name)
@@ -97,23 +98,25 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 						return nil
 					}
 					for rootID, m := range item.Contents {
-						for sourceID, ca := range m {
-							for _, idx := range indexes {
-								isContains, err := ca.Contains(ecosystem, criterionTypes.Query{Package: &qpkgs[idx]})
-								if err != nil {
-									return errors.Wrap(err, "criteria contains")
-								}
+						for sourceID, conds := range m {
+							for _, cond := range conds {
+								for _, idx := range indexes {
+									isContained, err := cond.Contains(ecosystem, criterionTypes.Query{Package: &qpkgs[idx]})
+									if err != nil {
+										return errors.Wrap(err, "condition contains")
+									}
 
-								if isContains {
-									if cm[rootID] == nil {
-										cm[rootID] = make(map[sourceTypes.SourceID]filtered)
+									if isContained {
+										if pfm[rootID] == nil {
+											pfm[rootID] = make(map[sourceTypes.SourceID]prefiltered)
+										}
+										pf, ok := pfm[rootID][sourceID]
+										if !ok {
+											pf = prefiltered{condition: cond}
+										}
+										pf.indexes = append(pf.indexes, idx)
+										pfm[rootID][sourceID] = pf
 									}
-									base, ok := cm[rootID][sourceID]
-									if !ok {
-										base = filtered{criteria: ca}
-									}
-									base.indexes = append(base.indexes, idx)
-									cm[rootID][sourceID] = base
 								}
 							}
 						}
@@ -129,28 +132,29 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		}
 	}
 
-	contents := make(map[string]map[sourceTypes.SourceID]criteriaTypes.FilteredCriteria)
-	for rootID, m := range cm {
-		for sourceID, fca := range m {
-			qs := make([]criterionTypes.Query, 0, len(fca.indexes))
-			for _, idx := range fca.indexes {
+	contents := make(map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+	for rootID, m := range pfm {
+		for sourceID, pf := range m {
+			qs := make([]criterionTypes.Query, 0, len(pf.indexes))
+			for _, idx := range pf.indexes {
 				qs = append(qs, criterionTypes.Query{Package: &qpkgs[idx]})
 			}
 
-			ac, err := fca.criteria.Accept(ecosystem, qs)
+			fcond, err := pf.condition.Accept(ecosystem, qs)
 			if err != nil {
 				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria accept")
 			}
 
-			isAffected, err := ac.Affected()
+			isAffected, err := fcond.Affected()
 			if err != nil {
 				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria affected")
 			}
 			if isAffected {
 				if contents[rootID] == nil {
-					contents[rootID] = make(map[sourceTypes.SourceID]criteriaTypes.FilteredCriteria)
+					contents[rootID] = make(map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 				}
-				contents[rootID][sourceID] = replaceIndexes(ac, fca.indexes)
+				fcond.Criteria = replaceIndexes(fcond.Criteria, pf.indexes)
+				contents[rootID][sourceID] = fcond
 			}
 		}
 	}
@@ -172,20 +176,20 @@ func replaceIndexes(ac criteriaTypes.FilteredCriteria, indexes []int) criteriaTy
 		replaced.Criterias = append(replaced.Criterias, rca)
 	}
 
-	var cos []criteriaTypes.FilteredCriterion
-	for _, co := range ac.Criterions {
-		if len(co.Accepts) == 0 {
+	var cns []criteriaTypes.FilteredCriterion
+	for _, cn := range ac.Criterions {
+		if len(cn.Accepts) == 0 {
 			continue
 		}
 
-		is := make([]int, 0, len(co.Accepts))
-		for _, a := range co.Accepts {
+		is := make([]int, 0, len(cn.Accepts))
+		for _, a := range cn.Accepts {
 			is = append(is, indexes[a])
 		}
-		co.Accepts = is
-		cos = append(cos, co)
+		cn.Accepts = is
+		cns = append(cns, cn)
 	}
-	replaced.Criterions = cos
+	replaced.Criterions = cns
 
 	return replaced
 }

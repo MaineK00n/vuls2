@@ -5,8 +5,9 @@ import (
 	"time"
 
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
-	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/ecosystem"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -54,8 +55,8 @@ type VulnerabilityDataVulnerability struct {
 }
 
 type VulnerabilityDataDetection struct {
-	Ecosystem ecosystemTypes.Ecosystem                                   `json:"ecosystem,omitempty"`
-	Contents  map[string]map[sourceTypes.SourceID]criteriaTypes.Criteria `json:"contents,omitempty"`
+	Ecosystem ecosystemTypes.Ecosystem                                       `json:"ecosystem,omitempty"`
+	Contents  map[string]map[sourceTypes.SourceID][]conditionTypes.Condition `json:"contents,omitempty"`
 }
 
 func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) VulnerabilityData {
@@ -66,8 +67,8 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 		for sid, m := range adv.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
-						return slices.Contains(ecosystems, e)
+					if slices.ContainsFunc(c.Segments, func(s segmentTypes.Segment) bool {
+						return slices.Contains(ecosystems, s.Ecosystem)
 					}) {
 						sm, ok := a.Contents[sid]
 						if !ok {
@@ -90,8 +91,8 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 		for sid, m := range vuln.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
-					if slices.ContainsFunc(c.Ecosystems, func(e ecosystemTypes.Ecosystem) bool {
-						return slices.Contains(ecosystems, e)
+					if slices.ContainsFunc(c.Segments, func(s segmentTypes.Segment) bool {
+						return slices.Contains(ecosystems, s.Ecosystem)
 					}) {
 						sm, ok := v.Contents[sid]
 						if !ok {

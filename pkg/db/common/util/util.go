@@ -10,7 +10,7 @@ import (
 	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/criteria"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 )
 
 func Marshal(v any) ([]byte, error) {
@@ -37,18 +37,18 @@ func WalkCriteria(ca criteriaTypes.Criteria) []string {
 		pkgs = append(pkgs, WalkCriteria(ca)...)
 	}
 
-	for _, co := range ca.Criterions {
-		if !co.Vulnerable {
+	for _, cn := range ca.Criterions {
+		if !cn.Vulnerable {
 			continue
 		}
 
-		if co.Package.Name != "" {
-			pkgs = append(pkgs, co.Package.Name)
+		if cn.Package.Name != "" {
+			pkgs = append(pkgs, cn.Package.Name)
 		}
-		if co.Package.CPE != "" {
-			wfn, err := naming.UnbindFS(co.Package.CPE)
+		if cn.Package.CPE != "" {
+			wfn, err := naming.UnbindFS(cn.Package.CPE)
 			if err != nil {
-				slog.Warn("failed to unbind a formatted string to WFN", "input", co.Package.CPE)
+				slog.Warn("failed to unbind a formatted string to WFN", "input", cn.Package.CPE)
 				continue
 			}
 			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
