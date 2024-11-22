@@ -3,6 +3,7 @@ package types
 import (
 	"time"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
@@ -23,13 +24,13 @@ type DetectResult struct {
 }
 
 type VulnerabilityData struct {
-	ID              string                                   `json:"id,omitempty"`
+	ID              dataTypes.RootID                         `json:"id,omitempty"`
 	Advisories      []dbTypes.VulnerabilityDataAdvisory      `json:"advisories,omitempty"`
 	Vulnerabilities []dbTypes.VulnerabilityDataVulnerability `json:"vulnerabilities,omitempty"`
 	Detections      []VulnerabilityDataDetection             `json:"detections,omitempty"`
 }
 
 type VulnerabilityDataDetection struct {
-	Ecosystem ecosystemTypes.Ecosystem                                             `json:"ecosystem,omitempty"`
-	Contents  map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition `json:"contents,omitempty"`
+	Ecosystem ecosystemTypes.Ecosystem                                                       `json:"ecosystem,omitempty"`
+	Contents  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition `json:"contents,omitempty"`
 }

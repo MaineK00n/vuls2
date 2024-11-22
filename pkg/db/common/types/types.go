@@ -4,11 +4,14 @@ import (
 	"slices"
 	"time"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
@@ -37,7 +40,7 @@ type Metadata struct {
 }
 
 type VulnerabilityData struct {
-	ID              string                           `json:"id,omitempty"`
+	ID              dataTypes.RootID                 `json:"id,omitempty"`
 	Advisories      []VulnerabilityDataAdvisory      `json:"advisories,omitempty"`
 	Vulnerabilities []VulnerabilityDataVulnerability `json:"vulnerabilities,omitempty"`
 	Detections      []VulnerabilityDataDetection     `json:"detections,omitempty"`
@@ -45,25 +48,25 @@ type VulnerabilityData struct {
 }
 
 type VulnerabilityDataAdvisory struct {
-	ID       string                                                       `json:"id,omitempty"`
-	Contents map[sourceTypes.SourceID]map[string][]advisoryTypes.Advisory `json:"contents,omitempty"`
+	ID       advisoryContentTypes.AdvisoryID                                        `json:"id,omitempty"`
+	Contents map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory `json:"contents,omitempty"`
 }
 
 type VulnerabilityDataVulnerability struct {
-	ID       string                                                                 `json:"id,omitempty"`
-	Contents map[sourceTypes.SourceID]map[string][]vulnerabilityTypes.Vulnerability `json:"contents,omitempty"`
+	ID       vulnerabilityContentTypes.VulnerabilityID                                        `json:"id,omitempty"`
+	Contents map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability `json:"contents,omitempty"`
 }
 
 type VulnerabilityDataDetection struct {
-	Ecosystem ecosystemTypes.Ecosystem                                       `json:"ecosystem,omitempty"`
-	Contents  map[string]map[sourceTypes.SourceID][]conditionTypes.Condition `json:"contents,omitempty"`
+	Ecosystem ecosystemTypes.Ecosystem                                                 `json:"ecosystem,omitempty"`
+	Contents  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition `json:"contents,omitempty"`
 }
 
 func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) VulnerabilityData {
 	filtered := VulnerabilityData{ID: data.ID}
-	srcs := map[sourceTypes.SourceID]struct{}{}
+	srcs := make(map[sourceTypes.SourceID]struct{})
 	for _, adv := range data.Advisories {
-		a := VulnerabilityDataAdvisory{ID: adv.ID, Contents: map[sourceTypes.SourceID]map[string][]advisoryTypes.Advisory{}}
+		a := VulnerabilityDataAdvisory{ID: adv.ID, Contents: make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)}
 		for sid, m := range adv.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
@@ -72,7 +75,7 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 					}) {
 						sm, ok := a.Contents[sid]
 						if !ok {
-							sm = map[string][]advisoryTypes.Advisory{}
+							sm = make(map[dataTypes.RootID][]advisoryTypes.Advisory)
 						}
 						sm[rid] = append(sm[rid], c)
 						a.Contents[sid] = sm
@@ -87,7 +90,7 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 	}
 
 	for _, vuln := range data.Vulnerabilities {
-		v := VulnerabilityDataVulnerability{ID: vuln.ID, Contents: map[sourceTypes.SourceID]map[string][]vulnerabilityTypes.Vulnerability{}}
+		v := VulnerabilityDataVulnerability{ID: vuln.ID, Contents: make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)}
 		for sid, m := range vuln.Contents {
 			for rid, cs := range m {
 				for _, c := range cs {
@@ -96,7 +99,7 @@ func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) Vul
 					}) {
 						sm, ok := v.Contents[sid]
 						if !ok {
-							sm = map[string][]vulnerabilityTypes.Vulnerability{}
+							sm = make(map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
 						}
 						sm[rid] = append(sm[rid], c)
 						v.Contents[sid] = sm
