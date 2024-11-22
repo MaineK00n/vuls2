@@ -11,6 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -180,7 +181,7 @@ func Detect(targets []string, opts ...Option) error {
 }
 
 func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
-	detected := make(map[string]detectTypes.VulnerabilityData)
+	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
 	if len(sr.OSPackages) > 0 {
 		m, err := ospkg.Detect(dbc, sr)
@@ -191,7 +192,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 		for rootID, mm := range m.Contents {
 			base, ok := detected[rootID]
 			if !ok {
-				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, rootID)
+				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
 				if err != nil {
 					return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
 				}
@@ -205,7 +206,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 			for sourceID, fcond := range mm {
 				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
 					Ecosystem: m.Ecosystem,
-					Contents:  map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
+					Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
 				})
 			}
 
@@ -222,7 +223,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 		for rootID, mm := range m.Contents {
 			base, ok := detected[rootID]
 			if !ok {
-				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, rootID)
+				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
 				if err != nil {
 					return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
 				}
@@ -236,7 +237,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 			for sourceID, fcond := range mm {
 				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
 					Ecosystem: m.Ecosystem,
-					Contents:  map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
+					Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
 				})
 			}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/knqyf263/go-cpe/naming"
 	"github.com/pkg/errors"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
@@ -33,7 +34,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		condition conditionTypes.Condition
 		indexes   []int
 	}
-	pfm := make(map[string]map[sourceTypes.SourceID]prefiltered)
+	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
 	for vp, indexes := range qm {
 		if err := func() error {
 			resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystemTypes.EcosystemTypeCPE), vp)
@@ -74,11 +75,11 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				}
 			}
 		}(); err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "detect cpe: %s %s", string(ecosystemTypes.EcosystemTypeCPE), vp)
+			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "detect cpe: %s %s", ecosystemTypes.EcosystemTypeCPE, vp)
 		}
 	}
 
-	contents := make(map[string]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+	contents := make(map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 	for rootID, m := range pfm {
 		for sourceID, pf := range m {
 			qs := make([]criterionTypes.Query, 0, len(pf.indexes))
