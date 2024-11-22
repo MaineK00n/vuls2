@@ -11,6 +11,7 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
@@ -26,7 +27,6 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		if err != nil {
 			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "unbind %q to WFN", cpe)
 		}
-
 		qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))] = append(qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))], i)
 	}
 
@@ -48,7 +48,12 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 						for sourceID, conds := range m {
 							for _, cond := range conds {
 								for _, idx := range indexes {
-									isContained, err := cond.Criteria.Contains(ecosystemTypes.EcosystemTypeCPE, criterionTypes.Query{CPE: &sr.CPE[idx]})
+									isContained, err := cond.Criteria.Contains(criterionTypes.Query{
+										Version: []vcTypes.Query{{
+											Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+											CPE:       &sr.CPE[idx],
+										}},
+									})
 									if err != nil {
 										return errors.Wrap(err, "criteria contains")
 									}
@@ -82,12 +87,20 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 	contents := make(map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 	for rootID, m := range pfm {
 		for sourceID, pf := range m {
-			qs := make([]criterionTypes.Query, 0, len(pf.indexes))
-			for _, idx := range pf.indexes {
-				qs = append(qs, criterionTypes.Query{CPE: &sr.CPE[idx]})
-			}
-
-			fcond, err := pf.condition.Accept(ecosystemTypes.EcosystemTypeCPE, qs)
+			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
+				return criterionTypes.Query{
+					Version: func() []vcTypes.Query {
+						qs := make([]vcTypes.Query, 0, len(pf.indexes))
+						for _, idx := range pf.indexes {
+							qs = append(qs, vcTypes.Query{
+								Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+								CPE:       &sr.CPE[idx],
+							})
+						}
+						return qs
+					}(),
+				}
+			}())
 			if err != nil {
 				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria accept")
 			}
@@ -100,7 +113,10 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				if contents[rootID] == nil {
 					contents[rootID] = make(map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 				}
-				fcond.Criteria = replaceIndexes(fcond.Criteria, pf.indexes)
+				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+				if err != nil {
+					return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "replace indexes")
+				}
 				contents[rootID][sourceID] = fcond
 			}
 		}
@@ -112,31 +128,44 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 	}, nil
 }
 
-func replaceIndexes(ac criteriaTypes.FilteredCriteria, indexes []int) criteriaTypes.FilteredCriteria {
-	replaced := criteriaTypes.FilteredCriteria{Operator: ac.Operator}
+func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {
+	replaced := criteriaTypes.FilteredCriteria{Operator: fca.Operator}
 
-	for _, ca := range ac.Criterias {
-		rca := replaceIndexes(ca, indexes)
+	for _, ca := range fca.Criterias {
+		rca, err := replaceIndexes(ca, indexes)
+		if err != nil {
+			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "replace indexes")
+		}
 		if len(rca.Criterias) == 0 && len(rca.Criterions) == 0 {
 			continue
 		}
 		replaced.Criterias = append(replaced.Criterias, rca)
 	}
 
-	var cns []criteriaTypes.FilteredCriterion
-	for _, cn := range ac.Criterions {
-		if len(cn.Accepts) == 0 {
+	var cns []criterionTypes.FilteredCriterion
+	for _, cn := range fca.Criterions {
+		isAffected, err := cn.Affected()
+		if err != nil {
+			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "criterion affected")
+		}
+		if !isAffected {
 			continue
 		}
 
-		is := make([]int, 0, len(cn.Accepts))
-		for _, a := range cn.Accepts {
-			is = append(is, indexes[a])
+		switch cn.Criterion.Type {
+		case criterionTypes.CriterionTypeVersion:
+			is := make([]int, 0, len(cn.Accepts.Version))
+			for _, a := range cn.Accepts.Version {
+				is = append(is, indexes[a])
+			}
+			cn.Accepts.Version = is
+			cns = append(cns, cn)
+		case criterionTypes.CriterionTypeNoneExist:
+		default:
+			return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist}, cn.Criterion.Type)
 		}
-		cn.Accepts = is
-		cns = append(cns, cn)
 	}
 	replaced.Criterions = cns
 
-	return replaced
+	return replaced, nil
 }

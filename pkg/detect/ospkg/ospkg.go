@@ -11,6 +11,8 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	necTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
+	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
@@ -25,62 +27,28 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
 	}
 
-	pkgnameFunc := func(pkgname, modularitylabel string) (string, error) {
-		if modularitylabel != "" {
-			lhs, _, _ := strings.Cut(modularitylabel, "/")
-			ss := strings.Split(lhs, ":")
-			if len(ss) < 2 {
-				return "", errors.Errorf("unexpected modularitylabel format. expected: %q, actual: %q", "NAME:STREAM(:VERSION:CONTEXT:ARCH/PROFILE)", modularitylabel)
-			}
-			return fmt.Sprintf("%s:%s::%s", ss[0], ss[1], pkgname), nil
-		}
-		return pkgname, nil
-	}
-
-	qpkgs := make([]criterionTypes.QueryPackage, 0, len(sr.OSPackages))
-	for _, p := range sr.OSPackages {
-		bn, err := pkgnameFunc(p.Name, p.ModularityLabel)
+	vcpkgs := make([]vcTypes.QueryPackage, 0, len(sr.OSPackages))
+	vcm := make(map[string][]int)
+	var necq necTypes.Query
+	for i, p := range sr.OSPackages {
+		converted, err := convertVCQueryPackage(p)
 		if err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, err
+			return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "convert version criterion package")
 		}
-		sn, err := pkgnameFunc(p.SrcName, p.ModularityLabel)
-		if err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, err
+		vcpkgs = append(vcpkgs, converted)
+
+		if !slices.Contains(vcm[converted.Name], i) {
+			vcm[converted.Name] = append(vcm[converted.Name], i)
+		}
+		if converted.SrcName != "" && converted.Name != converted.SrcName && !slices.Contains(vcm[converted.SrcName], i) {
+			vcm[converted.SrcName] = append(vcm[converted.SrcName], i)
 		}
 
-		qpkgs = append(qpkgs, criterionTypes.QueryPackage{
-			Name: bn,
-			Version: func() string {
-				if p.Version == "" {
-					return ""
-				}
-				if p.Release == "" {
-					return p.Version
-				}
-				return fmt.Sprintf("%s-%s", p.Version, p.Release)
-			}(),
-			SrcName: sn,
-			SrcVersion: func() string {
-				if p.SrcVersion == "" {
-					return ""
-				}
-				if p.SrcRelease == "" {
-					return p.SrcVersion
-				}
-				return fmt.Sprintf("%s-%s", p.SrcVersion, p.SrcRelease)
-			}(),
-			Arch:       p.Arch,
-			Repository: p.Repository,
-		})
-	}
-
-	qm := make(map[string][]int)
-	for i, p := range qpkgs {
-		if !slices.Contains(qm[p.Name], i) {
-			qm[p.Name] = append(qm[p.Name], i)
+		if slices.Contains(necq.Binaries, converted.Name) {
+			necq.Binaries = append(necq.Binaries, converted.Name)
 		}
-		if p.SrcName != "" && p.Name != p.SrcName && !slices.Contains(qm[p.SrcName], i) {
-			qm[p.SrcName] = append(qm[p.SrcName], i)
+		if converted.SrcName != "" && slices.Contains(necq.Sources, converted.SrcName) {
+			necq.Sources = append(necq.Sources, converted.SrcName)
 		}
 	}
 
@@ -89,7 +57,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 		indexes   []int
 	}
 	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
-	for name, indexes := range qm {
+	for name, indexes := range vcm {
 		if err := func() error {
 			resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystem), name)
 			for {
@@ -102,7 +70,13 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 						for sourceID, conds := range m {
 							for _, cond := range conds {
 								for _, idx := range indexes {
-									isContained, err := cond.Contains(ecosystem, criterionTypes.Query{Package: &qpkgs[idx]})
+									isContained, err := cond.Contains(criterionTypes.Query{
+										Version: []vcTypes.Query{{
+											Ecosystem: ecosystem,
+											Package:   &vcpkgs[idx],
+										}},
+										NoneExist: &necq,
+									})
 									if err != nil {
 										return errors.Wrap(err, "condition contains")
 									}
@@ -136,12 +110,21 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 	contents := make(map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 	for rootID, m := range pfm {
 		for sourceID, pf := range m {
-			qs := make([]criterionTypes.Query, 0, len(pf.indexes))
-			for _, idx := range pf.indexes {
-				qs = append(qs, criterionTypes.Query{Package: &qpkgs[idx]})
-			}
-
-			fcond, err := pf.condition.Accept(ecosystem, qs)
+			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
+				return criterionTypes.Query{
+					Version: func() []vcTypes.Query {
+						qs := make([]vcTypes.Query, 0, len(pf.indexes))
+						for _, idx := range pf.indexes {
+							qs = append(qs, vcTypes.Query{
+								Ecosystem: ecosystem,
+								Package:   &vcpkgs[idx],
+							})
+						}
+						return qs
+					}(),
+					NoneExist: &necq,
+				}
+			}())
 			if err != nil {
 				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria accept")
 			}
@@ -154,7 +137,10 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				if contents[rootID] == nil {
 					contents[rootID] = make(map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
 				}
-				fcond.Criteria = replaceIndexes(fcond.Criteria, pf.indexes)
+				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+				if err != nil {
+					return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "replace indexes")
+				}
 				contents[rootID][sourceID] = fcond
 			}
 		}
@@ -166,31 +152,106 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 	}, nil
 }
 
-func replaceIndexes(ac criteriaTypes.FilteredCriteria, indexes []int) criteriaTypes.FilteredCriteria {
-	replaced := criteriaTypes.FilteredCriteria{Operator: ac.Operator}
+func convertVCQueryPackage(p scanTypes.OSPackage) (vcTypes.QueryPackage, error) {
+	pnfn := func(pkgname, modularitylabel string) (string, error) {
+		if pkgname == "" {
+			return "", errors.New("name is empty")
+		}
+		if modularitylabel != "" {
+			lhs, _, _ := strings.Cut(modularitylabel, "/")
+			ss := strings.Split(lhs, ":")
+			if len(ss) < 2 {
+				return "", errors.Errorf("unexpected modularitylabel format. expected: %q, actual: %q", "NAME:STREAM(:VERSION:CONTEXT:ARCH/PROFILE)", modularitylabel)
+			}
+			return fmt.Sprintf("%s:%s::%s", ss[0], ss[1], pkgname), nil
+		}
+		return pkgname, nil
+	}
 
-	for _, ca := range ac.Criterias {
-		rca := replaceIndexes(ca, indexes)
+	pvfn := func(epoch int, version, release string) (string, error) {
+		if version == "" {
+			return "", errors.New("version is empty")
+		}
+		if release == "" {
+			return fmt.Sprintf("%d:%s", epoch, version), nil
+		}
+		return fmt.Sprintf("%d:%s-%s", epoch, version, release), nil
+	}
+
+	bn, err := pnfn(p.Name, p.ModularityLabel)
+	if err != nil {
+		return vcTypes.QueryPackage{}, errors.Wrap(err, "form binary package name")
+	}
+
+	bv, err := pvfn(p.Epoch, p.Version, p.Release)
+	if err != nil {
+		return vcTypes.QueryPackage{}, errors.Wrap(err, "form binary package version")
+	}
+
+	var (
+		sn string
+		sv string
+	)
+	if p.SrcName != "" {
+		sn, err = pnfn(p.SrcName, p.ModularityLabel)
+		if err != nil {
+			return vcTypes.QueryPackage{}, errors.Wrap(err, "form source package name")
+		}
+
+		sv, err = pvfn(p.SrcEpoch, p.SrcVersion, p.SrcRelease)
+		if err != nil {
+			return vcTypes.QueryPackage{}, errors.Wrap(err, "form source package version")
+		}
+	}
+
+	return vcTypes.QueryPackage{
+		Name:       bn,
+		Version:    bv,
+		SrcName:    sn,
+		SrcVersion: sv,
+		Arch:       p.Arch,
+		Repository: p.Repository,
+	}, nil
+}
+
+func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {
+	replaced := criteriaTypes.FilteredCriteria{Operator: fca.Operator}
+
+	for _, ca := range fca.Criterias {
+		rca, err := replaceIndexes(ca, indexes)
+		if err != nil {
+			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "replace indexes")
+		}
 		if len(rca.Criterias) == 0 && len(rca.Criterions) == 0 {
 			continue
 		}
 		replaced.Criterias = append(replaced.Criterias, rca)
 	}
 
-	var cns []criteriaTypes.FilteredCriterion
-	for _, cn := range ac.Criterions {
-		if len(cn.Accepts) == 0 {
+	var cns []criterionTypes.FilteredCriterion
+	for _, cn := range fca.Criterions {
+		isAffected, err := cn.Affected()
+		if err != nil {
+			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "criterion affected")
+		}
+		if !isAffected {
 			continue
 		}
 
-		is := make([]int, 0, len(cn.Accepts))
-		for _, a := range cn.Accepts {
-			is = append(is, indexes[a])
+		switch cn.Criterion.Type {
+		case criterionTypes.CriterionTypeVersion:
+			is := make([]int, 0, len(cn.Accepts.Version))
+			for _, a := range cn.Accepts.Version {
+				is = append(is, indexes[a])
+			}
+			cn.Accepts.Version = is
+			cns = append(cns, cn)
+		case criterionTypes.CriterionTypeNoneExist:
+		default:
+			return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist}, cn.Criterion.Type)
 		}
-		cn.Accepts = is
-		cns = append(cns, cn)
 	}
 	replaced.Criterions = cns
 
-	return replaced
+	return replaced, nil
 }

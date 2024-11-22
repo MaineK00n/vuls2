@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 )
 
 func Marshal(v any) ([]byte, error) {
@@ -38,20 +39,24 @@ func WalkCriteria(ca criteriaTypes.Criteria) []string {
 	}
 
 	for _, cn := range ca.Criterions {
-		if !cn.Vulnerable {
-			continue
-		}
-
-		if cn.Package.Name != "" {
-			pkgs = append(pkgs, cn.Package.Name)
-		}
-		if cn.Package.CPE != "" {
-			wfn, err := naming.UnbindFS(cn.Package.CPE)
-			if err != nil {
-				slog.Warn("failed to unbind a formatted string to WFN", "input", cn.Package.CPE)
-				continue
+		switch cn.Type {
+		case criterionTypes.CriterionTypeVersion:
+			if !cn.Version.Vulnerable {
+				break
 			}
-			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+			if cn.Version.Package.Name != "" {
+				pkgs = append(pkgs, cn.Version.Package.Name)
+			}
+			if cn.Version.Package.CPE != "" {
+				wfn, err := naming.UnbindFS(cn.Version.Package.CPE)
+				if err != nil {
+					slog.Warn("failed to unbind a formatted string to WFN", "input", cn.Version.Package.CPE)
+					break
+				}
+				pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+			}
+		case criterionTypes.CriterionTypeNoneExist:
+		default:
 		}
 	}
 
