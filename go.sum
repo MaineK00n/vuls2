@@ -1,6 +1,12 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/MaineK00n/vuls-data-update v0.0.0-20241122063227-cd20b3e8ac32 h1:QJCOD0ICm2pKXNxNj3pAWDYd7zqhMHOPxm5f84wWcmc=
-github.com/MaineK00n/vuls-data-update v0.0.0-20241122063227-cd20b3e8ac32/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241122070006-a50d77fbc898 h1:/8iWyizoFbK7EyV+EdfiU8I9JtKKVICvvje3GNWpiWE=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241122070006-a50d77fbc898/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241122075829-d0706392e4f6 h1:f81i0pgBZ5yoB1NL9TlntwH0NHT26Azvc3qnRkvH8gs=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241122075829-d0706392e4f6/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241125175002-714262f3bd05 h1:we6mh9+CzBkQE/a/052HE3KVfVUXYHFFvLzHTejBeoQ=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241125175002-714262f3bd05/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241125180514-2c47c8550cbc h1:6/Q9uB/7Ypm2J+sMHMGhXhp7lqnwCZNADADlrXs0myY=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241125180514-2c47c8550cbc/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/aquasecurity/go-gem-version v0.0.0-20201115065557-8eed6fe000ce h1:QgBRgJvtEOBtUXilDb1MLi1p1MWoyFDXAu5DEUl5nwM=
