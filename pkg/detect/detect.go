@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
-	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
@@ -188,28 +187,12 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
 		}
-
-		for rootID, mm := range m.Contents {
+		for rootID, d := range m {
 			base, ok := detected[rootID]
 			if !ok {
-				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
-				if err != nil {
-					return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
-				}
-				base = detectTypes.VulnerabilityData{
-					ID:              rootID,
-					Advisories:      d.Advisories,
-					Vulnerabilities: d.Vulnerabilities,
-				}
+				base = detectTypes.VulnerabilityData{ID: rootID}
 			}
-
-			for sourceID, fcond := range mm {
-				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
-					Ecosystem: m.Ecosystem,
-					Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
-				})
-			}
-
+			base.Detections = append(base.Detections, d)
 			detected[rootID] = base
 		}
 	}
@@ -219,30 +202,24 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
 		}
-
-		for rootID, mm := range m.Contents {
+		for rootID, d := range m {
 			base, ok := detected[rootID]
 			if !ok {
-				d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
-				if err != nil {
-					return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
-				}
-				base = detectTypes.VulnerabilityData{
-					ID:              rootID,
-					Advisories:      d.Advisories,
-					Vulnerabilities: d.Vulnerabilities,
-				}
+				base = detectTypes.VulnerabilityData{ID: rootID}
 			}
-
-			for sourceID, fcond := range mm {
-				base.Detections = append(base.Detections, detectTypes.VulnerabilityDataDetection{
-					Ecosystem: m.Ecosystem,
-					Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition{rootID: {sourceID: fcond}},
-				})
-			}
-
+			base.Detections = append(base.Detections, d)
 			detected[rootID] = base
 		}
+	}
+
+	for rootID, base := range detected {
+		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
+		if err != nil {
+			return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
+		}
+		base.Advisories = d.Advisories
+		base.Vulnerabilities = d.Vulnerabilities
+		detected[rootID] = base
 	}
 
 	var sourceIDs []sourceTypes.SourceID
@@ -262,11 +239,9 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 			}
 		}
 		for _, d := range data.Detections {
-			for _, m := range d.Contents {
-				for sourceID := range m {
-					if !slices.Contains(sourceIDs, sourceID) {
-						sourceIDs = append(sourceIDs, sourceID)
-					}
+			for sourceID := range d.Contents {
+				if !slices.Contains(sourceIDs, sourceID) {
+					sourceIDs = append(sourceIDs, sourceID)
 				}
 			}
 		}
