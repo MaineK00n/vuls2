@@ -27,7 +27,7 @@ type Kernel struct {
 
 type OSPackage struct {
 	Name            string `json:"name,omitempty"`
-	Epoch           int    `json:"epoch,omitempty"`
+	Epoch           *int   `json:"epoch,omitempty"`
 	Version         string `json:"version,omitempty"`
 	Release         string `json:"release,omitempty"`
 	NewVersion      string `json:"new_version,omitempty"`
@@ -36,7 +36,7 @@ type OSPackage struct {
 	Repository      string `json:"repository,omitempty"`
 	ModularityLabel string `json:"modularity_label,omitempty"`
 	SrcName         string `json:"src_name,omitempty"`
-	SrcEpoch        int    `json:"src_epoch,omitempty"`
+	SrcEpoch        *int   `json:"src_epoch,omitempty"`
 	SrcVersion      string `json:"src_version,omitempty"`
 	SrcRelease      string `json:"src_release,omitempty"`
 }
