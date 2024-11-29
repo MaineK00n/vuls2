@@ -168,14 +168,26 @@ func convertVCQueryPackage(p scanTypes.OSPackage) (vcTypes.QueryPackage, error) 
 		return pkgname, nil
 	}
 
-	pvfn := func(epoch int, version, release string) (string, error) {
+	pvfn := func(epoch *int, version, release string) (string, error) {
 		if version == "" {
 			return "", errors.New("version is empty")
 		}
-		if release == "" {
-			return fmt.Sprintf("%d:%s", epoch, version), nil
+
+		var sb strings.Builder
+		if epoch != nil {
+			if _, err := sb.WriteString(fmt.Sprintf("%d:", *epoch)); err != nil {
+				return "", errors.Wrap(err, "append epoch")
+			}
 		}
-		return fmt.Sprintf("%d:%s-%s", epoch, version, release), nil
+		if _, err := sb.WriteString(version); err != nil {
+			return "", errors.Wrap(err, "append version")
+		}
+		if release != "" {
+			if _, err := sb.WriteString(fmt.Sprintf("-%s", release)); err != nil {
+				return "", errors.Wrap(err, "append release")
+			}
+		}
+		return sb.String(), nil
 	}
 
 	bn, err := pnfn(p.Name, p.ModularityLabel)
