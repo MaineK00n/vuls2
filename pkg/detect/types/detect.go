@@ -31,6 +31,6 @@ type VulnerabilityData struct {
 }
 
 type VulnerabilityDataDetection struct {
-	Ecosystem ecosystemTypes.Ecosystem                                                       `json:"ecosystem,omitempty"`
-	Contents  map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition `json:"contents,omitempty"`
+	Ecosystem ecosystemTypes.Ecosystem                                    `json:"ecosystem,omitempty"`
+	Contents  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition `json:"contents,omitempty"`
 }

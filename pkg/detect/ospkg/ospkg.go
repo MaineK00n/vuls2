@@ -21,10 +21,10 @@ import (
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
-func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDetection, error) {
+func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
 	ecosystem, err := ecosystemTypes.GetEcosystem(sr.Family, sr.Release)
 	if err != nil {
-		return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
+		return nil, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
 	}
 
 	vcpkgs := make([]vcTypes.QueryPackage, 0, len(sr.OSPackages))
@@ -33,7 +33,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 	for i, p := range sr.OSPackages {
 		converted, err := convertVCQueryPackage(p)
 		if err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "convert version criterion package")
+			return nil, errors.Wrap(err, "convert version criterion package")
 		}
 		vcpkgs = append(vcpkgs, converted)
 
@@ -103,11 +103,11 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				}
 			}
 		}(); err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "detect pkg: %s %s", ecosystem, name)
+			return nil, errors.Wrapf(err, "detect pkg: %s %s", ecosystem, name)
 		}
 	}
 
-	contents := make(map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
 	for rootID, m := range pfm {
 		for sourceID, pf := range m {
 			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
@@ -126,30 +126,32 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				}
 			}())
 			if err != nil {
-				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria accept")
+				return nil, errors.Wrap(err, "criteria accept")
 			}
 
 			isAffected, err := fcond.Affected()
 			if err != nil {
-				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria affected")
+				return nil, errors.Wrap(err, "criteria affected")
 			}
 			if isAffected {
-				if contents[rootID] == nil {
-					contents[rootID] = make(map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+				d, ok := dm[rootID]
+				if !ok {
+					d = detectTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystem,
+						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+					}
 				}
 				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
 				if err != nil {
-					return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "replace indexes")
+					return nil, errors.Wrap(err, "replace indexes")
 				}
-				contents[rootID][sourceID] = fcond
+				d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+				dm[rootID] = d
 			}
 		}
 	}
 
-	return detectTypes.VulnerabilityDataDetection{
-		Ecosystem: ecosystem,
-		Contents:  contents,
-	}, nil
+	return dm, nil
 }
 
 func convertVCQueryPackage(p scanTypes.OSPackage) (vcTypes.QueryPackage, error) {

@@ -20,12 +20,12 @@ import (
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
-func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDetection, error) {
+func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
 	qm := make(map[string][]int)
 	for i, cpe := range sr.CPE {
 		wfn, err := naming.UnbindFS(cpe)
 		if err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "unbind %q to WFN", cpe)
+			return nil, errors.Wrapf(err, "unbind %q to WFN", cpe)
 		}
 		qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))] = append(qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))], i)
 	}
@@ -80,11 +80,11 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				}
 			}
 		}(); err != nil {
-			return detectTypes.VulnerabilityDataDetection{}, errors.Wrapf(err, "detect cpe: %s %s", ecosystemTypes.EcosystemTypeCPE, vp)
+			return nil, errors.Wrapf(err, "detect cpe: %s %s", ecosystemTypes.EcosystemTypeCPE, vp)
 		}
 	}
 
-	contents := make(map[dataTypes.RootID]map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
 	for rootID, m := range pfm {
 		for sourceID, pf := range m {
 			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
@@ -102,30 +102,32 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.VulnerabilityDataDe
 				}
 			}())
 			if err != nil {
-				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria accept")
+				return nil, errors.Wrap(err, "criteria accept")
 			}
 
 			isAffected, err := fcond.Affected()
 			if err != nil {
-				return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "criteria affected")
+				return nil, errors.Wrap(err, "criteria affected")
 			}
 			if isAffected {
-				if contents[rootID] == nil {
-					contents[rootID] = make(map[sourceTypes.SourceID]conditionTypes.FilteredCondition)
+				d, ok := dm[rootID]
+				if !ok {
+					d = detectTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+					}
 				}
 				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
 				if err != nil {
-					return detectTypes.VulnerabilityDataDetection{}, errors.Wrap(err, "replace indexes")
+					return nil, errors.Wrap(err, "replace indexes")
 				}
-				contents[rootID][sourceID] = fcond
+				d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+				dm[rootID] = d
 			}
 		}
 	}
 
-	return detectTypes.VulnerabilityDataDetection{
-		Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-		Contents:  contents,
-	}, nil
+	return dm, nil
 }
 
 func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {
