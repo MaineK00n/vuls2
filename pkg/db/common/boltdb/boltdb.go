@@ -277,7 +277,7 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 }
 
 func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
-	root := dbTypes.VulnerabilityData{ID: dataTypes.RootID(id)}
+	root := dbTypes.VulnerabilityData{ID: id}
 
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		switch searchType {
