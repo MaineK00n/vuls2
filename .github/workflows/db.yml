@@ -62,5 +62,5 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload vuls.db to GHCR
-        run: oras push ghcr.io/mainek00n/vuls2:latest ./vuls.db.zst:application/vnd.mainek00n.vuls.db.layer.v1+zstd
-        # run: oras push ghcr.io/${{ github.repository }}:latest ./vuls.db.zst:application/vnd.mainek00n.vuls.db.layer.v1+zstd
+        run: oras push ghcr.io/mainek00n/vuls2:latest ./vuls.db.zst:application/vnd.vulsio.vuls.db.layer.v1+zstd
+        # run: oras push ghcr.io/${{ github.repository }}:latest ./vuls.db.zst:application/vnd.vulsio.vuls.db.layer.v1+zstd

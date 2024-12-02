@@ -21,7 +21,8 @@ import (
 )
 
 type options struct {
-	dbpath string
+	dbpath     string
+	repository string
 
 	debug bool
 }
@@ -40,6 +41,16 @@ func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
 }
 
+type repositoryOption string
+
+func (o repositoryOption) apply(opts *options) {
+	opts.repository = string(o)
+}
+
+func WithRepository(repository string) Option {
+	return repositoryOption(repository)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -52,27 +63,28 @@ func WithDebug(debug bool) Option {
 
 func Fetch(opts ...Option) error {
 	options := &options{
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
+		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		repository: "ghcr.io/mainek00n/vuls2",
+		debug:      false,
 	}
 	for _, o := range opts {
 		o.apply(options)
 	}
 
-	slog.Info("Fetch vuls.db from ghcr.io/mainek00n/vuls2")
+	slog.Info("Fetch vuls.db", "repository", options.repository)
 
 	ctx := context.TODO()
 
 	ms := memory.New()
 
-	repo, err := remote.NewRepository("ghcr.io/mainek00n/vuls2")
+	repo, err := remote.NewRepository(options.repository)
 	if err != nil {
-		return errors.Wrap(err, "create client for ghcr.io/mainek00n/vuls2")
+		return errors.Wrapf(err, "create client for %s", options.repository)
 	}
 
 	manifestDescriptor, err := oras.Copy(ctx, repo, "latest", ms, "latest", oras.DefaultCopyOptions)
 	if err != nil {
-		return errors.Wrap(err, "copy from ghcr.io/mainek00n/vuls2")
+		return errors.Wrapf(err, "copy from %s", options.repository)
 	}
 
 	r, err := ms.Fetch(ctx, manifestDescriptor)
@@ -88,7 +100,7 @@ func Fetch(opts ...Option) error {
 
 	l := func() *ocispec.Descriptor {
 		for _, l := range manifest.Layers {
-			if l.MediaType == "application/vnd.mainek00n.vuls.db.layer.v1+zstd" {
+			if l.MediaType == "application/vnd.vulsio.vuls.db.layer.v1+zstd" {
 				return &l
 			}
 		}
