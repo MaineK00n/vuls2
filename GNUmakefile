@@ -68,7 +68,7 @@ db-build:
 	# make db-add REPO=vuls-data-extracted-redhat-ovalv1 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-ovalv2 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-vex DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-rocky-errata DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-rocky-errata DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-rocky-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-suse-oval DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-suse-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
