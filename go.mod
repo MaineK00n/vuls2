@@ -11,7 +11,7 @@ require (
 	github.com/knqyf263/go-cpe v0.0.0-20230627041855-cb0794d06872
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/redis/rueidis v1.0.49
+	github.com/redis/rueidis v1.0.51
 	github.com/schollz/progressbar/v3 v3.17.1
 	github.com/spf13/cobra v1.8.1
 	go.etcd.io/bbolt v1.3.11
