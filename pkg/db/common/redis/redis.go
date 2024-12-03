@@ -264,7 +264,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 
 	switch searchType {
 	case dbTypes.SearchDataRoot:
-		root := dbTypes.VulnerabilityData{ID: dataTypes.RootID(id)}
+		root := dbTypes.VulnerabilityData{ID: id}
 
 		r, err := c.getRoot(ctx, dataTypes.RootID(id))
 		if err != nil {
@@ -318,7 +318,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 
 		return &root, nil
 	case dbTypes.SearchDataAdvisory:
-		root := dbTypes.VulnerabilityData{ID: dataTypes.RootID(id)}
+		root := dbTypes.VulnerabilityData{ID: id}
 
 		m, err := c.getAdvisory(ctx, advisoryContentTypes.AdvisoryID(id))
 		if err != nil {
@@ -404,7 +404,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 
 		return &root, nil
 	case dbTypes.SearchDataVulnerability:
-		root := dbTypes.VulnerabilityData{ID: dataTypes.RootID(id)}
+		root := dbTypes.VulnerabilityData{ID: id}
 
 		m, err := c.getVulnerability(ctx, vulnerabilityContentTypes.VulnerabilityID(id))
 		if err != nil {

@@ -40,7 +40,7 @@ type Metadata struct {
 }
 
 type VulnerabilityData struct {
-	ID              dataTypes.RootID                 `json:"id,omitempty"`
+	ID              string                           `json:"id,omitempty"`
 	Advisories      []VulnerabilityDataAdvisory      `json:"advisories,omitempty"`
 	Vulnerabilities []VulnerabilityDataVulnerability `json:"vulnerabilities,omitempty"`
 	Detections      []VulnerabilityDataDetection     `json:"detections,omitempty"`
