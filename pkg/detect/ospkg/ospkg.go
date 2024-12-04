@@ -12,6 +12,8 @@ import (
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 	necTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
+	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
+	necSourcePackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/source"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -22,33 +24,47 @@ import (
 )
 
 func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	ecosystem, err := ecosystemTypes.GetEcosystem(sr.Family, sr.Release)
+	ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
 	}
 
-	vcpkgs := make([]vcTypes.QueryPackage, 0, len(sr.OSPackages))
+	vcpkgs := make([]vcTypes.Query, 0, len(sr.OSPackages))
 	vcm := make(map[string][]int)
 	var necq necTypes.Query
 	for i, p := range sr.OSPackages {
-		converted, err := convertVCQueryPackage(p)
+		converted, err := convertVCQueryPackage(sr.Family, p)
 		if err != nil {
 			return nil, errors.Wrap(err, "convert version criterion package")
 		}
 		vcpkgs = append(vcpkgs, converted)
 
-		if !slices.Contains(vcm[converted.Name], i) {
-			vcm[converted.Name] = append(vcm[converted.Name], i)
+		if converted.Binary != nil && !slices.Contains(vcm[converted.Binary.Name], i) {
+			vcm[converted.Binary.Name] = append(vcm[converted.Binary.Name], i)
 		}
-		if converted.SrcName != "" && converted.Name != converted.SrcName && !slices.Contains(vcm[converted.SrcName], i) {
-			vcm[converted.SrcName] = append(vcm[converted.SrcName], i)
+		if converted.Source != nil && !slices.Contains(vcm[converted.Source.Name], i) {
+			vcm[converted.Source.Name] = append(vcm[converted.Source.Name], i)
 		}
 
-		if slices.Contains(necq.Binaries, converted.Name) {
-			necq.Binaries = append(necq.Binaries, converted.Name)
+		if converted.Binary != nil && slices.Contains(necq.Binaries, necBinaryPackageTypes.Query{
+			Name:       converted.Binary.Name,
+			Arch:       converted.Binary.Arch,
+			Repository: converted.Binary.Repository,
+		}) {
+			necq.Binaries = append(necq.Binaries, necBinaryPackageTypes.Query{
+				Name:       converted.Binary.Name,
+				Arch:       converted.Binary.Arch,
+				Repository: converted.Binary.Repository,
+			})
 		}
-		if converted.SrcName != "" && slices.Contains(necq.Sources, converted.SrcName) {
-			necq.Sources = append(necq.Sources, converted.SrcName)
+		if converted.Source != nil && slices.Contains(necq.Sources, necSourcePackageTypes.Query{
+			Name:       converted.Source.Name,
+			Repository: converted.Source.Repository,
+		}) {
+			necq.Sources = append(necq.Sources, necSourcePackageTypes.Query{
+				Name:       converted.Source.Name,
+				Repository: converted.Source.Repository,
+			})
 		}
 	}
 
@@ -71,10 +87,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 							for _, cond := range conds {
 								for _, idx := range indexes {
 									isContained, err := cond.Contains(criterionTypes.Query{
-										Version: []vcTypes.Query{{
-											Family:  sr.Family,
-											Package: &vcpkgs[idx],
-										}},
+										Version:   []vcTypes.Query{vcpkgs[idx]},
 										NoneExist: &necq,
 									})
 									if err != nil {
@@ -115,10 +128,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 					Version: func() []vcTypes.Query {
 						qs := make([]vcTypes.Query, 0, len(pf.indexes))
 						for _, idx := range pf.indexes {
-							qs = append(qs, vcTypes.Query{
-								Family:  sr.Family,
-								Package: &vcpkgs[idx],
-							})
+							qs = append(qs, vcpkgs[idx])
 						}
 						return qs
 					}(),
@@ -154,7 +164,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	return dm, nil
 }
 
-func convertVCQueryPackage(p scanTypes.OSPackage) (vcTypes.QueryPackage, error) {
+func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackage) (vcTypes.Query, error) {
 	pnfn := func(pkgname, modularitylabel string) (string, error) {
 		if pkgname == "" {
 			return "", errors.New("name is empty")
@@ -194,37 +204,49 @@ func convertVCQueryPackage(p scanTypes.OSPackage) (vcTypes.QueryPackage, error) 
 
 	bn, err := pnfn(p.Name, p.ModularityLabel)
 	if err != nil {
-		return vcTypes.QueryPackage{}, errors.Wrap(err, "form binary package name")
+		return vcTypes.Query{}, errors.Wrap(err, "form binary package name")
 	}
 
 	bv, err := pvfn(p.Epoch, p.Version, p.Release)
 	if err != nil {
-		return vcTypes.QueryPackage{}, errors.Wrap(err, "form binary package version")
+		return vcTypes.Query{}, errors.Wrap(err, "form binary package version")
 	}
 
 	var (
 		sn string
 		sv string
 	)
-	if p.SrcName != "" {
+	if p.SrcName != "" && p.SrcVersion != "" {
 		sn, err = pnfn(p.SrcName, p.ModularityLabel)
 		if err != nil {
-			return vcTypes.QueryPackage{}, errors.Wrap(err, "form source package name")
+			return vcTypes.Query{}, errors.Wrap(err, "form source package name")
 		}
 
 		sv, err = pvfn(p.SrcEpoch, p.SrcVersion, p.SrcRelease)
 		if err != nil {
-			return vcTypes.QueryPackage{}, errors.Wrap(err, "form source package version")
+			return vcTypes.Query{}, errors.Wrap(err, "form source package version")
 		}
 	}
 
-	return vcTypes.QueryPackage{
-		Name:       bn,
-		Version:    bv,
-		SrcName:    sn,
-		SrcVersion: sv,
-		Arch:       p.Arch,
-		Repository: p.Repository,
+	return vcTypes.Query{
+		Binary: &vcTypes.QueryBinary{
+			Family:     family,
+			Name:       bn,
+			Version:    bv,
+			Arch:       p.Arch,
+			Repository: p.Repository,
+		},
+		Source: func() *vcTypes.QuerySource {
+			if sn != "" && sv != "" {
+				return &vcTypes.QuerySource{
+					Family:     family,
+					Name:       sn,
+					Version:    sv,
+					Repository: p.Repository,
+				}
+			}
+			return nil
+		}(),
 	}, nil
 }
 

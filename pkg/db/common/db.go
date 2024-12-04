@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SchemaVersion = 0
+	SchemaVersion = 1
 )
 
 type DB interface {
@@ -35,9 +35,8 @@ type DB interface {
 }
 
 type Config struct {
-	Type string
-	Path string
-
+	Type  string
+	Path  string
 	Debug bool
 }
 

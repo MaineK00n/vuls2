@@ -677,7 +677,11 @@ func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) erro
 
 		var pkgs []string
 		for _, cond := range d.Conditions {
-			pkgs = append(pkgs, util.WalkCriteria(cond.Criteria)...)
+			ps, err := util.WalkCriteria(cond.Criteria)
+			if err != nil {
+				return errors.Wrap(err, "walk criteria")
+			}
+			pkgs = append(pkgs, ps...)
 		}
 		slices.Sort(pkgs)
 

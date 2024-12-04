@@ -160,12 +160,11 @@ func Fetch(opts ...Option) error {
 		return errors.Wrapf(err, "write to %s", options.dbpath)
 	}
 
-	c := db.Config{
+	dbc, err := (&db.Config{
 		Type:  "boltdb",
 		Path:  options.dbpath,
 		Debug: options.debug,
-	}
-	dbc, err := c.New()
+	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
