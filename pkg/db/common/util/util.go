@@ -41,9 +41,6 @@ func WalkCriteria(ca criteriaTypes.Criteria) []string {
 	for _, cn := range ca.Criterions {
 		switch cn.Type {
 		case criterionTypes.CriterionTypeVersion:
-			if !cn.Version.Vulnerable {
-				break
-			}
 			if cn.Version.Package.Name != "" {
 				pkgs = append(pkgs, cn.Version.Package.Name)
 			}
@@ -56,6 +53,7 @@ func WalkCriteria(ca criteriaTypes.Criteria) []string {
 				pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
 			}
 		case criterionTypes.CriterionTypeNoneExist:
+			pkgs = append(pkgs, cn.NoneExist.Name)
 		default:
 		}
 	}
