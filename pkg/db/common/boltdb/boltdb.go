@@ -622,7 +622,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 				return err
 			}
 
-			if d.IsDir() {
+			if d.IsDir() || filepath.Ext(path) != ".json" {
 				return nil
 			}
 
