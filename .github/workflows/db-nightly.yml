@@ -1,7 +1,9 @@
-name: DB
+name: DB(Nightly)
 on:
-  schedule:
-    - cron: "0 */6 * * *"
+  workflow_run:
+    workflows: [DB]
+    types:
+      - completed
   workflow_dispatch:
 jobs:
   build:
@@ -11,37 +13,33 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 32768 
+          root-reserve-mb: 32768
           remove-dotnet: "true"
           remove-android: "true"
           remove-haskell: "true"
           remove-codeql: "true"
           remove-docker-images: "true"
-    
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: nightly
 
       - name: Set up Go 1.x
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      
+
       - name: Install Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y jq zstd
+          sudo apt-get update && sudo apt-get install -y zstd
           go install go.etcd.io/bbolt/cmd/bbolt@latest
 
       - name: vuls install
         run: make install
 
       - name: make db-build
-        run: make db-build BRANCH=main DBPATH=./vuls.db
-
-      - name: save vuls.db schema_version
-        id: save_scheme_version
-        run: echo "schema_version=$(bbolt get ./vuls.db "metadata" "db" | jq .schema_version)" >> $GITHUB_OUTPUT
+        run: make db-build BRANCH=nightly DBPATH=./vuls.db
 
       - name: compact vuls.db
         run: |
@@ -68,5 +66,4 @@ jobs:
 
       - name: Upload vuls.db to GHCR
         run: |
-          oras push ghcr.io/mainek00n/vuls2:${{steps.save_scheme_version.outputs.schema_version}} ./vuls.db.zst:application/vnd.vulsio.vuls.db.layer.v1+zstd
-          oras push ghcr.io/mainek00n/vuls2:latest ./vuls.db.zst:application/vnd.vulsio.vuls.db.layer.v1+zstd
+          oras push ghcr.io/mainek00n/vuls2:nightly ./vuls.db.zst:application/vnd.vulsio.vuls.db.layer.v1+zstd

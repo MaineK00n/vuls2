@@ -41,106 +41,107 @@ vet:
 fmtcheck:
 	gofmt -s -d .
 
+BRANCH := main
 DBTYPE := boltdb
 DBPATH := ~/.cache/vuls/vuls.db
 
 .PHONY: db-build
 db-build:
 	vuls db init --dbtype ${DBTYPE} --dbpath ${DBPATH}
-	make db-add REPO=vuls-data-extracted-alma-errata DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-alma-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-alma-oval DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-alpine-secdb DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-alpine-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-amazon DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-arch DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-debian-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-debian-oval DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-debian-security-tracker-api DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-debian-security-tracker-salsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-freebsd DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-gentoo DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-netbsd DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-oracle DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-redhat-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-redhat-csaf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-redhat-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-redhat-ovalv1 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-redhat-ovalv2 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-redhat-ovalv2-rhel DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-redhat-vex DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-rocky-errata DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-rocky-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-suse-oval DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-suse-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-suse-csaf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-ubuntu-oval DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-ubuntu-cve-tracker DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-windows-bulletin DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-windows-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-windows-wsusscn2 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-alma-errata BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-alma-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-alma-oval BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-alpine-secdb BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-alpine-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-amazon BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-arch BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-debian-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-debian-oval BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-debian-security-tracker-api BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-debian-security-tracker-salsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-freebsd BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-gentoo BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-netbsd BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-oracle BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-cve BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-csaf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-cvrf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-redhat-ovalv1 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-ovalv2 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-redhat-ovalv2-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-vex BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-rocky-errata BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-rocky-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-suse-oval BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-suse-cvrf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-suse-csaf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-ubuntu-oval BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-ubuntu-cve-tracker BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-windows-bulletin BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-windows-cvrf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-windows-wsusscn2 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 
-	# make db-add REPO=vuls-data-extracted-cargo-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-cargo-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-composer-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-composer-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-composer-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-conan-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-erlang-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-erlang-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-golang-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-golang-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-golang-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-haskell-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-maven-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-maven-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-maven-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-npm-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-npm-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-npm-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nuget-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nuget-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nuget-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-pip-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-pip-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-pip-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-pub-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-pub-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-r-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-rubygems-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-rubygems-glsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-rubygems-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-swift-ghsa DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-swift-osv DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-cargo-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-cargo-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-composer-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-composer-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-composer-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-conan-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-erlang-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-erlang-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-golang-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-golang-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-golang-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-haskell-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-maven-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-maven-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-maven-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-npm-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-npm-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-npm-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nuget-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nuget-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nuget-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-pip-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-pip-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-pip-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-pub-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-pub-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-r-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-rubygems-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-rubygems-glsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-rubygems-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-swift-ghsa BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-swift-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 
-	# make db-add REPO=vuls-data-extracted-attack DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-capec DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-cwe DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-eol DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-epss DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-exploit-exploitdb DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-exploit-github DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-exploit-inthewild DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-exploit-trickest DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-jvn-feed-detail DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-jvn-feed-product DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-jvn-feed-rss DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-kev DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-mitre-cvrf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-mitre-v4 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-mitre-v5 DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-msf DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-nvd-api-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nvd-api-cpe  DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nvd-api-cpematch DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nvd-feed-cve DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nvd-feed-cpe  DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-nvd-feed-cpematch DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	# make db-add REPO=vuls-data-extracted-snort DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-attack BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-capec BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-cwe BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-eol BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-epss BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-exploit-exploitdb BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-exploit-github BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-exploit-inthewild BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-exploit-trickest BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-jvn-feed-detail BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-jvn-feed-product BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-jvn-feed-rss BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-kev BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-mitre-cvrf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-mitre-v4 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-mitre-v5 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-msf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-nvd-api-cve BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-api-cpe  BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-api-cpematch BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-feed-cve BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-feed-cpe  BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-nvd-feed-cpematch BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-snort BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 
 .PHONY: db-add
 db-add: 
-	git clone --depth 1 https://github.com/vulsio/${REPO}.git
+	git clone -b ${BRANCH} --depth 1 https://github.com/vulsio/${REPO}.git
 	find ${REPO} -name "*.json.*" | sed -r 's/(.*)\.json\.[0-9]+/\1.json/' | sort -u | \
 	while read -r base; do \
 		cat "$$base".* > "$$base" && rm -f "$$base".*; \
