@@ -50,8 +50,8 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 								for _, idx := range indexes {
 									isContained, err := cond.Criteria.Contains(criterionTypes.Query{
 										Version: []vcTypes.Query{{
-											Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-											CPE:       &sr.CPE[idx],
+											Family: ecosystemTypes.EcosystemTypeCPE,
+											CPE:    &sr.CPE[idx],
 										}},
 									})
 									if err != nil {
@@ -93,8 +93,8 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 						qs := make([]vcTypes.Query, 0, len(pf.indexes))
 						for _, idx := range pf.indexes {
 							qs = append(qs, vcTypes.Query{
-								Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-								CPE:       &sr.CPE[idx],
+								Family: ecosystemTypes.EcosystemTypeCPE,
+								CPE:    &sr.CPE[idx],
 							})
 						}
 						return qs
