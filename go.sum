@@ -1,6 +1,6 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/MaineK00n/vuls-data-update v0.0.0-20241208064319-c10fa421e7ba h1:2clBYiVzuMVQJbLbhG/CPSHCt2iHADcMNUFPIZfXiWY=
-github.com/MaineK00n/vuls-data-update v0.0.0-20241208064319-c10fa421e7ba/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241208090537-1636de60e613 h1:Vnnvrl8aYjq6Lymjj6bQIm+vHpGo1zPE7jZESke+zkg=
+github.com/MaineK00n/vuls-data-update v0.0.0-20241208090537-1636de60e613/go.mod h1:n5rQrltX0Fp2gKJj+nGE7V81ezSdRBxANuhmLtxkWo4=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/aquasecurity/go-gem-version v0.0.0-20201115065557-8eed6fe000ce h1:QgBRgJvtEOBtUXilDb1MLi1p1MWoyFDXAu5DEUl5nwM=
