@@ -34,7 +34,7 @@ const (
 )
 
 type Metadata struct {
-	SchemaVersion uint      `json:"schema_version,omitempty"`
+	SchemaVersion uint      `json:"schema_version"`
 	CreatedBy     string    `json:"created_by,omitempty"`
 	LastModified  time.Time `json:"last_modified,omitempty"`
 }
