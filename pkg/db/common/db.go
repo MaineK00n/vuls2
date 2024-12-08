@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SchemaVersion = 1
+	SchemaVersion = 0
 )
 
 type DB interface {
