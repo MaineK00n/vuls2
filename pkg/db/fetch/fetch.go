@@ -64,7 +64,7 @@ func WithDebug(debug bool) Option {
 func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		repository: "ghcr.io/mainek00n/vuls2",
+		repository: "ghcr.io/mainek00n/vuls2:latest",
 		debug:      false,
 	}
 	for _, o := range opts {
@@ -81,8 +81,11 @@ func Fetch(opts ...Option) error {
 	if err != nil {
 		return errors.Wrapf(err, "create client for %s", options.repository)
 	}
+	if repo.Reference.Reference == "" {
+		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>@<digest>", "<repository>:<tag>", "<repository>:<tag>@<digest>"}, options.repository)
+	}
 
-	manifestDescriptor, err := oras.Copy(ctx, repo, "latest", ms, "latest", oras.DefaultCopyOptions)
+	manifestDescriptor, err := oras.Copy(ctx, repo, repo.Reference.Reference, ms, repo.Reference.Reference, oras.DefaultCopyOptions)
 	if err != nil {
 		return errors.Wrapf(err, "copy from %s", options.repository)
 	}
