@@ -6,7 +6,7 @@ ifeq ($(shell git rev-parse --abbrev-ref HEAD), nightly)
 	VERSION := nightly
 endif
 REVISION := $(shell git rev-parse --short HEAD)
-LDFLAGS := -ldflags "-s -w -X=github.com/MaineK00n/vuls2/pkg/cmd/version.Version=$(VERSION) -X=github.com/MaineK00n/vuls2/pkg/cmd/version.Revision=$(REVISION)"
+LDFLAGS := -ldflags "-s -w -X=github.com/MaineK00n/vuls2/pkg/version.Version=$(VERSION) -X=github.com/MaineK00n/vuls2/pkg/version.Revision=$(REVISION)"
 
 GOPATH := $(shell go env GOPATH)
 GOBIN := $(GOPATH)/bin
