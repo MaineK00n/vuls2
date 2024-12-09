@@ -108,8 +108,8 @@ func Detect(targets []string, opts ...Option) error {
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
-	if meta.SchemaVersion < db.SchemaVersion {
-		return errors.Errorf("schema version is old. expected: %q, actual: %q", db.SchemaVersion, meta.SchemaVersion)
+	if meta.SchemaVersion != db.SchemaVersion {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
 	if len(targets) == 0 {

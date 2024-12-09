@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -17,14 +18,15 @@ import (
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 
+	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
 type options struct {
 	dbpath     string
 	repository string
-
-	debug bool
+	noProgress bool
+	debug      bool
 }
 
 type Option interface {
@@ -61,11 +63,22 @@ func WithDebug(debug bool) Option {
 	return debugOption(debug)
 }
 
+type noProgressOption bool
+
+func (o noProgressOption) apply(opts *options) {
+	opts.noProgress = bool(o)
+}
+
+func WithNoProgress(noProgress bool) Option {
+	return noProgressOption(noProgress)
+}
+
 func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		repository: "ghcr.io/mainek00n/vuls2:latest",
 		debug:      false,
+		noProgress: false,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -135,8 +148,46 @@ func Fetch(opts ...Option) error {
 	}
 	defer f.Close()
 
-	if _, err := d.WriteTo(io.MultiWriter(f, progressbar.DefaultBytes(-1, "downloading"))); err != nil {
+	pb := func() *progressbar.ProgressBar {
+		if options.noProgress {
+			return progressbar.DefaultBytesSilent(-1)
+		}
+		return progressbar.DefaultBytes(-1, "downloading")
+	}()
+	defer pb.Close()
+
+	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
 		return errors.Wrapf(err, "write to %s", options.dbpath)
+	}
+
+	c := db.Config{
+		Type:  "boltdb",
+		Path:  options.dbpath,
+		Debug: options.debug,
+	}
+	dbc, err := c.New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+	if err := dbc.Open(); err != nil {
+		return errors.Wrap(err, "db open")
+	}
+	defer dbc.Close()
+
+	meta, err := dbc.GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if meta.SchemaVersion != db.SchemaVersion {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
+	}
+
+	meta.Downloaded = func() *time.Time {
+		t := time.Now()
+		return &t
+	}()
+	if err := dbc.PutMetadata(*meta); err != nil {
+		return errors.Wrap(err, "put metadata")
 	}
 
 	return nil

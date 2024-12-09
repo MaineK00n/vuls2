@@ -8,7 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/db/common"
+	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
@@ -64,7 +64,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	db, err := (&common.Config{
+	dbc, err := (&db.Config{
 		Type:  options.dbtype,
 		Path:  options.dbpath,
 		Debug: options.debug,
@@ -72,18 +72,18 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
-	if err := db.Open(); err != nil {
+	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer db.Close()
+	defer dbc.Close()
 
 	slog.Info("Get Metadata")
-	meta, err := db.GetMetadata()
+	meta, err := dbc.GetMetadata()
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
-	if meta.SchemaVersion < common.SchemaVersion {
-		return errors.Errorf("schema version is old. expected: %q, actual: %q", common.SchemaVersion, meta.SchemaVersion)
+	if meta.SchemaVersion != db.SchemaVersion {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
 	e := json.NewEncoder(os.Stdout)
@@ -92,7 +92,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	switch searchType {
 	case "detection-pkg":
 		slog.Info("Get Vulnerability Detections", "ecosystem", queries[0], "key", queries[1])
-		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1])
+		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -110,7 +110,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-root":
 		slog.Info("Get Vulnerability Detections", "root id", queries[0])
-		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0])
+		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -128,7 +128,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-advisory":
 		slog.Info("Get Vulnerability Detections", "advisory id", queries[0])
-		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0])
+		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -146,7 +146,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-vulnerability":
 		slog.Info("Get Vulnerability Detections", "vulnerability id", queries[0])
-		resCh, errCh := db.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0])
+		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -164,7 +164,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "data-root":
 		slog.Info("Get Vulnerability Data", "root id", queries[0])
-		d, err := db.GetVulnerabilityData(dbTypes.SearchDataRoot, queries[0])
+		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, queries[0])
 		if err != nil {
 			return errors.Wrap(err, "get root data")
 		}
@@ -176,7 +176,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		return nil
 	case "data-advisory":
 		slog.Info("Get Vulnerability Data", "advisory id", queries[0])
-		d, err := db.GetVulnerabilityData(dbTypes.SearchDataAdvisory, queries[0])
+		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataAdvisory, queries[0])
 		if err != nil {
 			return errors.Wrap(err, "get advisory data")
 		}
@@ -188,7 +188,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		return nil
 	case "data-vulnerability":
 		slog.Info("Get Vulnerability Data", "vulnerability id", queries[0])
-		d, err := db.GetVulnerabilityData(dbTypes.SearchDataVulnerability, queries[0])
+		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataVulnerability, queries[0])
 		if err != nil {
 			return errors.Wrap(err, "get vulnerability data")
 		}
