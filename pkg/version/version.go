@@ -8,5 +8,5 @@ var (
 )
 
 func String() string {
-	return fmt.Sprintf("vuls %s %s\n", Version, Revision)
+	return fmt.Sprintf("vuls %s %s", Version, Revision)
 }
