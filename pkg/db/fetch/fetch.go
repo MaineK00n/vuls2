@@ -155,7 +155,7 @@ func Fetch(opts ...Option) error {
 		}
 		return progressbar.DefaultBytes(-1, "downloading")
 	}()
-	defer pb.Finish()
+	defer pb.Close()
 
 	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
 		return errors.Wrapf(err, "write to %s", options.dbpath)
