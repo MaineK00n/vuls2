@@ -92,7 +92,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	switch searchType {
 	case "detection-pkg":
 		slog.Info("Get Vulnerability Detections", "ecosystem", queries[0], "key", queries[1])
-		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1])
+		done := make(chan struct{})
+		defer close(done)
+		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, queries[0], queries[1])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -110,7 +112,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-root":
 		slog.Info("Get Vulnerability Detections", "root id", queries[0])
-		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0])
+		done := make(chan struct{})
+		defer close(done)
+		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionRoot, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -128,7 +132,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-advisory":
 		slog.Info("Get Vulnerability Detections", "advisory id", queries[0])
-		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0])
+		done := make(chan struct{})
+		defer close(done)
+		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionAdvisory, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:
@@ -146,7 +152,9 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		}
 	case "detection-vulnerability":
 		slog.Info("Get Vulnerability Detections", "vulnerability id", queries[0])
-		resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0])
+		done := make(chan struct{})
+		defer close(done)
+		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionVulnerability, queries[0])
 		for {
 			select {
 			case item, ok := <-resCh:

@@ -107,7 +107,7 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	})
 }
 
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error) {
+func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType dbTypes.SearchDetectionType, queries ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error) {
 	resCh := make(chan dbTypes.VulnerabilityDataDetection, 1)
 	errCh := make(chan error, 1)
 
@@ -153,9 +153,13 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", queries[0], rootID))
 					}
 
-					resCh <- dbTypes.VulnerabilityDataDetection{
+					select {
+					case <-done:
+						return nil
+					case resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
 						Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: m},
+					}:
 					}
 				}
 
@@ -169,7 +173,12 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 					return errors.WithStack(err)
 				}
 				for _, d := range ds {
-					resCh <- d
+					select {
+					case <-done:
+						return nil
+					case resCh <- d:
+
+					}
 				}
 
 				return nil
@@ -212,9 +221,13 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 				}
 
 				for ecosystem, m := range em {
-					resCh <- dbTypes.VulnerabilityDataDetection{
+					select {
+					case <-done:
+						return nil
+					case resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
+					}:
 					}
 				}
 
@@ -258,9 +271,13 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 				}
 
 				for ecosystem, m := range em {
-					resCh <- dbTypes.VulnerabilityDataDetection{
+					select {
+					case <-done:
+						return nil
+					case resCh <- dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
+					}:
 					}
 				}
 
@@ -269,7 +286,12 @@ func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetecti
 				return errors.Errorf("unexpected search type. expected: %q, actual: %s", []dbTypes.SearchDetectionType{dbTypes.SearchDetectionPkg, dbTypes.SearchDetectionRoot, dbTypes.SearchDetectionAdvisory, dbTypes.SearchDetectionVulnerability}, searchType)
 			}
 		}); err != nil {
-			errCh <- errors.WithStack(err)
+			select {
+			case <-done:
+				return
+			case errCh <- errors.WithStack(err):
+				return
+			}
 		}
 	}()
 
@@ -390,7 +412,9 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			}
 
 			if err := func() error {
-				resCh, errCh := c.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, id)
+				done := make(chan struct{})
+				defer close(done)
+				resCh, errCh := c.GetVulnerabilityDetections(done, dbTypes.SearchDetectionAdvisory, id)
 				for {
 					select {
 					case item, ok := <-resCh:
@@ -474,7 +498,9 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 			}
 
 			if err := func() error {
-				resCh, errCh := c.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, id)
+				done := make(chan struct{})
+				defer close(done)
+				resCh, errCh := c.GetVulnerabilityDetections(done, dbTypes.SearchDetectionVulnerability, id)
 				for {
 					select {
 					case item, ok := <-resCh:

@@ -23,7 +23,7 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error)
+	GetVulnerabilityDetections(<-chan struct{}, dbTypes.SearchDetectionType, ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error)
 	GetVulnerabilityData(dbTypes.SearchDataType, string) (*dbTypes.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 

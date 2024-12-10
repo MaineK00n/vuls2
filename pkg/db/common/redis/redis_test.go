@@ -125,6 +125,7 @@ func TestConnection_GetVulnerabilityDetections(t *testing.T) {
 		Config *rueidis.ClientOption
 	}
 	type args struct {
+		done       <-chan struct{}
 		searchType dbTypes.SearchDetectionType
 		queries    []string
 	}
@@ -145,7 +146,7 @@ func TestConnection_GetVulnerabilityDetections(t *testing.T) {
 			}
 			defer c.Close()
 
-			gotResCh, gotErrCh := c.GetVulnerabilityDetections(tt.args.searchType, tt.args.queries...)
+			gotResCh, gotErrCh := c.GetVulnerabilityDetections(tt.args.done, tt.args.searchType, tt.args.queries...)
 			if !reflect.DeepEqual(gotResCh, tt.wantResCh) {
 				t.Errorf("Connection.GetVulnerabilityDetections() got = %v, want %v", gotResCh, tt.wantResCh)
 			}
