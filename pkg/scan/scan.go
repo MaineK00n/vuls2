@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
@@ -121,7 +122,7 @@ func Scan(root string, opts ...Option) error {
 					JSONVersion: 0,
 					ServerUUID:  id.String(),
 					ServerName:  old.ServerName,
-					Family:      old.Family,
+					Family:      ecosystemTypes.Ecosystem(old.Family),
 					Release:     old.Release,
 
 					Kernel: scanTypes.Kernel{

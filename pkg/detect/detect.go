@@ -88,13 +88,11 @@ func Detect(targets []string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	c := db.Config{
-		Type: options.dbtype,
-		Path: options.dbpath,
-
+	dbc, err := (&db.Config{
+		Type:  options.dbtype,
+		Path:  options.dbpath,
 		Debug: options.debug,
-	}
-	dbc, err := c.New()
+	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}

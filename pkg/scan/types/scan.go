@@ -1,13 +1,17 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+)
 
 type ScanResult struct {
-	JSONVersion int    `json:"json_version,omitempty"`
-	ServerUUID  string `json:"server_uuid,omitempty"`
-	ServerName  string `json:"server_name,omitempty"`
-	Family      string `json:"family,omitempty"`
-	Release     string `json:"release,omitempty"`
+	JSONVersion int                      `json:"json_version,omitempty"`
+	ServerUUID  string                   `json:"server_uuid,omitempty"`
+	ServerName  string                   `json:"server_name,omitempty"`
+	Family      ecosystemTypes.Ecosystem `json:"family,omitempty"`
+	Release     string                   `json:"release,omitempty"`
 
 	Kernel     Kernel      `json:"kernel,omitempty"`
 	OSPackages []OSPackage `json:"os_packages,omitempty"`
