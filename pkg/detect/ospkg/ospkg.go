@@ -46,7 +46,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 			vcm[converted.Source.Name] = append(vcm[converted.Source.Name], i)
 		}
 
-		if converted.Binary != nil && slices.Contains(necq.Binaries, necBinaryPackageTypes.Query{
+		if converted.Binary != nil && !slices.Contains(necq.Binaries, necBinaryPackageTypes.Query{
 			Name:       converted.Binary.Name,
 			Arch:       converted.Binary.Arch,
 			Repository: converted.Binary.Repository,
@@ -57,7 +57,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 				Repository: converted.Binary.Repository,
 			})
 		}
-		if converted.Source != nil && slices.Contains(necq.Sources, necSourcePackageTypes.Query{
+		if converted.Source != nil && !slices.Contains(necq.Sources, necSourcePackageTypes.Query{
 			Name:       converted.Source.Name,
 			Repository: converted.Source.Repository,
 		}) {
