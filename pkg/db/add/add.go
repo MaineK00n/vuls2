@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/db/common"
+	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
@@ -64,7 +64,7 @@ func Add(root string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	db, err := (&common.Config{
+	dbc, err := (&db.Config{
 		Type:  options.dbtype,
 		Path:  options.dbpath,
 		Debug: options.debug,
@@ -72,33 +72,33 @@ func Add(root string, opts ...Option) error {
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
-	if err := db.Open(); err != nil {
+	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer db.Close()
+	defer dbc.Close()
 
 	slog.Info("Get Metadata")
-	meta, err := db.GetMetadata()
+	meta, err := dbc.GetMetadata()
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
-	if meta.SchemaVersion < common.SchemaVersion {
-		return errors.Errorf("schema version is old. expected: %q, actual: %q", common.SchemaVersion, meta.SchemaVersion)
+	if meta.SchemaVersion != db.SchemaVersion {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
 	slog.Info("Put Vulnerability Data")
-	if err := db.PutVulnerabilityData(filepath.Join(root, "data")); err != nil {
+	if err := dbc.PutVulnerabilityData(filepath.Join(root, "data")); err != nil {
 		return errors.Wrap(err, "put data")
 	}
 
 	slog.Info("Put DataSource")
-	if err := db.PutDataSource(filepath.Join(root, "datasource.json")); err != nil {
+	if err := dbc.PutDataSource(filepath.Join(root, "datasource.json")); err != nil {
 		return errors.Wrap(err, "put datasource")
 	}
 
 	slog.Info("Put Metadata")
-	if err := db.PutMetadata(dbTypes.Metadata{
-		SchemaVersion: common.SchemaVersion,
+	if err := dbc.PutMetadata(dbTypes.Metadata{
+		SchemaVersion: db.SchemaVersion,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now(),
 	}); err != nil {
