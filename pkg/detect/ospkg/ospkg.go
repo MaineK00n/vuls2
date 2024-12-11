@@ -75,7 +75,9 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
 	for name, indexes := range vcm {
 		if err := func() error {
-			resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystem), name)
+			done := make(chan struct{})
+			defer close(done)
+			resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, string(ecosystem), name)
 			for {
 				select {
 				case item, ok := <-resCh:

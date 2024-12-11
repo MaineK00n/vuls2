@@ -37,7 +37,9 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
 	for vp, indexes := range qm {
 		if err := func() error {
-			resCh, errCh := dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystemTypes.EcosystemTypeCPE), vp)
+			done := make(chan struct{})
+			defer close(done)
+			resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, string(ecosystemTypes.EcosystemTypeCPE), vp)
 			for {
 				select {
 				case item, ok := <-resCh:
