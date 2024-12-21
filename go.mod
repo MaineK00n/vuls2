@@ -3,7 +3,7 @@ module github.com/MaineK00n/vuls2
 go 1.23
 
 require (
-	github.com/MaineK00n/vuls-data-update v0.0.0-20241210065423-30cbba2233ec
+	github.com/MaineK00n/vuls-data-update v0.0.0-20241220103253-e0464240ff28
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
@@ -51,7 +51,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/crypto v0.30.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
