@@ -72,7 +72,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 		condition conditionTypes.Condition
 		indexes   []int
 	}
-	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
+	pfmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID][]prefiltered)
 	for name, indexes := range vcm {
 		if err := func() error {
 			done := make(chan struct{})
@@ -97,15 +97,23 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 									}
 
 									if isContained {
-										if pfm[rootID] == nil {
-											pfm[rootID] = make(map[sourceTypes.SourceID]prefiltered)
+										if pfmm[rootID] == nil {
+											pfmm[rootID] = make(map[sourceTypes.SourceID][]prefiltered)
 										}
-										pf, ok := pfm[rootID][sourceID]
-										if !ok {
-											pf = prefiltered{condition: cond}
+										pfIndex := slices.IndexFunc(pfmm[rootID][sourceID], func(x prefiltered) bool {
+											return conditionTypes.Compare(x.condition, cond) == 0
+										})
+										switch pfIndex {
+										case -1:
+											pfmm[rootID][sourceID] = append(pfmm[rootID][sourceID], prefiltered{
+												condition: cond,
+												indexes:   []int{idx},
+											})
+										default:
+											pf := pfmm[rootID][sourceID][pfIndex]
+											pf.indexes = append(pf.indexes, idx)
+											pfmm[rootID][sourceID][pfIndex] = pf
 										}
-										pf.indexes = append(pf.indexes, idx)
-										pfm[rootID][sourceID] = pf
 									}
 								}
 							}
@@ -123,42 +131,44 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	}
 
 	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rootID, m := range pfm {
-		for sourceID, pf := range m {
-			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
-				return criterionTypes.Query{
-					Version: func() []vcTypes.Query {
-						qs := make([]vcTypes.Query, 0, len(pf.indexes))
-						for _, idx := range pf.indexes {
-							qs = append(qs, vcpkgs[idx])
-						}
-						return qs
-					}(),
-					NoneExist: &necq,
-				}
-			}())
-			if err != nil {
-				return nil, errors.Wrap(err, "criteria accept")
-			}
-
-			isAffected, err := fcond.Affected()
-			if err != nil {
-				return nil, errors.Wrap(err, "criteria affected")
-			}
-			if isAffected {
-				d, ok := dm[rootID]
-				if !ok {
-					d = detectTypes.VulnerabilityDataDetection{
-						Ecosystem: ecosystem,
-						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+	for rootID, pfm := range pfmm {
+		for sourceID, pfs := range pfm {
+			for _, pf := range pfs {
+				fcond, err := pf.condition.Accept(func() criterionTypes.Query {
+					return criterionTypes.Query{
+						Version: func() []vcTypes.Query {
+							qs := make([]vcTypes.Query, 0, len(pf.indexes))
+							for _, idx := range pf.indexes {
+								qs = append(qs, vcpkgs[idx])
+							}
+							return qs
+						}(),
+						NoneExist: &necq,
 					}
-				}
-				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+				}())
 				if err != nil {
-					return nil, errors.Wrap(err, "replace indexes")
+					return nil, errors.Wrap(err, "criteria accept")
 				}
-				d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
-				dm[rootID] = d
+
+				isAffected, err := fcond.Affected()
+				if err != nil {
+					return nil, errors.Wrap(err, "criteria affected")
+				}
+				if isAffected {
+					d, ok := dm[rootID]
+					if !ok {
+						d = detectTypes.VulnerabilityDataDetection{
+							Ecosystem: ecosystem,
+							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+						}
+					}
+					fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+					if err != nil {
+						return nil, errors.Wrap(err, "replace indexes")
+					}
+					d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+					dm[rootID] = d
+				}
 			}
 		}
 	}
