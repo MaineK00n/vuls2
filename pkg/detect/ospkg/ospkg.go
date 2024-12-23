@@ -72,7 +72,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 		condition conditionTypes.Condition
 		indexes   []int
 	}
-	pfm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]prefiltered)
+	pfmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID][]prefiltered)
 	for name, indexes := range vcm {
 		if err := func() error {
 			done := make(chan struct{})
@@ -87,6 +87,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 					for rootID, m := range item.Contents {
 						for sourceID, conds := range m {
 							for _, cond := range conds {
+								containedIndexes := make([]int, 0, len(indexes))
 								for _, idx := range indexes {
 									isContained, err := cond.Contains(criterionTypes.Query{
 										Version:   []vcTypes.Query{vcpkgs[idx]},
@@ -97,16 +98,17 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 									}
 
 									if isContained {
-										if pfm[rootID] == nil {
-											pfm[rootID] = make(map[sourceTypes.SourceID]prefiltered)
-										}
-										pf, ok := pfm[rootID][sourceID]
-										if !ok {
-											pf = prefiltered{condition: cond}
-										}
-										pf.indexes = append(pf.indexes, idx)
-										pfm[rootID][sourceID] = pf
+										containedIndexes = append(containedIndexes, idx)
 									}
+								}
+								if len(containedIndexes) > 0 {
+									if pfmm[rootID] == nil {
+										pfmm[rootID] = make(map[sourceTypes.SourceID][]prefiltered)
+									}
+									pfmm[rootID][sourceID] = append(pfmm[rootID][sourceID], prefiltered{
+										condition: cond,
+										indexes:   containedIndexes,
+									})
 								}
 							}
 						}
@@ -123,42 +125,44 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	}
 
 	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rootID, m := range pfm {
-		for sourceID, pf := range m {
-			fcond, err := pf.condition.Accept(func() criterionTypes.Query {
-				return criterionTypes.Query{
-					Version: func() []vcTypes.Query {
-						qs := make([]vcTypes.Query, 0, len(pf.indexes))
-						for _, idx := range pf.indexes {
-							qs = append(qs, vcpkgs[idx])
-						}
-						return qs
-					}(),
-					NoneExist: &necq,
-				}
-			}())
-			if err != nil {
-				return nil, errors.Wrap(err, "criteria accept")
-			}
-
-			isAffected, err := fcond.Affected()
-			if err != nil {
-				return nil, errors.Wrap(err, "criteria affected")
-			}
-			if isAffected {
-				d, ok := dm[rootID]
-				if !ok {
-					d = detectTypes.VulnerabilityDataDetection{
-						Ecosystem: ecosystem,
-						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+	for rootID, pfm := range pfmm {
+		for sourceID, pfs := range pfm {
+			for _, pf := range pfs {
+				fcond, err := pf.condition.Accept(func() criterionTypes.Query {
+					return criterionTypes.Query{
+						Version: func() []vcTypes.Query {
+							qs := make([]vcTypes.Query, 0, len(pf.indexes))
+							for _, idx := range pf.indexes {
+								qs = append(qs, vcpkgs[idx])
+							}
+							return qs
+						}(),
+						NoneExist: &necq,
 					}
-				}
-				fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+				}())
 				if err != nil {
-					return nil, errors.Wrap(err, "replace indexes")
+					return nil, errors.Wrap(err, "criteria accept")
 				}
-				d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
-				dm[rootID] = d
+
+				isAffected, err := fcond.Affected()
+				if err != nil {
+					return nil, errors.Wrap(err, "criteria affected")
+				}
+				if isAffected {
+					d, ok := dm[rootID]
+					if !ok {
+						d = detectTypes.VulnerabilityDataDetection{
+							Ecosystem: ecosystem,
+							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+						}
+					}
+					fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+					if err != nil {
+						return nil, errors.Wrap(err, "replace indexes")
+					}
+					d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+					dm[rootID] = d
+				}
 			}
 		}
 	}
