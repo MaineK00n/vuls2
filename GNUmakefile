@@ -65,11 +65,13 @@ db-build:
 	make db-add REPO=vuls-data-extracted-oracle BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-cve BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-csaf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-csaf-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-cvrf BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-redhat-ovalv1 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-ovalv1 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-ovalv2 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-redhat-ovalv2-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	# make db-add REPO=vuls-data-extracted-redhat-ovalv2-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-redhat-vex BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-redhat-vex-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-rocky-errata BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-rocky-osv BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	# make db-add REPO=vuls-data-extracted-suse-oval BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
