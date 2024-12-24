@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -142,21 +143,7 @@ func Fetch(opts ...Option) error {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 	}
 
-	f, err := os.Create(options.dbpath)
-	if err != nil {
-		return errors.Wrapf(err, "create %s", options.dbpath)
-	}
-	defer f.Close()
-
-	pb := func() *progressbar.ProgressBar {
-		if options.noProgress {
-			return progressbar.DefaultBytesSilent(-1)
-		}
-		return progressbar.DefaultBytes(-1, "downloading")
-	}()
-	defer pb.Close()
-
-	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
+	if err := options.write(d); err != nil {
 		return errors.Wrapf(err, "write to %s", options.dbpath)
 	}
 
@@ -187,6 +174,36 @@ func Fetch(opts ...Option) error {
 	}()
 	if err := dbc.PutMetadata(*meta); err != nil {
 		return errors.Wrap(err, "put metadata")
+	}
+
+	return nil
+}
+
+func (o *options) write(d *zstd.Decoder) error {
+	tmpPath := fmt.Sprintf("%s.tmp", o.dbpath)
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		return errors.Wrapf(err, "create %s", tmpPath)
+	}
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
+	}()
+
+	pb := func() *progressbar.ProgressBar {
+		if o.noProgress {
+			return progressbar.DefaultBytesSilent(-1)
+		}
+		return progressbar.DefaultBytes(-1, "fetching")
+	}()
+	defer pb.Close()
+
+	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
+		return errors.Wrapf(err, "write to %s", o.dbpath)
+	}
+
+	if err := os.Rename(tmpPath, o.dbpath); err != nil {
+		return errors.Wrapf(err, "rename %s to %s", tmpPath, o.dbpath)
 	}
 
 	return nil
