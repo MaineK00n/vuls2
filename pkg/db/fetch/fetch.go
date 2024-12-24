@@ -199,7 +199,7 @@ func (o *options) write(d *zstd.Decoder) error {
 	defer pb.Close()
 
 	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
-		return errors.Wrapf(err, "write to %s", o.dbpath)
+		return errors.Wrapf(err, "write to %s", tmpPath)
 	}
 
 	if err := os.Rename(tmpPath, o.dbpath); err != nil {
