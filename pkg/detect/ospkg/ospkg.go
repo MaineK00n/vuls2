@@ -222,15 +222,35 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 		sn string
 		sv string
 	)
-	if p.SrcName != "" && p.SrcVersion != "" {
-		sn, err = pnfn(p.SrcName, p.ModularityLabel)
-		if err != nil {
-			return vcTypes.Query{}, errors.Wrap(err, "form source package name")
-		}
+	switch family {
+	case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosytemCentOS:
+		// TODO: Theoretically, we should check non-emptiess of p.SrcVersion here too. However, for workaround
+		// in RHEL oval v2 -> vex transition, we accept empty SrcVersion and skip validation at the moment.
+		// This switch MUST BE removed soon.
+		if p.SrcName != "" {
+			sn, err = pnfn(p.SrcName, p.ModularityLabel)
+			if err != nil {
+				return vcTypes.Query{}, errors.Wrap(err, "form source package name")
+			}
 
-		sv, err = pvfn(p.SrcEpoch, p.SrcVersion, p.SrcRelease)
-		if err != nil {
-			return vcTypes.Query{}, errors.Wrap(err, "form source package version")
+			if p.SrcVersion != "" {
+				sv, err = pvfn(p.SrcEpoch, p.SrcVersion, p.SrcRelease)
+				if err != nil {
+					return vcTypes.Query{}, errors.Wrap(err, "form source package version")
+				}
+			}
+		}
+	default:
+		if p.SrcName != "" && p.SrcVersion != "" {
+			sn, err = pnfn(p.SrcName, p.ModularityLabel)
+			if err != nil {
+				return vcTypes.Query{}, errors.Wrap(err, "form source package name")
+			}
+
+			sv, err = pvfn(p.SrcEpoch, p.SrcVersion, p.SrcRelease)
+			if err != nil {
+				return vcTypes.Query{}, errors.Wrap(err, "form source package version")
+			}
 		}
 	}
 
@@ -243,15 +263,29 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 			Repository: p.Repository,
 		},
 		Source: func() *vcTypes.QuerySource {
-			if sn != "" && sv != "" {
-				return &vcTypes.QuerySource{
-					Family:     family,
-					Name:       sn,
-					Version:    sv,
-					Repository: p.Repository,
+			switch family {
+			case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosytemCentOS:
+				// TODO: This switch should also be removed soon as well as the above one.
+				if sn != "" {
+					return &vcTypes.QuerySource{
+						Family:     family,
+						Name:       sn,
+						Version:    sv,
+						Repository: p.Repository,
+					}
 				}
+				return nil
+			default:
+				if sn != "" && sv != "" {
+					return &vcTypes.QuerySource{
+						Family:     family,
+						Name:       sn,
+						Version:    sv,
+						Repository: p.Repository,
+					}
+				}
+				return nil
 			}
-			return nil
 		}(),
 	}, nil
 }
