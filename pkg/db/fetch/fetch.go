@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
 
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
@@ -26,6 +29,7 @@ import (
 type options struct {
 	dbpath     string
 	repository string
+	proxy      string
 	noProgress bool
 	debug      bool
 }
@@ -54,14 +58,14 @@ func WithRepository(repository string) Option {
 	return repositoryOption(repository)
 }
 
-type debugOption bool
+type proxyOption string
 
-func (o debugOption) apply(opts *options) {
-	opts.debug = bool(o)
+func (o proxyOption) apply(opts *options) {
+	opts.proxy = string(o)
 }
 
-func WithDebug(debug bool) Option {
-	return debugOption(debug)
+func WithProxy(proxy string) Option {
+	return proxyOption(proxy)
 }
 
 type noProgressOption bool
@@ -74,10 +78,21 @@ func WithNoProgress(noProgress bool) Option {
 	return noProgressOption(noProgress)
 }
 
+type debugOption bool
+
+func (o debugOption) apply(opts *options) {
+	opts.debug = bool(o)
+}
+
+func WithDebug(debug bool) Option {
+	return debugOption(debug)
+}
+
 func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		repository: "ghcr.io/mainek00n/vuls2:latest",
+		proxy:      "",
 		debug:      false,
 		noProgress: false,
 	}
@@ -97,6 +112,20 @@ func Fetch(opts ...Option) error {
 	}
 	if repo.Reference.Reference == "" {
 		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>@<digest>", "<repository>:<tag>", "<repository>:<tag>@<digest>"}, options.repository)
+	}
+
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	if options.proxy != "" {
+		u, err := url.Parse(options.proxy)
+		if err != nil {
+			return errors.Wrap(err, "parse proxy url")
+		}
+		t.Proxy = http.ProxyURL(u)
+	}
+	repo.Client = &auth.Client{
+		Client: &http.Client{
+			Transport: t,
+		},
 	}
 
 	manifestDescriptor, err := oras.Copy(ctx, repo, repo.Reference.Reference, ms, repo.Reference.Reference, oras.DefaultCopyOptions)
