@@ -13,6 +13,7 @@ const (
 	DBTypeSQLite3    DBType = "sqlite3"
 	DBTypeMySQL      DBType = "mysql"
 	DBTypePostgreSQL DBType = "postgres"
+	DBTypePebble     DBType = "pebble"
 )
 
 func (t *DBType) String() string {
@@ -21,7 +22,7 @@ func (t *DBType) String() string {
 
 func (t *DBType) Set(v string) error {
 	switch v {
-	case "boltdb", "redis", "sqlite3", "mysql", "postgres":
+	case "boltdb", "redis", "sqlite3", "mysql", "postgres", "pebble":
 		*t = DBType(v)
 		return nil
 	default:
@@ -34,5 +35,5 @@ func (t *DBType) Type() string {
 }
 
 func DBTypeCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return []string{string(DBTypeBoltDB), string(DBTypeRedis), string(DBTypeSQLite3), string(DBTypeMySQL), string(DBTypePostgreSQL)}, cobra.ShellCompDirectiveDefault
+	return []string{string(DBTypeBoltDB), string(DBTypeRedis), string(DBTypeSQLite3), string(DBTypeMySQL), string(DBTypePostgreSQL), string(DBTypePebble)}, cobra.ShellCompDirectiveDefault
 }

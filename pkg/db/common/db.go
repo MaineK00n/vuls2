@@ -7,6 +7,7 @@ import (
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
+	"github.com/MaineK00n/vuls2/pkg/db/common/pebble"
 	"github.com/MaineK00n/vuls2/pkg/db/common/rdb"
 	"github.com/MaineK00n/vuls2/pkg/db/common/redis"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
@@ -48,6 +49,8 @@ func (c *Config) New() (DB, error) {
 		return &redis.Connection{Config: &rueidis.ClientOption{InitAddress: []string{c.Path}}}, nil
 	case "sqlite3", "mysql", "postgres":
 		return &rdb.Connection{Config: &rdb.Config{Type: c.Type, Path: c.Path}}, nil
+	case "pebble":
+		return &pebble.Connection{Config: &pebble.Config{Path: c.Path}}, nil
 	default:
 		return nil, errors.Errorf("%s is not support dbtype", c.Type)
 	}
