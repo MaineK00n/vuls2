@@ -542,17 +542,12 @@ func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) erro
 			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID), data.DataSource.ID, string(bs))
 		}
 
-		var pkgs []string
-		for _, cond := range d.Conditions {
-			ps, err := util.WalkCriteria(cond.Criteria)
-			if err != nil {
-				return errors.Wrap(err, "walk criteria")
-			}
-			pkgs = append(pkgs, ps...)
+		pkgs, err := util.CollectPkgName(d.Conditions)
+		if err != nil {
+			return errors.Wrap(err, "collect package name")
 		}
-		slices.Sort(pkgs)
 
-		for _, p := range slices.Compact(pkgs) {
+		for _, p := range pkgs {
 			if err := c.conn.Do(ctx, c.conn.B().Sadd().Key(fmt.Sprintf("%s#index#%s", d.Ecosystem, p)).Member(string(data.ID)).Build()).Error(); err != nil {
 				return errors.Wrapf(err, "SADD %s %s", fmt.Sprintf("%s#index#%s", d.Ecosystem, p), data.ID)
 			}

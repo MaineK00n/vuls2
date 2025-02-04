@@ -35,7 +35,9 @@ import (
 
 // boltdb: <ecosystem>:index:<package> -> [<Root ID>]
 
-// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
+// boltdb: <ecosystem>:detection:main:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
+
+// boltdb: <ecosystem>:detection:repository:<repository index> -> repository name
 
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
@@ -567,10 +569,38 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> detection", d.Ecosystem))
 		}
 
+		edrb, err := edb.CreateBucketIfNotExists([]byte("repository"))
+		if err != nil {
+			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> detection -> repository", d.Ecosystem))
+		}
+
+		repom := make(map[string]string)
+		if err := edrb.ForEach(func(k, v []byte) error {
+			repom[string(v)] = string(k)
+			return nil
+		}); err != nil {
+			return errors.Wrapf(err, "foreach %s", fmt.Sprintf("%s -> detection -> repository", d.Ecosystem))
+		}
+
+		if err := util.ReplaceRepositories(d.Conditions, repom); err != nil {
+			return errors.Wrapf(err, "replace repository in conditions")
+		}
+
+		for repo, i := range repom {
+			if err := edrb.Put([]byte(i), []byte(repo)); err != nil {
+				return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> detection -> repository -> %s", d.Ecosystem, i))
+			}
+		}
+
+		edmb, err := edb.CreateBucketIfNotExists([]byte("main"))
+		if err != nil {
+			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> detection -> main", d.Ecosystem))
+		}
+
 		m := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
-		if bs := edb.Get([]byte(data.ID)); len(bs) > 0 {
+		if bs := edmb.Get([]byte(data.ID)); len(bs) > 0 {
 			if err := util.Unmarshal(bs, &m); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> main -> %s", d.Ecosystem, data.ID))
 			}
 		}
 		m[data.DataSource.ID] = d.Conditions
@@ -580,8 +610,8 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			return errors.Wrap(err, "marshal conditions map")
 		}
 
-		if err := edb.Put([]byte(data.ID), bs); err != nil {
-			return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+		if err := edmb.Put([]byte(data.ID), bs); err != nil {
+			return errors.Wrapf(err, "put %s", fmt.Sprintf("%s -> detection -> main -> %s", d.Ecosystem, data.ID))
 		}
 
 		eib, err := eb.CreateBucketIfNotExists([]byte("index"))
@@ -589,17 +619,12 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			return errors.Wrapf(err, "create bucket: %s if not exists", fmt.Sprintf("%s -> index", d.Ecosystem))
 		}
 
-		var pkgs []string
-		for _, cond := range d.Conditions {
-			ps, err := util.WalkCriteria(cond.Criteria)
-			if err != nil {
-				return errors.Wrap(err, "walk criteria")
-			}
-			pkgs = append(pkgs, ps...)
+		pkgs, err := util.CollectPkgName(d.Conditions)
+		if err != nil {
+			return errors.Wrap(err, "collect package name")
 		}
-		slices.Sort(pkgs)
 
-		for _, p := range slices.Compact(pkgs) {
+		for _, p := range pkgs {
 			var rootIDs []dataTypes.RootID
 			if bs := eib.Get([]byte(p)); len(bs) > 0 {
 				if err := util.Unmarshal(bs, &rootIDs); err != nil {
