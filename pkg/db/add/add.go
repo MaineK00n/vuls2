@@ -75,7 +75,7 @@ func Add(root string, opts ...Option) error {
 	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer dbc.Close()
+	defer dbc.Close() //nolint:errcheck
 
 	slog.Info("Get Metadata")
 	meta, err := dbc.GetMetadata()
