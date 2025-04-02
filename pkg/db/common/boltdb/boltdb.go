@@ -65,7 +65,7 @@ func (c *Connection) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	return c.conn.Close()
+	return c.conn.Close() //nolint:errcheck
 }
 
 func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
@@ -656,7 +656,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 			if err != nil {
 				return errors.Wrapf(err, "open %s", path)
 			}
-			defer f.Close()
+			defer f.Close() //nolint:errcheck
 
 			var data dataTypes.Data
 			if err := json.NewDecoder(f).Decode(&data); err != nil {
@@ -940,7 +940,7 @@ func (c *Connection) PutDataSource(root string) error {
 		if err != nil {
 			return errors.Wrapf(err, "open %s", root)
 		}
-		defer f.Close()
+		defer f.Close() //nolint:errcheck
 
 		var datasource datasourceTypes.DataSource
 		if err := json.NewDecoder(f).Decode(&datasource); err != nil {

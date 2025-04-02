@@ -89,7 +89,7 @@ func Scan(root string, opts ...Option) error {
 				if err != nil {
 					return errors.Wrapf(err, "open %s", filepath.Join(root, t, name))
 				}
-				defer f.Close()
+				defer f.Close() //nolint:errcheck
 
 				var old scanResult
 				if err := json.NewDecoder(f).Decode(&old); err != nil {
@@ -157,7 +157,7 @@ func Scan(root string, opts ...Option) error {
 				if err != nil {
 					return errors.Wrapf(err, "create %s", filepath.Join(options.resultsDir, id.String(), t, "scan.json"))
 				}
-				defer f.Close()
+				defer f.Close() //nolint:errcheck
 
 				e := json.NewEncoder(f)
 				e.SetEscapeHTML(false)

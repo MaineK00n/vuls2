@@ -80,7 +80,7 @@ func Init(opts ...Option) error {
 	if err := db.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	slog.Info("Delete All Data")
 	if err := db.DeleteAll(); err != nil {
