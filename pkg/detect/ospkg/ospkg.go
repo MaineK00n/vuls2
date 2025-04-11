@@ -1,6 +1,7 @@
 package ospkg
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -68,11 +69,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 		}
 	}
 
-	type prefiltered struct {
-		condition conditionTypes.Condition
-		indexes   []int
-	}
-	pfmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID][]prefiltered)
+	pfmmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]map[string][]int)
 	for name, indexes := range vcm {
 		if err := func() error {
 			done := make(chan struct{})
@@ -102,13 +99,19 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 									}
 								}
 								if len(containedIndexes) > 0 {
-									if pfmm[rootID] == nil {
-										pfmm[rootID] = make(map[sourceTypes.SourceID][]prefiltered)
+									if pfmmm[rootID] == nil {
+										pfmmm[rootID] = make(map[sourceTypes.SourceID]map[string][]int)
 									}
-									pfmm[rootID][sourceID] = append(pfmm[rootID][sourceID], prefiltered{
-										condition: cond,
-										indexes:   containedIndexes,
-									})
+									if pfmmm[rootID][sourceID] == nil {
+										pfmmm[rootID][sourceID] = make(map[string][]int)
+									}
+
+									k, err := json.Marshal(cond)
+									if err != nil {
+										return errors.Wrap(err, "json marshal")
+									}
+
+									pfmmm[rootID][sourceID][string(k)] = append(pfmmm[rootID][sourceID][string(k)], containedIndexes...)
 								}
 							}
 						}
@@ -125,14 +128,19 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	}
 
 	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rootID, pfm := range pfmm {
-		for sourceID, pfs := range pfm {
-			for _, pf := range pfs {
-				fcond, err := pf.condition.Accept(func() criterionTypes.Query {
+	for rootID, pfmm := range pfmmm {
+		for sourceID, pfm := range pfmm {
+			for condkey, indexes := range pfm {
+				var cond conditionTypes.Condition
+				if err := json.Unmarshal([]byte(condkey), &cond); err != nil {
+					return nil, errors.Wrap(err, "json unmarshal")
+				}
+
+				fcond, err := cond.Accept(func() criterionTypes.Query {
 					return criterionTypes.Query{
 						Version: func() []vcTypes.Query {
-							qs := make([]vcTypes.Query, 0, len(pf.indexes))
-							for _, idx := range pf.indexes {
+							qs := make([]vcTypes.Query, 0, len(indexes))
+							for _, idx := range indexes {
 								qs = append(qs, vcpkgs[idx])
 							}
 							return qs
@@ -156,7 +164,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
 						}
 					}
-					fcond.Criteria, err = replaceIndexes(fcond.Criteria, pf.indexes)
+					fcond.Criteria, err = replaceIndexes(fcond.Criteria, indexes)
 					if err != nil {
 						return nil, errors.Wrap(err, "replace indexes")
 					}
