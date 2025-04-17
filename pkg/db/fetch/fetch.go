@@ -14,6 +14,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	progressbar "github.com/schollz/progressbar/v3"
+	bolt "go.etcd.io/bbolt"
 	oras "oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
@@ -24,7 +25,9 @@ import (
 )
 
 type options struct {
-	dbpath     string
+	dbpath string
+	dbopts db.DBOptions
+
 	repository string
 	noProgress bool
 	debug      bool
@@ -42,6 +45,16 @@ func (o dbpathOption) apply(opts *options) {
 
 func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
+}
+
+type dboptsOption db.DBOptions
+
+func (o dboptsOption) apply(opts *options) {
+	opts.dbopts = db.DBOptions(o)
+}
+
+func WithDBOptions(dbopts db.DBOptions) Option {
+	return dboptsOption(dbopts)
 }
 
 type repositoryOption string
@@ -77,6 +90,7 @@ func WithNoProgress(noProgress bool) Option {
 func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		dbopts:     db.DBOptions{BoltDB: bolt.DefaultOptions},
 		repository: "ghcr.io/mainek00n/vuls2:latest",
 		debug:      false,
 		noProgress: false,
@@ -148,9 +162,10 @@ func Fetch(opts ...Option) error {
 	}
 
 	dbc, err := (&db.Config{
-		Type:  "boltdb",
-		Path:  options.dbpath,
-		Debug: options.debug,
+		Type:    "boltdb",
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.dbopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")

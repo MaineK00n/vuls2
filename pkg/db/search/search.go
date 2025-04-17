@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
 
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
@@ -16,6 +17,7 @@ import (
 type options struct {
 	dbtype string
 	dbpath string
+	dbopts db.DBOptions
 
 	debug bool
 }
@@ -44,6 +46,16 @@ func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
 }
 
+type dboptsOption db.DBOptions
+
+func (o dboptsOption) apply(opts *options) {
+	opts.dbopts = db.DBOptions(o)
+}
+
+func WithDBOptions(dbopts db.DBOptions) Option {
+	return dboptsOption(dbopts)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -58,6 +70,7 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	options := &options{
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
 		debug:  false,
 	}
 	for _, o := range opts {
@@ -65,9 +78,10 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	}
 
 	dbc, err := (&db.Config{
-		Type:  options.dbtype,
-		Path:  options.dbpath,
-		Debug: options.debug,
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.dbopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")

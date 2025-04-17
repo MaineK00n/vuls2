@@ -40,6 +40,8 @@ import (
 
 type Config struct {
 	Path string
+
+	Options *bolt.Options
 }
 
 type Connection struct {
@@ -53,7 +55,7 @@ func (c *Connection) Open() error {
 		return errors.New("connection config is not set")
 	}
 
-	db, err := bolt.Open(c.Config.Path, 0600, nil)
+	db, err := bolt.Open(c.Config.Path, 0600, c.Config.Options)
 	if err != nil {
 		return errors.WithStack(err)
 	}
