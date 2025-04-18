@@ -15,6 +15,8 @@ import (
 type Config struct {
 	Type string
 	Path string
+
+	Options []gorm.Option
 }
 
 type Connection struct {
@@ -30,21 +32,21 @@ func (c *Connection) Open() error {
 
 	switch c.Config.Type {
 	case "sqlite3":
-		db, err := gorm.Open(sqlite.Open(c.Config.Path))
+		db, err := gorm.Open(sqlite.Open(c.Config.Path), c.Config.Options...)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 		c.conn = db
 		return nil
 	case "mysql":
-		db, err := gorm.Open(mysql.Open(c.Config.Path))
+		db, err := gorm.Open(mysql.Open(c.Config.Path), c.Config.Options...)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 		c.conn = db
 		return nil
 	case "postgres":
-		db, err := gorm.Open(postgres.Open(c.Config.Path))
+		db, err := gorm.Open(postgres.Open(c.Config.Path), c.Config.Options...)
 		if err != nil {
 			return errors.WithStack(err)
 		}

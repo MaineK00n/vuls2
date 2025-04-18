@@ -9,9 +9,10 @@ import (
 
 func TestConfig_New(t *testing.T) {
 	type fields struct {
-		Type  string
-		Path  string
-		Debug bool
+		Type    string
+		Path    string
+		Debug   bool
+		Options db.DBOptions
 	}
 	tests := []struct {
 		name    string
@@ -22,9 +23,10 @@ func TestConfig_New(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := (&db.Config{
-				Type:  tt.fields.Type,
-				Path:  tt.fields.Path,
-				Debug: tt.fields.Debug,
+				Type:    tt.fields.Type,
+				Path:    tt.fields.Path,
+				Debug:   tt.fields.Debug,
+				Options: tt.fields.Options,
 			}).New()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Config.New() error = %v, wantErr %v", err, tt.wantErr)

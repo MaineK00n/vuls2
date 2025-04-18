@@ -3,6 +3,8 @@ package common
 import (
 	"github.com/pkg/errors"
 	"github.com/redis/rueidis"
+	bolt "go.etcd.io/bbolt"
+	"gorm.io/gorm"
 
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -35,19 +37,30 @@ type DB interface {
 }
 
 type Config struct {
-	Type  string
-	Path  string
-	Debug bool
+	Type    string
+	Path    string
+	Debug   bool
+	Options DBOptions
+}
+
+type DBOptions struct {
+	BoltDB *bolt.Options
+	Redis  *rueidis.ClientOption
+	RDB    []gorm.Option
 }
 
 func (c *Config) New() (DB, error) {
 	switch c.Type {
 	case "boltdb":
-		return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path}}, nil
+		return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path, Options: c.Options.BoltDB}}, nil
 	case "redis":
-		return &redis.Connection{Config: &rueidis.ClientOption{InitAddress: []string{c.Path}}}, nil
+		conf := c.Options.Redis
+		if conf == nil {
+			conf = &rueidis.ClientOption{InitAddress: []string{c.Path}}
+		}
+		return &redis.Connection{Config: conf}, nil
 	case "sqlite3", "mysql", "postgres":
-		return &rdb.Connection{Config: &rdb.Config{Type: c.Type, Path: c.Path}}, nil
+		return &rdb.Connection{Config: &rdb.Config{Type: c.Type, Path: c.Path, Options: c.Options.RDB}}, nil
 	default:
 		return nil, errors.Errorf("%s is not support dbtype", c.Type)
 	}
