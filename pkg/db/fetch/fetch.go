@@ -195,15 +195,18 @@ func Fetch(opts ...Option) error {
 }
 
 func (o *options) write(d *zstd.Decoder) error {
-	tmpPath := fmt.Sprintf("%s.tmp", o.dbpath)
-	f, err := os.Create(tmpPath)
+	f, err := os.CreateTemp(filepath.Dir(o.dbpath), fmt.Sprintf("%s.*", filepath.Base(o.dbpath)))
 	if err != nil {
-		return errors.Wrapf(err, "create %s", tmpPath)
+		return errors.Wrapf(err, "create %s", filepath.Join(filepath.Dir(o.dbpath), fmt.Sprintf("%s.*", filepath.Base(o.dbpath))))
 	}
 	defer func() {
-		_ = f.Close() //nolint:errcheck
-		_ = os.Remove(tmpPath)
+		_ = f.Close()           //nolint:errcheck
+		_ = os.Remove(f.Name()) //nolint:errcheck
 	}()
+
+	if err := f.Chmod(0644); err != nil {
+		return errors.Wrapf(err, "chmod 644 %s", f.Name())
+	}
 
 	pb := func() *progressbar.ProgressBar {
 		if o.noProgress {
@@ -214,11 +217,11 @@ func (o *options) write(d *zstd.Decoder) error {
 	defer pb.Close() //nolint:errcheck
 
 	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
-		return errors.Wrapf(err, "write to %s", tmpPath)
+		return errors.Wrapf(err, "write to %s", f.Name())
 	}
 
-	if err := os.Rename(tmpPath, o.dbpath); err != nil {
-		return errors.Wrapf(err, "rename %s to %s", tmpPath, o.dbpath)
+	if err := os.Rename(f.Name(), o.dbpath); err != nil {
+		return errors.Wrapf(err, "rename %s to %s", f.Name(), o.dbpath)
 	}
 
 	return nil
