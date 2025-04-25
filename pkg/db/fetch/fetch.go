@@ -218,7 +218,7 @@ func (o *options) finish(dbpath, digest string) error {
 
 	meta.Digest = &digest
 	meta.Downloaded = func() *time.Time {
-		t := time.Now()
+		t := time.Now().UTC()
 		return &t
 	}()
 
