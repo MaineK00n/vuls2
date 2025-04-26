@@ -157,15 +157,48 @@ func Fetch(opts ...Option) error {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 	}
 
-	if err := options.write(d); err != nil {
-		return errors.Wrapf(err, "write to %s", options.dbpath)
+	tmpdb, err := options.writeTempDB(d)
+	if err != nil {
+		return errors.Wrap(err, "write temp db")
+	}
+	defer os.Remove(tmpdb) //nolint:errcheck
+
+	if err := options.finish(tmpdb, manifestDescriptor.Digest.String()); err != nil {
+		return errors.Wrap(err, "finish db")
 	}
 
+	return nil
+}
+
+func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(o.dbpath), fmt.Sprintf("%s.*", filepath.Base(o.dbpath)))
+	if err != nil {
+		return "", errors.Wrapf(err, "create %s", filepath.Join(filepath.Dir(o.dbpath), fmt.Sprintf("%s.*", filepath.Base(o.dbpath))))
+	}
+	defer f.Close() //nolint:errcheck
+
+	pb := func() *progressbar.ProgressBar {
+		if o.noProgress {
+			return progressbar.DefaultBytesSilent(-1)
+		}
+		return progressbar.DefaultBytes(-1, "fetching")
+	}()
+	defer pb.Close() //nolint:errcheck
+
+	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
+		_ = os.Remove(f.Name()) // nolint:errcheck
+		return "", errors.Wrapf(err, "write to %s", f.Name())
+	}
+
+	return f.Name(), nil
+}
+
+func (o *options) finish(dbpath, digest string) error {
 	dbc, err := (&db.Config{
 		Type:    "boltdb",
-		Path:    options.dbpath,
-		Debug:   options.debug,
-		Options: options.dbopts,
+		Path:    dbpath,
+		Debug:   o.debug,
+		Options: o.dbopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
@@ -183,42 +216,22 @@ func Fetch(opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
+	meta.Digest = &digest
 	meta.Downloaded = func() *time.Time {
-		t := time.Now()
+		t := time.Now().UTC()
 		return &t
 	}()
+
 	if err := dbc.PutMetadata(*meta); err != nil {
 		return errors.Wrap(err, "put metadata")
 	}
 
-	return nil
-}
-
-func (o *options) write(d *zstd.Decoder) error {
-	tmpPath := fmt.Sprintf("%s.tmp", o.dbpath)
-	f, err := os.Create(tmpPath)
-	if err != nil {
-		return errors.Wrapf(err, "create %s", tmpPath)
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck
-		_ = os.Remove(tmpPath)
-	}()
-
-	pb := func() *progressbar.ProgressBar {
-		if o.noProgress {
-			return progressbar.DefaultBytesSilent(-1)
-		}
-		return progressbar.DefaultBytes(-1, "fetching")
-	}()
-	defer pb.Close() //nolint:errcheck
-
-	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
-		return errors.Wrapf(err, "write to %s", tmpPath)
+	if err := os.Chmod(dbpath, 0644); err != nil {
+		return errors.Wrapf(err, "chmod 644 %s", dbpath)
 	}
 
-	if err := os.Rename(tmpPath, o.dbpath); err != nil {
-		return errors.Wrapf(err, "rename %s to %s", tmpPath, o.dbpath)
+	if err := os.Rename(dbpath, o.dbpath); err != nil {
+		return errors.Wrapf(err, "rename %s to %s", dbpath, o.dbpath)
 	}
 
 	return nil

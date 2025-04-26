@@ -110,7 +110,7 @@ func Init(opts ...Option) error {
 	if err := dbc.PutMetadata(dbTypes.Metadata{
 		SchemaVersion: db.SchemaVersion,
 		CreatedBy:     version.String(),
-		LastModified:  time.Now(),
+		LastModified:  time.Now().UTC(),
 	}); err != nil {
 		return errors.Wrap(err, "put metadata")
 	}
