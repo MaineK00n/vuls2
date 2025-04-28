@@ -1,8 +1,10 @@
 name: DB
+
 on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+
 jobs:
   build:
     name: build vuls.db
@@ -11,13 +13,13 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
         with:
-          root-reserve-mb: 32768 
+          root-reserve-mb: 32768
           remove-dotnet: "true"
           remove-android: "true"
           remove-haskell: "true"
           remove-codeql: "true"
           remove-docker-images: "true"
-    
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
         with:
@@ -27,23 +29,26 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      
+
       - name: Install Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq zstd
           go install go.etcd.io/bbolt/cmd/bbolt@latest
 
-      - name: vuls install
+      - name: Install vuls
         run: make install
 
-      - name: make db-build
+      - name: Install vuls-data-update
+        run: go install github.com/MaineK00n/vuls-data-update/cmd/vuls-data-update@main
+
+      - name: Build DB
         run: make db-build BRANCH=main DBPATH=./vuls.db
 
-      - name: save vuls.db schema_version
+      - name: Save vuls.db schema_version
         id: save_scheme_version
         run: echo "schema_version=$(bbolt get ./vuls.db "metadata" "db" | jq .schema_version)" >> $GITHUB_OUTPUT
 
-      - name: compact vuls.db
+      - name: Compact vuls.db
         run: |
           bbolt compact -o ./vuls-compact.db ./vuls.db
           mv ./vuls-compact.db ./vuls.db
@@ -52,7 +57,7 @@ jobs:
       - name: Install Oras
         run: |
           # https://oras.land/docs/installation/#linux
-          VERSION="1.2.0"
+          VERSION="1.2.2"
           curl -LO "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
           mkdir -p oras-install/
           tar -zxf oras_${VERSION}_*.tar.gz -C oras-install/
