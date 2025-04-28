@@ -1,10 +1,12 @@
 name: DB(Nightly)
+
 on:
   workflow_run:
     workflows: [DB]
     types:
       - completed
   workflow_dispatch:
+
 jobs:
   build:
     name: build vuls.db
@@ -35,13 +37,16 @@ jobs:
           sudo apt-get update && sudo apt-get install -y zstd
           go install go.etcd.io/bbolt/cmd/bbolt@latest
 
-      - name: vuls install
+      - name: Install vuls
         run: make install
 
-      - name: make db-build
+      - name: Install vuls-data-update
+        run: go install github.com/MaineK00n/vuls-data-update/cmd/vuls-data-update@main
+
+      - name: Build DB
         run: make db-build BRANCH=nightly DBPATH=./vuls.db
 
-      - name: compact vuls.db
+      - name: Compact vuls.db
         run: |
           bbolt compact -o ./vuls-compact.db ./vuls.db
           mv ./vuls-compact.db ./vuls.db
