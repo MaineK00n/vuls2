@@ -8,6 +8,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"gorm.io/gorm"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
@@ -27,9 +30,11 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
 	GetVulnerabilityData(dbTypes.SearchDataType, string) (*dbTypes.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
+	GetIndexes(ecosystemTypes.Ecosystem, ...string) (map[dataTypes.RootID][]string, error)
+	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
+	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
 
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error

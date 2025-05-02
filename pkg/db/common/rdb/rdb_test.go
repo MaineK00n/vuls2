@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/rdb"
@@ -114,6 +117,80 @@ func TestConnection_PutMetadata(t *testing.T) {
 
 			if err := c.PutMetadata(tt.args.metadata); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.PutMetadata() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConnection_GetIndexes(t *testing.T) {
+	type fields struct {
+		Config *rdb.Config
+	}
+	type args struct {
+		ecosystem ecosystemTypes.Ecosystem
+		queries   []string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    map[dataTypes.RootID][]string
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &rdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetIndexes(tt.args.ecosystem, tt.args.queries...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetIndexes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetIndexes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConnection_GetDetection(t *testing.T) {
+	type fields struct {
+		Config *rdb.Config
+	}
+	type args struct {
+		ecosystem ecosystemTypes.Ecosystem
+		rootID    dataTypes.RootID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID][]conditionTypes.Condition
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &rdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetDetection(tt.args.ecosystem, tt.args.rootID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetDetection() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetDetection() = %v, want %v", got, tt.want)
 			}
 		})
 	}

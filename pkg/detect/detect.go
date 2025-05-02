@@ -32,6 +32,8 @@ type options struct {
 	dbpath string
 	dbopts db.DBOptions
 
+	concurrency int
+
 	debug bool
 }
 
@@ -79,6 +81,16 @@ func WithDBOptions(dbopts db.DBOptions) Option {
 	return dboptsOption(dbopts)
 }
 
+type concurrencyOption int
+
+func (o concurrencyOption) apply(opts *options) {
+	opts.concurrency = int(o)
+}
+
+func WithConcurrency(concurrency int) Option {
+	return concurrencyOption(concurrency)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -96,6 +108,8 @@ func Detect(targets []string, opts ...Option) error {
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
+
+		concurrency: 1,
 
 		debug: false,
 	}
@@ -166,7 +180,7 @@ func Detect(targets []string, opts ...Option) error {
 			}
 
 			slog.Info("Detect", "ServerUUID", sr.ServerUUID, "scanned", latest)
-			dr, err := detect(dbc, sr)
+			dr, err := detect(dbc, sr, options.concurrency)
 			if err != nil {
 				return errors.Wrapf(err, "detect %s", sr.ServerUUID)
 			}
@@ -193,11 +207,11 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error) {
+func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
 	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
 	if len(sr.OSPackages) > 0 {
-		m, err := ospkg.Detect(dbc, sr)
+		m, err := ospkg.Detect(dbc, sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
 		}
@@ -212,7 +226,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult) (detectTypes.DetectResult, error
 	}
 
 	if len(sr.CPE) > 0 {
-		m, err := cpe.Detect(dbc, sr)
+		m, err := cpe.Detect(dbc, sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
 		}

@@ -9,6 +9,9 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
@@ -78,20 +81,28 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
-	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
-		if !yield(dbTypes.VulnerabilityDataDetection{}, errors.New("not implemented yet")) {
-			return
-		}
-	}
-}
-
 func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
+}
+
+func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
+	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
+		if !yield(dbTypes.VulnerabilityDataDetection{}, errors.New("not implemented yet")) {
+			return
+		}
+	}
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {
