@@ -72,56 +72,48 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	pfmmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]map[string][]int)
 	for name, indexes := range vcm {
 		if err := func() error {
-			done := make(chan struct{})
-			defer close(done)
-			resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, string(ecosystem), name)
-			for {
-				select {
-				case item, ok := <-resCh:
-					if !ok {
-						return nil
-					}
-					for rootID, m := range item.Contents {
-						for sourceID, conds := range m {
-							for _, cond := range conds {
-								containedIndexes := make([]int, 0, len(indexes))
-								for _, idx := range indexes {
-									isContained, err := cond.Contains(criterionTypes.Query{
-										Version:   []vcTypes.Query{vcpkgs[idx]},
-										NoneExist: &necq,
-									})
-									if err != nil {
-										return errors.Wrap(err, "condition contains")
-									}
+			for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystem), name) {
+				if err != nil {
+					return errors.Wrap(err, "get detection")
+				}
 
-									if isContained {
-										containedIndexes = append(containedIndexes, idx)
-									}
+				for rootID, m := range item.Contents {
+					for sourceID, conds := range m {
+						for _, cond := range conds {
+							containedIndexes := make([]int, 0, len(indexes))
+							for _, idx := range indexes {
+								isContained, err := cond.Contains(criterionTypes.Query{
+									Version:   []vcTypes.Query{vcpkgs[idx]},
+									NoneExist: &necq,
+								})
+								if err != nil {
+									return errors.Wrap(err, "condition contains")
 								}
-								if len(containedIndexes) > 0 {
-									if pfmmm[rootID] == nil {
-										pfmmm[rootID] = make(map[sourceTypes.SourceID]map[string][]int)
-									}
-									if pfmmm[rootID][sourceID] == nil {
-										pfmmm[rootID][sourceID] = make(map[string][]int)
-									}
 
-									k, err := json.Marshal(cond)
-									if err != nil {
-										return errors.Wrap(err, "json marshal")
-									}
-
-									pfmmm[rootID][sourceID][string(k)] = append(pfmmm[rootID][sourceID][string(k)], containedIndexes...)
+								if isContained {
+									containedIndexes = append(containedIndexes, idx)
 								}
+							}
+							if len(containedIndexes) > 0 {
+								if pfmmm[rootID] == nil {
+									pfmmm[rootID] = make(map[sourceTypes.SourceID]map[string][]int)
+								}
+								if pfmmm[rootID][sourceID] == nil {
+									pfmmm[rootID][sourceID] = make(map[string][]int)
+								}
+
+								k, err := json.Marshal(cond)
+								if err != nil {
+									return errors.Wrap(err, "json marshal")
+								}
+
+								pfmmm[rootID][sourceID][string(k)] = append(pfmmm[rootID][sourceID][string(k)], containedIndexes...)
 							}
 						}
 					}
-				case err, ok := <-errCh:
-					if ok {
-						return errors.Wrap(err, "get detection")
-					}
 				}
 			}
+			return nil
 		}(); err != nil {
 			return nil, errors.Wrapf(err, "detect pkg: %s %s", ecosystem, name)
 		}
