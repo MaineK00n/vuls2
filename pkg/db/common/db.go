@@ -1,6 +1,8 @@
 package common
 
 import (
+	"iter"
+
 	"github.com/pkg/errors"
 	"github.com/redis/rueidis"
 	bolt "go.etcd.io/bbolt"
@@ -25,7 +27,7 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityDetections(<-chan struct{}, dbTypes.SearchDetectionType, ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error)
+	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
 	GetVulnerabilityData(dbTypes.SearchDataType, string) (*dbTypes.VulnerabilityData, error)
 	PutVulnerabilityData(string) error
 

@@ -34,51 +34,43 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult) (map[dataTypes.RootID]detectType
 	pfmmm := make(map[dataTypes.RootID]map[sourceTypes.SourceID]map[string][]int)
 	for vp, indexes := range qm {
 		if err := func() error {
-			done := make(chan struct{})
-			defer close(done)
-			resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, string(ecosystemTypes.EcosystemTypeCPE), vp)
-			for {
-				select {
-				case item, ok := <-resCh:
-					if !ok {
-						return nil
-					}
-					for rootID, m := range item.Contents {
-						for sourceID, conds := range m {
-							for _, cond := range conds {
-								for _, idx := range indexes {
-									isContained, err := cond.Criteria.Contains(criterionTypes.Query{
-										Version: []vcTypes.Query{{CPE: &sr.CPE[idx]}},
-									})
+			for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, string(ecosystemTypes.EcosystemTypeCPE), vp) {
+				if err != nil {
+					return errors.Wrap(err, "get detection")
+				}
+
+				for rootID, m := range item.Contents {
+					for sourceID, conds := range m {
+						for _, cond := range conds {
+							for _, idx := range indexes {
+								isContained, err := cond.Criteria.Contains(criterionTypes.Query{
+									Version: []vcTypes.Query{{CPE: &sr.CPE[idx]}},
+								})
+								if err != nil {
+									return errors.Wrap(err, "criteria contains")
+								}
+
+								if isContained {
+									if pfmmm[rootID] == nil {
+										pfmmm[rootID] = make(map[sourceTypes.SourceID]map[string][]int)
+									}
+									if pfmmm[rootID][sourceID] == nil {
+										pfmmm[rootID][sourceID] = make(map[string][]int)
+									}
+
+									k, err := json.Marshal(cond)
 									if err != nil {
-										return errors.Wrap(err, "criteria contains")
+										return errors.Wrap(err, "json marshal")
 									}
 
-									if isContained {
-										if pfmmm[rootID] == nil {
-											pfmmm[rootID] = make(map[sourceTypes.SourceID]map[string][]int)
-										}
-										if pfmmm[rootID][sourceID] == nil {
-											pfmmm[rootID][sourceID] = make(map[string][]int)
-										}
-
-										k, err := json.Marshal(cond)
-										if err != nil {
-											return errors.Wrap(err, "json marshal")
-										}
-
-										pfmmm[rootID][sourceID][string(k)] = append(pfmmm[rootID][sourceID][string(k)], idx)
-									}
+									pfmmm[rootID][sourceID][string(k)] = append(pfmmm[rootID][sourceID][string(k)], idx)
 								}
 							}
 						}
 					}
-				case err, ok := <-errCh:
-					if ok {
-						return errors.Wrap(err, "get detection")
-					}
 				}
 			}
+			return nil
 		}(); err != nil {
 			return nil, errors.Wrapf(err, "detect cpe: %s %s", ecosystemTypes.EcosystemTypeCPE, vp)
 		}

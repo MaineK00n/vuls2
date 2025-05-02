@@ -106,84 +106,52 @@ func Search(searchType string, queries []string, opts ...Option) error {
 	switch searchType {
 	case "detection-pkg":
 		slog.Info("Get Vulnerability Detections", "ecosystem", queries[0], "key", queries[1])
-		done := make(chan struct{})
-		defer close(done)
-		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionPkg, queries[0], queries[1])
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return nil
-				}
-				if err := e.Encode(item); err != nil {
-					return errors.Wrapf(err, "encode %s %s", queries[0], queries[1])
-				}
-			case err, ok := <-errCh:
-				if ok {
-					return errors.Wrap(err, "get pkg detections")
-				}
+		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1]) {
+			if err != nil {
+				return errors.Wrap(err, "get pkg detections")
+			}
+			if err := e.Encode(item); err != nil {
+				return errors.Wrapf(err, "encode %s %s", queries[0], queries[1])
 			}
 		}
+
+		return nil
 	case "detection-root":
 		slog.Info("Get Vulnerability Detections", "root id", queries[0])
-		done := make(chan struct{})
-		defer close(done)
-		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionRoot, queries[0])
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return nil
-				}
-				if err := e.Encode(item); err != nil {
-					return errors.Wrapf(err, "encode %s", queries[0])
-				}
-			case err, ok := <-errCh:
-				if ok {
-					return errors.Wrap(err, "get root detections")
-				}
+		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0]) {
+			if err != nil {
+				return errors.Wrap(err, "get root detections")
+			}
+			if err := e.Encode(item); err != nil {
+				return errors.Wrapf(err, "encode %s", queries[0])
 			}
 		}
+
+		return nil
 	case "detection-advisory":
 		slog.Info("Get Vulnerability Detections", "advisory id", queries[0])
-		done := make(chan struct{})
-		defer close(done)
-		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionAdvisory, queries[0])
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return nil
-				}
-				if err := e.Encode(item); err != nil {
-					return errors.Wrapf(err, "encode %s", queries[0])
-				}
-			case err, ok := <-errCh:
-				if ok {
-					return errors.Wrap(err, "get advisory detections")
-				}
+		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0]) {
+			if err != nil {
+				return errors.Wrap(err, "get advisory detections")
+			}
+			if err := e.Encode(item); err != nil {
+				return errors.Wrapf(err, "encode %s", queries[0])
 			}
 		}
+
+		return nil
 	case "detection-vulnerability":
 		slog.Info("Get Vulnerability Detections", "vulnerability id", queries[0])
-		done := make(chan struct{})
-		defer close(done)
-		resCh, errCh := dbc.GetVulnerabilityDetections(done, dbTypes.SearchDetectionVulnerability, queries[0])
-		for {
-			select {
-			case item, ok := <-resCh:
-				if !ok {
-					return nil
-				}
-				if err := e.Encode(item); err != nil {
-					return errors.Wrapf(err, "encode %s", queries[0])
-				}
-			case err, ok := <-errCh:
-				if ok {
-					return errors.Wrap(err, "get vulnerability detections")
-				}
+		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0]) {
+			if err != nil {
+				return errors.Wrap(err, "get vulnerability detections")
+			}
+			if err := e.Encode(item); err != nil {
+				return errors.Wrapf(err, "encode %s", queries[0])
 			}
 		}
+
+		return nil
 	case "data-root":
 		slog.Info("Get Vulnerability Data", "root id", queries[0])
 		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, queries[0])

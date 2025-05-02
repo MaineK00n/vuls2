@@ -1,6 +1,7 @@
 package rdb_test
 
 import (
+	"iter"
 	"reflect"
 	"testing"
 
@@ -123,16 +124,14 @@ func TestConnection_GetVulnerabilityDetections(t *testing.T) {
 		Config *rdb.Config
 	}
 	type args struct {
-		done       <-chan struct{}
 		searchType dbTypes.SearchDetectionType
 		queries    []string
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		wantResCh <-chan dbTypes.VulnerabilityDataDetection
-		wantErrCh <-chan error
+		name   string
+		fields fields
+		args   args
+		want   iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,12 +143,8 @@ func TestConnection_GetVulnerabilityDetections(t *testing.T) {
 			}
 			defer c.Close() //nolint:errcheck
 
-			gotResCh, gotErrCh := c.GetVulnerabilityDetections(tt.args.done, tt.args.searchType, tt.args.queries...)
-			if !reflect.DeepEqual(gotResCh, tt.wantResCh) {
-				t.Errorf("Connection.GetVulnerabilityDetections() got = %v, want %v", gotResCh, tt.wantResCh)
-			}
-			if !reflect.DeepEqual(gotErrCh, tt.wantErrCh) {
-				t.Errorf("Connection.GetVulnerabilityDetections() got1 = %v, want %v", gotErrCh, tt.wantErrCh)
+			if got := c.GetVulnerabilityDetections(tt.args.searchType, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetVulnerabilityDetections() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -109,14 +110,8 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	})
 }
 
-func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType dbTypes.SearchDetectionType, queries ...string) (<-chan dbTypes.VulnerabilityDataDetection, <-chan error) {
-	resCh := make(chan dbTypes.VulnerabilityDataDetection, 1)
-	errCh := make(chan error, 1)
-
-	go func() {
-		defer close(resCh)
-		defer close(errCh)
-
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
+	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
 		if err := c.conn.View(func(tx *bolt.Tx) error {
 			switch searchType {
 			case dbTypes.SearchDetectionPkg:
@@ -155,13 +150,11 @@ func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType
 						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", queries[0], rootID))
 					}
 
-					select {
-					case <-done:
-						return nil
-					case resCh <- dbTypes.VulnerabilityDataDetection{
+					if !yield(dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
 						Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: m},
-					}:
+					}, nil) {
+						return nil
 					}
 				}
 
@@ -174,12 +167,10 @@ func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType
 				if err != nil {
 					return errors.WithStack(err)
 				}
-				for _, d := range ds {
-					select {
-					case <-done:
-						return nil
-					case resCh <- d:
 
+				for _, d := range ds {
+					if !yield(d, nil) {
+						return nil
 					}
 				}
 
@@ -223,13 +214,11 @@ func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType
 				}
 
 				for ecosystem, m := range em {
-					select {
-					case <-done:
-						return nil
-					case resCh <- dbTypes.VulnerabilityDataDetection{
+					if !yield(dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
-					}:
+					}, nil) {
+						return nil
 					}
 				}
 
@@ -273,13 +262,11 @@ func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType
 				}
 
 				for ecosystem, m := range em {
-					select {
-					case <-done:
-						return nil
-					case resCh <- dbTypes.VulnerabilityDataDetection{
+					if !yield(dbTypes.VulnerabilityDataDetection{
 						Ecosystem: ecosystem,
 						Contents:  m,
-					}:
+					}, nil) {
+						return nil
 					}
 				}
 
@@ -288,16 +275,11 @@ func (c *Connection) GetVulnerabilityDetections(done <-chan struct{}, searchType
 				return errors.Errorf("unexpected search type. expected: %q, actual: %s", []dbTypes.SearchDetectionType{dbTypes.SearchDetectionPkg, dbTypes.SearchDetectionRoot, dbTypes.SearchDetectionAdvisory, dbTypes.SearchDetectionVulnerability}, searchType)
 			}
 		}); err != nil {
-			select {
-			case <-done:
-				return
-			case errCh <- errors.WithStack(err):
+			if !yield(dbTypes.VulnerabilityDataDetection{}, errors.WithStack(err)) {
 				return
 			}
 		}
-	}()
-
-	return resCh, errCh
+	}
 }
 
 func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
@@ -413,25 +395,11 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				})
 			}
 
-			if err := func() error {
-				done := make(chan struct{})
-				defer close(done)
-				resCh, errCh := c.GetVulnerabilityDetections(done, dbTypes.SearchDetectionAdvisory, id)
-				for {
-					select {
-					case item, ok := <-resCh:
-						if !ok {
-							return nil
-						}
-						root.Detections = append(root.Detections, item)
-					case err, ok := <-errCh:
-						if ok {
-							return errors.Wrap(err, "get advisory detections")
-						}
-					}
+			for item, err := range c.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, id) {
+				if err != nil {
+					return errors.Wrap(err, "get advisory detections")
 				}
-			}(); err != nil {
-				return errors.Wrap(err, "get detection")
+				root.Detections = append(root.Detections, item)
 			}
 
 			for _, datasource := range r.DataSources {
@@ -499,25 +467,11 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id 
 				})
 			}
 
-			if err := func() error {
-				done := make(chan struct{})
-				defer close(done)
-				resCh, errCh := c.GetVulnerabilityDetections(done, dbTypes.SearchDetectionVulnerability, id)
-				for {
-					select {
-					case item, ok := <-resCh:
-						if !ok {
-							return nil
-						}
-						root.Detections = append(root.Detections, item)
-					case err, ok := <-errCh:
-						if ok {
-							return errors.Wrap(err, "get vulnerability detections")
-						}
-					}
+			for item, err := range c.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, id) {
+				if err != nil {
+					return errors.Wrap(err, "get vulnerability detections")
 				}
-			}(); err != nil {
-				return errors.Wrap(err, "get detection")
+				root.Detections = append(root.Detections, item)
 			}
 
 			for _, datasource := range r.DataSources {
