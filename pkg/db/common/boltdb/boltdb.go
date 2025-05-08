@@ -110,178 +110,6 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	})
 }
 
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
-	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
-		if err := c.conn.View(func(tx *bolt.Tx) error {
-			switch searchType {
-			case dbTypes.SearchDetectionPkg:
-				if len(queries) != 2 {
-					return errors.Errorf("unexpected pkg search queries. expected: %q, actual: %q", []string{"<ecosystem>", "<key>"}, queries)
-				}
-
-				eb := tx.Bucket([]byte(queries[0]))
-				if eb == nil {
-					return nil
-				}
-
-				eib := eb.Bucket([]byte("index"))
-				if eib == nil {
-					return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> index", queries[0]))
-				}
-
-				bs := eib.Get([]byte(queries[1]))
-				if len(bs) == 0 {
-					return nil
-				}
-
-				var rootIDs []dataTypes.RootID
-				if err := util.Unmarshal(bs, &rootIDs); err != nil {
-					return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> index -> %s", queries[0], queries[1]))
-				}
-
-				edb := eb.Bucket([]byte("detection"))
-				if edb == nil {
-					return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> detection", queries[0]))
-				}
-
-				for _, rootID := range rootIDs {
-					var m map[sourceTypes.SourceID][]conditionTypes.Condition
-					if err := util.Unmarshal(edb.Get([]byte(rootID)), &m); err != nil {
-						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", queries[0], rootID))
-					}
-
-					if !yield(dbTypes.VulnerabilityDataDetection{
-						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
-						Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: m},
-					}, nil) {
-						return nil
-					}
-				}
-
-				return nil
-			case dbTypes.SearchDetectionRoot:
-				if len(queries) != 1 {
-					return errors.Errorf("unexpected root search queries. expected: %q, actual: %q", []string{"<root id>"}, queries)
-				}
-				ds, err := getDetection(tx, dataTypes.RootID(queries[0]))
-				if err != nil {
-					return errors.WithStack(err)
-				}
-
-				for _, d := range ds {
-					if !yield(d, nil) {
-						return nil
-					}
-				}
-
-				return nil
-			case dbTypes.SearchDetectionAdvisory:
-				if len(queries) != 1 {
-					return errors.Errorf("unexpected advisory search queries. expected: %q, actual: %q", []string{"<advisory id>"}, queries)
-				}
-
-				am, err := getAdvisory(tx, advisoryContentTypes.AdvisoryID(queries[0]))
-				if err != nil {
-					return errors.Wrap(err, "get advisory")
-				}
-
-				rootIDs := func() []dataTypes.RootID {
-					var rs []dataTypes.RootID
-					for _, mm := range am {
-						for rootID := range mm {
-							if !slices.Contains(rs, rootID) {
-								rs = append(rs, rootID)
-							}
-						}
-					}
-					return rs
-				}()
-
-				em := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-				for _, rootID := range rootIDs {
-					ds, err := getDetection(tx, rootID)
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					for _, d := range ds {
-						if em[d.Ecosystem] == nil {
-							em[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-						}
-						for rootID, cm := range d.Contents {
-							em[d.Ecosystem][rootID] = cm
-						}
-					}
-				}
-
-				for ecosystem, m := range em {
-					if !yield(dbTypes.VulnerabilityDataDetection{
-						Ecosystem: ecosystem,
-						Contents:  m,
-					}, nil) {
-						return nil
-					}
-				}
-
-				return nil
-			case dbTypes.SearchDetectionVulnerability:
-				if len(queries) != 1 {
-					return errors.Errorf("unexpected vulnerability search queries. expected: %q, actual: %q", []string{"<vulnerability id>"}, queries)
-				}
-
-				vm, err := getVulnerability(tx, vulnerabilityContentTypes.VulnerabilityID(queries[0]))
-				if err != nil {
-					return errors.Wrap(err, "get vulnerability")
-				}
-
-				rootIDs := func() []dataTypes.RootID {
-					var rs []dataTypes.RootID
-					for _, mm := range vm {
-						for rootID := range mm {
-							if !slices.Contains(rs, rootID) {
-								rs = append(rs, rootID)
-							}
-						}
-					}
-					return rs
-				}()
-
-				em := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-				for _, rootID := range rootIDs {
-					ds, err := getDetection(tx, rootID)
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					for _, d := range ds {
-						if em[d.Ecosystem] == nil {
-							em[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-						}
-						for rootID, cm := range d.Contents {
-							em[d.Ecosystem][rootID] = cm
-						}
-					}
-				}
-
-				for ecosystem, m := range em {
-					if !yield(dbTypes.VulnerabilityDataDetection{
-						Ecosystem: ecosystem,
-						Contents:  m,
-					}, nil) {
-						return nil
-					}
-				}
-
-				return nil
-			default:
-				return errors.Errorf("unexpected search type. expected: %q, actual: %s", []dbTypes.SearchDetectionType{dbTypes.SearchDetectionPkg, dbTypes.SearchDetectionRoot, dbTypes.SearchDetectionAdvisory, dbTypes.SearchDetectionVulnerability}, searchType)
-			}
-		}); err != nil {
-			if !yield(dbTypes.VulnerabilityDataDetection{}, errors.WithStack(err)) {
-				return
-			}
-		}
-	}
-}
-
 func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
 	root := dbTypes.VulnerabilityData{ID: id}
 
@@ -864,6 +692,238 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	}
 
 	return nil
+}
+
+func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
+	m := make(map[dataTypes.RootID][]string)
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		eb := tx.Bucket([]byte(ecosystem))
+		if eb == nil {
+			return nil
+		}
+
+		eib := eb.Bucket([]byte("index"))
+		if eib == nil {
+			return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> index", ecosystem))
+		}
+
+		for _, query := range queries {
+			bs := eib.Get([]byte(query))
+			if len(bs) == 0 {
+				continue
+			}
+
+			var rootIDs []dataTypes.RootID
+			if err := util.Unmarshal(bs, &rootIDs); err != nil {
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> index -> %s", ecosystem, query))
+			}
+
+			for _, rootID := range rootIDs {
+				m[rootID] = append(m[rootID], query)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
+func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
+	var m map[sourceTypes.SourceID][]conditionTypes.Condition
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		eb := tx.Bucket([]byte(ecosystem))
+		if eb == nil {
+			return nil
+		}
+
+		edb := eb.Bucket([]byte("detection"))
+		if edb == nil {
+			return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> detection", ecosystem))
+		}
+
+		if err := util.Unmarshal(edb.Get([]byte(rootID)), &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
+func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
+	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
+		if err := c.conn.View(func(tx *bolt.Tx) error {
+			switch searchType {
+			case dbTypes.SearchDetectionPkg:
+				if len(queries) != 2 {
+					return errors.Errorf("unexpected pkg search queries. expected: %q, actual: %q", []string{"<ecosystem>", "<key>"}, queries)
+				}
+
+				eb := tx.Bucket([]byte(queries[0]))
+				if eb == nil {
+					return nil
+				}
+
+				eib := eb.Bucket([]byte("index"))
+				if eib == nil {
+					return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> index", queries[0]))
+				}
+
+				bs := eib.Get([]byte(queries[1]))
+				if len(bs) == 0 {
+					return nil
+				}
+
+				var rootIDs []dataTypes.RootID
+				if err := util.Unmarshal(bs, &rootIDs); err != nil {
+					return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> index -> %s", queries[0], queries[1]))
+				}
+
+				edb := eb.Bucket([]byte("detection"))
+				if edb == nil {
+					return errors.Errorf("bucket: %s is not exists", fmt.Sprintf("%s -> detection", queries[0]))
+				}
+
+				for _, rootID := range rootIDs {
+					var m map[sourceTypes.SourceID][]conditionTypes.Condition
+					if err := util.Unmarshal(edb.Get([]byte(rootID)), &m); err != nil {
+						return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> detection -> %s", queries[0], rootID))
+					}
+
+					if !yield(dbTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystemTypes.Ecosystem(queries[0]),
+						Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: m},
+					}, nil) {
+						return nil
+					}
+				}
+
+				return nil
+			case dbTypes.SearchDetectionRoot:
+				if len(queries) != 1 {
+					return errors.Errorf("unexpected root search queries. expected: %q, actual: %q", []string{"<root id>"}, queries)
+				}
+				ds, err := getDetection(tx, dataTypes.RootID(queries[0]))
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				for _, d := range ds {
+					if !yield(d, nil) {
+						return nil
+					}
+				}
+
+				return nil
+			case dbTypes.SearchDetectionAdvisory:
+				if len(queries) != 1 {
+					return errors.Errorf("unexpected advisory search queries. expected: %q, actual: %q", []string{"<advisory id>"}, queries)
+				}
+
+				am, err := getAdvisory(tx, advisoryContentTypes.AdvisoryID(queries[0]))
+				if err != nil {
+					return errors.Wrap(err, "get advisory")
+				}
+
+				rootIDs := func() []dataTypes.RootID {
+					var rs []dataTypes.RootID
+					for _, mm := range am {
+						for rootID := range mm {
+							if !slices.Contains(rs, rootID) {
+								rs = append(rs, rootID)
+							}
+						}
+					}
+					return rs
+				}()
+
+				em := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
+				for _, rootID := range rootIDs {
+					ds, err := getDetection(tx, rootID)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+					for _, d := range ds {
+						if em[d.Ecosystem] == nil {
+							em[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
+						}
+						for rootID, cm := range d.Contents {
+							em[d.Ecosystem][rootID] = cm
+						}
+					}
+				}
+
+				for ecosystem, m := range em {
+					if !yield(dbTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystem,
+						Contents:  m,
+					}, nil) {
+						return nil
+					}
+				}
+
+				return nil
+			case dbTypes.SearchDetectionVulnerability:
+				if len(queries) != 1 {
+					return errors.Errorf("unexpected vulnerability search queries. expected: %q, actual: %q", []string{"<vulnerability id>"}, queries)
+				}
+
+				vm, err := getVulnerability(tx, vulnerabilityContentTypes.VulnerabilityID(queries[0]))
+				if err != nil {
+					return errors.Wrap(err, "get vulnerability")
+				}
+
+				rootIDs := func() []dataTypes.RootID {
+					var rs []dataTypes.RootID
+					for _, mm := range vm {
+						for rootID := range mm {
+							if !slices.Contains(rs, rootID) {
+								rs = append(rs, rootID)
+							}
+						}
+					}
+					return rs
+				}()
+
+				em := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
+				for _, rootID := range rootIDs {
+					ds, err := getDetection(tx, rootID)
+					if err != nil {
+						return errors.WithStack(err)
+					}
+					for _, d := range ds {
+						if em[d.Ecosystem] == nil {
+							em[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
+						}
+						for rootID, cm := range d.Contents {
+							em[d.Ecosystem][rootID] = cm
+						}
+					}
+				}
+
+				for ecosystem, m := range em {
+					if !yield(dbTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystem,
+						Contents:  m,
+					}, nil) {
+						return nil
+					}
+				}
+
+				return nil
+			default:
+				return errors.Errorf("unexpected search type. expected: %q, actual: %s", []dbTypes.SearchDetectionType{dbTypes.SearchDetectionPkg, dbTypes.SearchDetectionRoot, dbTypes.SearchDetectionAdvisory, dbTypes.SearchDetectionVulnerability}, searchType)
+			}
+		}); err != nil {
+			if !yield(dbTypes.VulnerabilityDataDetection{}, errors.WithStack(err)) {
+				return
+			}
+		}
+	}
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {
