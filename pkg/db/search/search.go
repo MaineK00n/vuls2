@@ -89,7 +89,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer dbc.Close() //nolint:errcheck
+	defer dbc.Close()
 
 	slog.Info("Get Metadata")
 	meta, err := dbc.GetMetadata()

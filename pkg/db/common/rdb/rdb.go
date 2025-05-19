@@ -74,7 +74,7 @@ func (c *Connection) Close() error {
 	if err != nil {
 		return errors.Wrap(err, "get *sql.DB")
 	}
-	return db.Close() //nolint:errcheck
+	return db.Close()
 }
 
 func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {

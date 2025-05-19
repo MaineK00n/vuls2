@@ -71,7 +71,11 @@ func (c *Config) New() (DB, error) {
 	case "redis":
 		conf := c.Options.Redis
 		if conf == nil {
-			conf = &rueidis.ClientOption{InitAddress: []string{c.Path}}
+			c, err := rueidis.ParseURL(c.Path)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse redis url")
+			}
+			conf = &c
 		}
 		return &redis.Connection{Config: conf}, nil
 	case "sqlite3", "mysql", "postgres":

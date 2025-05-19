@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,17 +30,17 @@ import (
 
 // redis: HASH KEY: "metadata" FIELD: "db" VALUE: dbtypes.Metadata
 
-// redis: STRING KEY: "vulnerability#root#<Root ID>" VALUE: vulnerabilityRoot
+// redis: HASH KEY: "vulnerability#root#<Root ID>" FIELD: <Source ID> VALUE: vulnerabilityRoot
 
 // redis: HASH KEY: "vulnerability#advisory#<Advisory ID>" FIELD: "<Source ID>#<Root ID>" VALUE: []advisoryTypes.Advisory
 
 // redis: HASH KEY: "vulnerability#vulnerability#<CVE ID>" FIELD: "<Source ID>#<Root ID>" VALUE: []vulnerabilityTypes.Vulnerability
 
-// redis: SET KEY: "<ecosystem>#index#<package>" MEMBER: <Root ID>
+// redis: HASH KEY: "<ecosystem>#index#<package>" FIELD: <Source ID> VALUE: []<Root ID>
 
 // redis: HASH KEY: "<ecosystem>#detection#<Root ID>" FIELD: <Source ID> VALUE: []conditionTypes.Condition
 
-// redis: HASH KEY "datasource" FIELD: <Source ID> VALUE: datasourceTypes.DataSource
+// redis: HASH KEY: "datasource" FIELD: <Source ID> VALUE: datasourceTypes.DataSource
 
 type Connection struct {
 	Config *rueidis.ClientOption
@@ -64,7 +65,7 @@ func (c *Connection) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	c.conn.Close() //nolint:errcheck
+	c.conn.Close()
 	return nil
 }
 
@@ -487,7 +488,31 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries
 func (c *Connection) PutVulnerabilityData(root string) error {
 	ctx := context.TODO()
 
-	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	datasource, err := func(path string) (datasourceTypes.DataSource, error) {
+		f, err := os.Open(path)
+		if err != nil {
+			return datasourceTypes.DataSource{}, errors.Wrapf(err, "open %s", path)
+		}
+		defer f.Close()
+
+		var datasource datasourceTypes.DataSource
+		if err := json.NewDecoder(f).Decode(&datasource); err != nil {
+			return datasourceTypes.DataSource{}, errors.Wrapf(err, "decode %s", path)
+		}
+
+		return datasource, nil
+	}(filepath.Join(root, "datasource.json"))
+	if err != nil {
+		return errors.Wrap(err, "get datasource")
+	}
+
+	cmds, err := c.removeSource(ctx, datasource.ID)
+	if err != nil {
+		return errors.Wrap(err, "remove source")
+	}
+
+	indexm := make(map[string][]dataTypes.RootID)
+	if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -500,69 +525,260 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 		if err != nil {
 			return errors.Wrapf(err, "open %s", path)
 		}
-		defer f.Close() //nolint:errcheck
+		defer f.Close()
 
 		var data dataTypes.Data
 		if err := json.NewDecoder(f).Decode(&data); err != nil {
 			return errors.Wrapf(err, "decode %s", path)
 		}
 
-		if err := c.putDetection(ctx, data); err != nil {
+		cs, m, err := c.putDetection(data)
+		if err != nil {
 			return errors.Wrap(err, "put detection")
 		}
+		cmds = append(cmds, cs...)
+		maps.Copy(indexm, m)
 
-		if err := c.putAdvisory(ctx, data); err != nil {
+		cs, err = c.putAdvisory(data)
+		if err != nil {
 			return errors.Wrap(err, "put advisory")
 		}
+		cmds = append(cmds, cs...)
 
-		if err := c.putVulnerability(ctx, data); err != nil {
+		cs, err = c.putVulnerability(data)
+		if err != nil {
 			return errors.Wrap(err, "put vulnerability")
 		}
+		cmds = append(cmds, cs...)
 
-		if err := c.putRoot(ctx, data); err != nil {
+		cs, err = c.putRoot(data)
+		if err != nil {
 			return errors.Wrap(err, "put root")
 		}
+		cmds = append(cmds, cs...)
 
 		return nil
 	}); err != nil {
 		return errors.Wrapf(err, "walk %s", root)
 	}
 
-	return nil
-}
+	cs, err := c.putIndex(datasource.ID, indexm)
+	if err != nil {
+		return errors.Wrap(err, "put index")
+	}
+	cmds = append(cmds, cs...)
 
-func (c *Connection) putDetection(ctx context.Context, data dataTypes.Data) error {
-	for _, d := range data.Detections {
-		bs, err := util.Marshal(d.Conditions)
-		if err != nil {
-			return errors.Wrap(err, "marshal conditions")
-		}
-
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID), data.DataSource.ID, string(bs))
-		}
-
-		var pkgs []string
-		for _, cond := range d.Conditions {
-			ps, err := util.WalkCriteria(cond.Criteria)
-			if err != nil {
-				return errors.Wrap(err, "walk criteria")
-			}
-			pkgs = append(pkgs, ps...)
-		}
-		slices.Sort(pkgs)
-
-		for _, p := range slices.Compact(pkgs) {
-			if err := c.conn.Do(ctx, c.conn.B().Sadd().Key(fmt.Sprintf("%s#index#%s", d.Ecosystem, p)).Member(string(data.ID)).Build()).Error(); err != nil {
-				return errors.Wrapf(err, "SADD %s %s", fmt.Sprintf("%s#index#%s", d.Ecosystem, p), data.ID)
-			}
+	resps := c.conn.DoMulti(ctx, cmds...)
+	for i, resp := range resps {
+		if err := resp.Error(); err != nil {
+			return errors.Wrapf(err, "%s", strings.Join(cmds[i].Commands(), " "))
 		}
 	}
 
 	return nil
 }
 
-func (c *Connection) putAdvisory(ctx context.Context, data dataTypes.Data) error {
+func (c *Connection) removeSource(ctx context.Context, sourceID sourceTypes.SourceID) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	if err := func() error {
+		var cursor uint64
+
+		for {
+			entry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("vulnerability#root#*").Count(10000).Build()).AsScanEntry()
+			if err != nil {
+				return errors.Wrapf(err, "SCAN %d MATCH %s COUNT 10000", cursor, "vulnerability#root#*")
+			}
+
+			for _, e := range entry.Elements {
+				cmds = append(cmds, c.conn.B().Hdel().Key(e).Field(string(sourceID)).Build())
+			}
+
+			cursor = entry.Cursor
+			if cursor == 0 {
+				break
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return nil, errors.Wrap(err, "SCAN vulnerability#root#*")
+	}
+
+	if err := func() error {
+		var cursor uint64
+
+		for {
+			kentry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("vulnerability#advisory#*").Count(10000).Build()).AsScanEntry()
+			if err != nil {
+				return errors.Wrapf(err, "SCAN %d MATCH %s COUNT 10000", cursor, "vulnerability#advisory#*")
+			}
+
+			for _, k := range kentry.Elements {
+				if err := func() error {
+					var cursor uint64
+
+					for {
+						fentry, err := c.conn.Do(ctx, c.conn.B().Hscan().Key(k).Cursor(cursor).Match(fmt.Sprintf("%s#*", sourceID)).Count(1000).Build()).AsScanEntry()
+						if err != nil {
+							return errors.Wrapf(err, "HSCAN %s %d MATCH %s COUNT 10000", k, cursor, fmt.Sprintf("%s#*", sourceID))
+						}
+
+						for _, f := range fentry.Elements {
+							cmds = append(cmds, c.conn.B().Hdel().Key(k).Field(f).Build())
+						}
+
+						cursor = fentry.Cursor
+						if cursor == 0 {
+							break
+						}
+					}
+
+					return nil
+				}(); err != nil {
+					return errors.Wrapf(err, "HSCAN %s", k)
+				}
+			}
+
+			cursor = kentry.Cursor
+			if cursor == 0 {
+				break
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return nil, errors.Wrap(err, "SCAN vulnerability#advisory#*")
+	}
+
+	if err := func() error {
+		var cursor uint64
+
+		for {
+			kentry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("vulnerability#vulnerability#*").Count(10000).Build()).AsScanEntry()
+			if err != nil {
+				return errors.Wrapf(err, "SCAN %d MATCH %s COUNT 10000", cursor, "vulnerability#vulnerability#*")
+			}
+
+			for _, k := range kentry.Elements {
+				if err := func() error {
+					var cursor uint64
+
+					for {
+						fentry, err := c.conn.Do(ctx, c.conn.B().Hscan().Key(k).Cursor(cursor).Match(fmt.Sprintf("%s#*", sourceID)).Count(1000).Build()).AsScanEntry()
+						if err != nil {
+							return errors.Wrapf(err, "HSCAN %s %d MATCH %s COUNT 10000", k, cursor, fmt.Sprintf("%s#*", sourceID))
+						}
+
+						for _, f := range fentry.Elements {
+							cmds = append(cmds, c.conn.B().Hdel().Key(k).Field(f).Build())
+						}
+
+						cursor = fentry.Cursor
+						if cursor == 0 {
+							break
+						}
+					}
+
+					return nil
+				}(); err != nil {
+					return errors.Wrapf(err, "HSCAN %s", k)
+				}
+			}
+
+			cursor = kentry.Cursor
+			if cursor == 0 {
+				break
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return nil, errors.Wrap(err, "SCAN vulnerability#vulnerability#*")
+	}
+
+	if err := func() error {
+		var cursor uint64
+
+		for {
+			entry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("*#index#*").Count(10000).Build()).AsScanEntry()
+			if err != nil {
+				return errors.Wrapf(err, "SCAN %d MATCH %s COUNT 10000", cursor, "*#index#*")
+			}
+
+			for _, e := range entry.Elements {
+				cmds = append(cmds, c.conn.B().Hdel().Key(e).Field(string(sourceID)).Build())
+			}
+
+			cursor = entry.Cursor
+			if cursor == 0 {
+				break
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return nil, errors.Wrap(err, "SCAN *#index#*")
+	}
+
+	if err := func() error {
+		var cursor uint64
+
+		for {
+			entry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("*#detection#*").Count(10000).Build()).AsScanEntry()
+			if err != nil {
+				return errors.Wrapf(err, "SCAN %d MATCH %s COUNT 10000", cursor, "*#detection#*")
+			}
+
+			for _, e := range entry.Elements {
+				cmds = append(cmds, c.conn.B().Hdel().Key(e).Field(string(sourceID)).Build())
+			}
+
+			cursor = entry.Cursor
+			if cursor == 0 {
+				break
+			}
+		}
+
+		return nil
+	}(); err != nil {
+		return nil, errors.Wrap(err, "SCAN *#detection#*")
+	}
+
+	return cmds, nil
+}
+
+func (c *Connection) putDetection(data dataTypes.Data) (rueidis.Commands, map[string][]dataTypes.RootID, error) {
+	var cmds rueidis.Commands
+	m := make(map[string][]dataTypes.RootID)
+
+	for _, d := range data.Detections {
+		bs, err := util.Marshal(d.Conditions)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "marshal conditions")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
+
+		for _, cond := range d.Conditions {
+			ps, err := util.WalkCriteria(cond.Criteria)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "walk criteria")
+			}
+			for _, p := range ps {
+				if slices.Contains(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID) {
+					m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)] = append(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID)
+				}
+			}
+		}
+	}
+
+	return cmds, m, nil
+}
+
+func (c *Connection) putAdvisory(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
 	m := make(map[advisoryContentTypes.AdvisoryID][]advisoryTypes.Advisory)
 	for _, a := range data.Advisories {
 		m[a.Content.ID] = append(m[a.Content.ID], a)
@@ -571,18 +787,18 @@ func (c *Connection) putAdvisory(ctx context.Context, data dataTypes.Data) error
 	for id, as := range m {
 		bs, err := util.Marshal(as)
 		if err != nil {
-			return errors.Wrap(err, "marshal advisories")
+			return nil, errors.Wrap(err, "marshal advisories")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#advisory#%s", id), fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs))
-		}
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
 	}
 
-	return nil
+	return cmds, nil
 }
 
-func (c *Connection) putVulnerability(ctx context.Context, data dataTypes.Data) error {
+func (c *Connection) putVulnerability(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
 	m := make(map[vulnerabilityContentTypes.VulnerabilityID][]vulnerabilityTypes.Vulnerability)
 	for _, v := range data.Vulnerabilities {
 		m[v.Content.ID] = append(m[v.Content.ID], v)
@@ -591,19 +807,19 @@ func (c *Connection) putVulnerability(ctx context.Context, data dataTypes.Data) 
 	for id, vs := range m {
 		bs, err := util.Marshal(vs)
 		if err != nil {
-			return errors.Wrap(err, "marshal vulnerabilities")
+			return nil, errors.Wrap(err, "marshal vulnerabilities")
 		}
 
-		if err := c.conn.Do(ctx, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build()).Error(); err != nil {
-			return errors.Wrapf(err, "HSET %s %s %q", fmt.Sprintf("vulnerability#vulnerability#%s", id), fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs))
-		}
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
 	}
 
-	return nil
+	return cmds, nil
 }
 
-func (c *Connection) putRoot(ctx context.Context, data dataTypes.Data) error {
-	root := vulnerabilityRoot{
+func (c *Connection) putRoot(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	bs, err := util.Marshal(vulnerabilityRoot{
 		ID: data.ID,
 		Advisories: func() []advisoryContentTypes.AdvisoryID {
 			as := make([]advisoryContentTypes.AdvisoryID, 0, len(data.Advisories))
@@ -627,51 +843,29 @@ func (c *Connection) putRoot(ctx context.Context, data dataTypes.Data) error {
 			return es
 		}(),
 		DataSources: []sourceTypes.SourceID{data.DataSource.ID},
-	}
-
-	bs, err := c.conn.Do(ctx, c.conn.B().Get().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).Build()).AsBytes()
-	if err != nil && !rueidis.IsRedisNil(err) {
-		return errors.Wrapf(err, "GET %s", fmt.Sprintf("vulnerability#root#%s", data.ID))
-	}
-
-	if len(bs) > 0 {
-		var r vulnerabilityRoot
-		if err := util.Unmarshal(bs, &r); err != nil {
-			return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability#root#%s", r.ID))
-		}
-
-		for _, a := range r.Advisories {
-			if !slices.Contains(root.Advisories, a) {
-				root.Advisories = append(root.Advisories, a)
-			}
-		}
-		for _, v := range r.Vulnerabilities {
-			if !slices.Contains(root.Vulnerabilities, v) {
-				root.Vulnerabilities = append(root.Vulnerabilities, v)
-			}
-		}
-		for _, e := range r.Ecosystems {
-			if !slices.Contains(root.Ecosystems, e) {
-				root.Ecosystems = append(root.Ecosystems, e)
-			}
-		}
-		for _, d := range r.DataSources {
-			if !slices.Contains(root.DataSources, d) {
-				root.DataSources = append(root.DataSources, d)
-			}
-		}
-	}
-
-	bs, err = util.Marshal(root)
+	})
 	if err != nil {
-		return errors.Wrap(err, "marshal root")
+		return nil, errors.Wrap(err, "marshal root")
 	}
 
-	if err := c.conn.Do(ctx, c.conn.B().Set().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).Value(string(bs)).Build()).Error(); err != nil {
-		return errors.Wrapf(err, "SET %s %q", fmt.Sprintf("vulnerability#root#%s", data.ID), string(bs))
+	cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
+
+	return cmds, nil
+}
+
+func (c *Connection) putIndex(sourceID sourceTypes.SourceID, m map[string][]dataTypes.RootID) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	for k, v := range m {
+		bs, err := util.Marshal(v)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal root ids")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(k).FieldValue().FieldValue(string(sourceID), string(bs)).Build())
 	}
 
-	return nil
+	return cmds, nil
 }
 
 func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
@@ -827,9 +1021,9 @@ func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...s
 
 	m := make(map[dataTypes.RootID][]string)
 	for _, q := range queries {
-		rootIDs, err := c.conn.Do(ctx, c.conn.B().Smembers().Key(fmt.Sprintf("%s#index#%s", ecosystem, q)).Build()).AsStrSlice()
+		rootIDs, err := c.conn.Do(ctx, c.conn.B().Hgetall().Key(fmt.Sprintf("%s#index#%s", ecosystem, q)).Build()).AsStrSlice()
 		if err != nil {
-			return nil, errors.Wrapf(err, "SMEMBERS %s", fmt.Sprintf("%s#index#%s", ecosystem, q))
+			return nil, errors.Wrapf(err, "HGETALL %s", fmt.Sprintf("%s#index#%s", ecosystem, q))
 		}
 		for _, rootID := range rootIDs {
 			m[dataTypes.RootID(rootID)] = append(m[dataTypes.RootID(rootID)], q)
@@ -911,7 +1105,7 @@ func (c *Connection) PutDataSource(root string) error {
 	if err != nil {
 		return errors.Wrapf(err, "open %s", root)
 	}
-	defer f.Close() //nolint:errcheck
+	defer f.Close()
 
 	var datasource datasourceTypes.DataSource
 	if err := json.NewDecoder(f).Decode(&datasource); err != nil {
