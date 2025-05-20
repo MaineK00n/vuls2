@@ -506,9 +506,9 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 		return errors.Wrap(err, "get datasource")
 	}
 
-	cmds, err := c.removeSource(ctx, datasource.ID)
+	cmds, err := c.removeVulnerabilityDataCommands(ctx, datasource.ID)
 	if err != nil {
-		return errors.Wrap(err, "remove source")
+		return errors.Wrap(err, "generate remove vulnerability data commands")
 	}
 
 	indexm := make(map[string][]dataTypes.RootID)
@@ -578,7 +578,145 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 	return nil
 }
 
-func (c *Connection) removeSource(ctx context.Context, sourceID sourceTypes.SourceID) (rueidis.Commands, error) {
+func (c *Connection) putDetection(data dataTypes.Data) (rueidis.Commands, map[string][]dataTypes.RootID, error) {
+	var cmds rueidis.Commands
+	m := make(map[string][]dataTypes.RootID)
+
+	for _, d := range data.Detections {
+		bs, err := util.Marshal(d.Conditions)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "marshal conditions")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
+
+		for _, cond := range d.Conditions {
+			ps, err := util.WalkCriteria(cond.Criteria)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "walk criteria")
+			}
+			for _, p := range ps {
+				if slices.Contains(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID) {
+					m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)] = append(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID)
+				}
+			}
+		}
+	}
+
+	return cmds, m, nil
+}
+
+func (c *Connection) putAdvisory(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	m := make(map[advisoryContentTypes.AdvisoryID][]advisoryTypes.Advisory)
+	for _, a := range data.Advisories {
+		m[a.Content.ID] = append(m[a.Content.ID], a)
+	}
+
+	for id, as := range m {
+		bs, err := util.Marshal(as)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal advisories")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
+	}
+
+	return cmds, nil
+}
+
+func (c *Connection) putVulnerability(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	m := make(map[vulnerabilityContentTypes.VulnerabilityID][]vulnerabilityTypes.Vulnerability)
+	for _, v := range data.Vulnerabilities {
+		m[v.Content.ID] = append(m[v.Content.ID], v)
+	}
+
+	for id, vs := range m {
+		bs, err := util.Marshal(vs)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal vulnerabilities")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
+	}
+
+	return cmds, nil
+}
+
+func (c *Connection) putRoot(data dataTypes.Data) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	bs, err := util.Marshal(vulnerabilityRoot{
+		ID: data.ID,
+		Advisories: func() []advisoryContentTypes.AdvisoryID {
+			as := make([]advisoryContentTypes.AdvisoryID, 0, len(data.Advisories))
+			for _, a := range data.Advisories {
+				as = append(as, a.Content.ID)
+			}
+			return as
+		}(),
+		Vulnerabilities: func() []vulnerabilityContentTypes.VulnerabilityID {
+			vs := make([]vulnerabilityContentTypes.VulnerabilityID, 0, len(data.Vulnerabilities))
+			for _, v := range data.Vulnerabilities {
+				vs = append(vs, v.Content.ID)
+			}
+			return vs
+		}(),
+		Ecosystems: func() []ecosystemTypes.Ecosystem {
+			es := make([]ecosystemTypes.Ecosystem, 0, len(data.Detections))
+			for _, d := range data.Detections {
+				es = append(es, d.Ecosystem)
+			}
+			return es
+		}(),
+		DataSources: []sourceTypes.SourceID{data.DataSource.ID},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal root")
+	}
+
+	cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
+
+	return cmds, nil
+}
+
+func (c *Connection) putIndex(sourceID sourceTypes.SourceID, m map[string][]dataTypes.RootID) (rueidis.Commands, error) {
+	var cmds rueidis.Commands
+
+	for k, v := range m {
+		bs, err := util.Marshal(v)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal root ids")
+		}
+
+		cmds = append(cmds, c.conn.B().Hset().Key(k).FieldValue().FieldValue(string(sourceID), string(bs)).Build())
+	}
+
+	return cmds, nil
+}
+
+func (c *Connection) RemoveVulnerabilityData(id sourceTypes.SourceID) error {
+	ctx := context.TODO()
+
+	cmds, err := c.removeVulnerabilityDataCommands(ctx, id)
+	if err != nil {
+		return errors.Wrap(err, "generate remove vulnerability data commands")
+	}
+
+	resps := c.conn.DoMulti(ctx, cmds...)
+	for i, resp := range resps {
+		if err := resp.Error(); err != nil {
+			return errors.Wrapf(err, "%s", strings.Join(cmds[i].Commands(), " "))
+		}
+	}
+
+	return nil
+}
+
+func (c *Connection) removeVulnerabilityDataCommands(ctx context.Context, sourceID sourceTypes.SourceID) (rueidis.Commands, error) {
 	var cmds rueidis.Commands
 
 	if err := func() error {
@@ -743,126 +881,6 @@ func (c *Connection) removeSource(ctx context.Context, sourceID sourceTypes.Sour
 		return nil
 	}(); err != nil {
 		return nil, errors.Wrap(err, "SCAN *#detection#*")
-	}
-
-	return cmds, nil
-}
-
-func (c *Connection) putDetection(data dataTypes.Data) (rueidis.Commands, map[string][]dataTypes.RootID, error) {
-	var cmds rueidis.Commands
-	m := make(map[string][]dataTypes.RootID)
-
-	for _, d := range data.Detections {
-		bs, err := util.Marshal(d.Conditions)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "marshal conditions")
-		}
-
-		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("%s#detection#%s", d.Ecosystem, data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
-
-		for _, cond := range d.Conditions {
-			ps, err := util.WalkCriteria(cond.Criteria)
-			if err != nil {
-				return nil, nil, errors.Wrap(err, "walk criteria")
-			}
-			for _, p := range ps {
-				if slices.Contains(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID) {
-					m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)] = append(m[fmt.Sprintf("%s#index#%s", d.Ecosystem, p)], data.ID)
-				}
-			}
-		}
-	}
-
-	return cmds, m, nil
-}
-
-func (c *Connection) putAdvisory(data dataTypes.Data) (rueidis.Commands, error) {
-	var cmds rueidis.Commands
-
-	m := make(map[advisoryContentTypes.AdvisoryID][]advisoryTypes.Advisory)
-	for _, a := range data.Advisories {
-		m[a.Content.ID] = append(m[a.Content.ID], a)
-	}
-
-	for id, as := range m {
-		bs, err := util.Marshal(as)
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal advisories")
-		}
-
-		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#advisory#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
-	}
-
-	return cmds, nil
-}
-
-func (c *Connection) putVulnerability(data dataTypes.Data) (rueidis.Commands, error) {
-	var cmds rueidis.Commands
-
-	m := make(map[vulnerabilityContentTypes.VulnerabilityID][]vulnerabilityTypes.Vulnerability)
-	for _, v := range data.Vulnerabilities {
-		m[v.Content.ID] = append(m[v.Content.ID], v)
-	}
-
-	for id, vs := range m {
-		bs, err := util.Marshal(vs)
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal vulnerabilities")
-		}
-
-		cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#vulnerability#%s", id)).FieldValue().FieldValue(fmt.Sprintf("%s#%s", data.DataSource.ID, data.ID), string(bs)).Build())
-	}
-
-	return cmds, nil
-}
-
-func (c *Connection) putRoot(data dataTypes.Data) (rueidis.Commands, error) {
-	var cmds rueidis.Commands
-
-	bs, err := util.Marshal(vulnerabilityRoot{
-		ID: data.ID,
-		Advisories: func() []advisoryContentTypes.AdvisoryID {
-			as := make([]advisoryContentTypes.AdvisoryID, 0, len(data.Advisories))
-			for _, a := range data.Advisories {
-				as = append(as, a.Content.ID)
-			}
-			return as
-		}(),
-		Vulnerabilities: func() []vulnerabilityContentTypes.VulnerabilityID {
-			vs := make([]vulnerabilityContentTypes.VulnerabilityID, 0, len(data.Vulnerabilities))
-			for _, v := range data.Vulnerabilities {
-				vs = append(vs, v.Content.ID)
-			}
-			return vs
-		}(),
-		Ecosystems: func() []ecosystemTypes.Ecosystem {
-			es := make([]ecosystemTypes.Ecosystem, 0, len(data.Detections))
-			for _, d := range data.Detections {
-				es = append(es, d.Ecosystem)
-			}
-			return es
-		}(),
-		DataSources: []sourceTypes.SourceID{data.DataSource.ID},
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal root")
-	}
-
-	cmds = append(cmds, c.conn.B().Hset().Key(fmt.Sprintf("vulnerability#root#%s", data.ID)).FieldValue().FieldValue(string(data.DataSource.ID), string(bs)).Build())
-
-	return cmds, nil
-}
-
-func (c *Connection) putIndex(sourceID sourceTypes.SourceID, m map[string][]dataTypes.RootID) (rueidis.Commands, error) {
-	var cmds rueidis.Commands
-
-	for k, v := range m {
-		bs, err := util.Marshal(v)
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal root ids")
-		}
-
-		cmds = append(cmds, c.conn.B().Hset().Key(k).FieldValue().FieldValue(string(sourceID), string(bs)).Build())
 	}
 
 	return cmds, nil
@@ -1119,6 +1137,14 @@ func (c *Connection) PutDataSource(root string) error {
 
 	if err := c.conn.Do(context.TODO(), c.conn.B().Hset().Key("datasource").FieldValue().FieldValue(string(datasource.ID), string(bs)).Build()).Error(); err != nil {
 		return errors.Wrapf(err, "HSET %s %s %q", "datasource", datasource.ID, string(bs))
+	}
+
+	return nil
+}
+
+func (c *Connection) RemoveDataSource(id sourceTypes.SourceID) error {
+	if err := c.conn.Do(context.TODO(), c.conn.B().Hdel().Key("datasource").Field(string(id)).Build()).Error(); err != nil {
+		return errors.Wrapf(err, "HDEL %s %s", "datasource", id)
 	}
 
 	return nil

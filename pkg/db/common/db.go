@@ -36,6 +36,7 @@ type DB interface {
 
 	GetVulnerabilityData(dbTypes.SearchType, ...string) iter.Seq2[dbTypes.VulnerabilityData, error]
 	PutVulnerabilityData(string) error
+	RemoveVulnerabilityData(sourceTypes.SourceID) error
 	GetRoot(dataTypes.RootID) (*dbTypes.VulnerabilityData, error)
 	GetAdvisory(advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error)
 	GetVulnerability(vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error)
@@ -46,6 +47,7 @@ type DB interface {
 	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error
+	RemoveDataSource(sourceTypes.SourceID) error
 
 	DeleteAll() error
 	Initialize() error

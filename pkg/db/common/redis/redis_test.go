@@ -188,6 +188,36 @@ func TestConnection_PutVulnerabilityData(t *testing.T) {
 	}
 }
 
+func TestConnection_RemoveVulnerabilityData(t *testing.T) {
+	type fields struct {
+		Config *rueidis.ClientOption
+	}
+	type args struct {
+		id sourceTypes.SourceID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &redis.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.RemoveVulnerabilityData(tt.args.id); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.RemoveVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestConnection_GetRoot(t *testing.T) {
 	type fields struct {
 		Config *rueidis.ClientOption
@@ -495,6 +525,36 @@ func TestConnection_PutDataSource(t *testing.T) {
 
 			if err := c.PutDataSource(tt.args.root); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.PutDataSource() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConnection_RemoveDataSource(t *testing.T) {
+	type fields struct {
+		Config *rueidis.ClientOption
+	}
+	type args struct {
+		id sourceTypes.SourceID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &redis.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.RemoveDataSource(tt.args.id); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.RemoveDataSource() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

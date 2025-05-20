@@ -773,6 +773,10 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
+func (c *Connection) RemoveVulnerabilityData(id sourceTypes.SourceID) error {
+	return errors.New("boltdb does not support remove vulnerability data")
+}
+
 func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
 	var d dbTypes.VulnerabilityData
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -1052,6 +1056,10 @@ func (c *Connection) PutDataSource(root string) error {
 
 		return nil
 	})
+}
+
+func (c *Connection) RemoveDataSource(id sourceTypes.SourceID) error {
+	return errors.New("boltdb does not support remove datasource")
 }
 
 func (c *Connection) DeleteAll() error {
