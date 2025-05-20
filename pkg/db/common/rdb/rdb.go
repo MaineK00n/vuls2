@@ -109,11 +109,19 @@ func (c *Connection) GetVulnerability(vulnerabilityID vulnerabilityContentTypes.
 	return nil, errors.New("not implemented yet")
 }
 
+func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
+	return nil, errors.New("not implemented yet")
+}
+
 func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
 	return nil, errors.New("not implemented yet")
 }
 
 func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetDataSources() ([]datasourceTypes.DataSource, error) {
 	return nil, errors.New("not implemented yet")
 }
 

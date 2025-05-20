@@ -296,6 +296,38 @@ func TestConnection_GetVulnerability(t *testing.T) {
 	}
 }
 
+func TestConnection_GetEcosystems(t *testing.T) {
+	type fields struct {
+		Config *rueidis.ClientOption
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    []ecosystemTypes.Ecosystem
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &redis.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetEcosystems()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetEcosystems() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetEcosystems() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConnection_GetIndexes(t *testing.T) {
 	type fields struct {
 		Config *rueidis.ClientOption
@@ -365,6 +397,38 @@ func TestConnection_GetDetection(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Connection.GetDetection() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConnection_GetDataSources(t *testing.T) {
+	type fields struct {
+		Config *rueidis.ClientOption
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    []datasourceTypes.DataSource
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &redis.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetDataSources()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetDataSources() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetDataSources() = %v, want %v", got, tt.want)
 			}
 		})
 	}

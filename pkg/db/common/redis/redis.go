@@ -791,6 +791,37 @@ func (c *Connection) GetVulnerability(id vulnerabilityContentTypes.Vulnerability
 	return vm, nil
 }
 
+func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
+	ctx := context.TODO()
+
+	var es []ecosystemTypes.Ecosystem
+
+	var cursor uint64
+	for {
+		entry, err := c.conn.Do(ctx, c.conn.B().Scan().Cursor(cursor).Match("*#detection#*").Count(10000).Build()).AsScanEntry()
+		if err != nil {
+			return nil, errors.Wrap(err, "SCAN %s MATCH *#detection#* COUNT 10000")
+		}
+
+		for _, e := range entry.Elements {
+			lhs, _, ok := strings.Cut(e, "#detection#")
+			if !ok {
+				return nil, errors.Errorf("unexpected key format. expected: %s, actual: %s", "<Ecosystem>#detection#<Root ID>", e)
+			}
+			if !slices.Contains(es, ecosystemTypes.Ecosystem(lhs)) {
+				es = append(es, ecosystemTypes.Ecosystem(lhs))
+			}
+		}
+
+		cursor = entry.Cursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return es, nil
+}
+
 func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
 	ctx := context.TODO()
 
@@ -830,6 +861,32 @@ func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dat
 		sm[sourceTypes.SourceID(k)] = conds
 	}
 	return sm, nil
+}
+
+func (c *Connection) GetDataSources() ([]datasourceTypes.DataSource, error) {
+	m, err := c.conn.Do(context.TODO(), c.conn.B().Hgetall().Key("datasource").Build()).AsMap()
+	if err != nil {
+		return nil, errors.Wrapf(err, "HGETALL %s", "datasource")
+	}
+	if len(m) == 0 {
+		return nil, errors.Wrapf(dbTypes.ErrNotFoundDataSource, "datasource not found")
+	}
+
+	datasources := make([]datasourceTypes.DataSource, 0, len(m))
+	for id, v := range m {
+		bs, err := v.AsBytes()
+		if err != nil {
+			return nil, errors.Wrapf(err, "as bytes %s", fmt.Sprintf("%s -> %s", "datasource", id))
+		}
+
+		var ds datasourceTypes.DataSource
+		if err := util.Unmarshal(bs, &ds); err != nil {
+			return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> %s", "datasource", id))
+		}
+		datasources = append(datasources, ds)
+	}
+
+	return datasources, nil
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {

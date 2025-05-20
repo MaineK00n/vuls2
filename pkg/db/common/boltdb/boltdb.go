@@ -893,6 +893,21 @@ func (c *Connection) GetVulnerability(id vulnerabilityContentTypes.Vulnerability
 	return m, nil
 }
 
+func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
+	var es []ecosystemTypes.Ecosystem
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			if b.Bucket([]byte("index")) != nil && b.Bucket([]byte("detection")) != nil {
+				es = append(es, ecosystemTypes.Ecosystem(name))
+			}
+			return nil
+		})
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return es, nil
+}
+
 func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
 	m := make(map[dataTypes.RootID][]string)
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -956,6 +971,28 @@ func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dat
 		return nil, errors.WithStack(err)
 	}
 	return m, nil
+}
+
+func (c *Connection) GetDataSources() ([]datasourceTypes.DataSource, error) {
+	var ds []datasourceTypes.DataSource
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		sb := tx.Bucket([]byte("datasource"))
+		if sb == nil {
+			return errors.Errorf("bucket: %s is not exists", "datasource")
+		}
+
+		return sb.ForEach(func(k, v []byte) error {
+			var d datasourceTypes.DataSource
+			if err := util.Unmarshal(v, &d); err != nil {
+				return errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("datasource -> %s", k))
+			}
+			ds = append(ds, d)
+			return nil
+		})
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return ds, nil
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {

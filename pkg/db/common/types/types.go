@@ -33,6 +33,9 @@ const (
 	SearchAdvisory      SearchType = "advisory"
 	SearchVulnerability SearchType = "vulnerability"
 	SearchPackage       SearchType = "package"
+	SearchMetadata      SearchType = "metadata"
+	SearchDataSources   SearchType = "datasources"
+	SearchEcosystems    SearchType = "ecosystems"
 )
 
 type Metadata struct {
