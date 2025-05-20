@@ -10,8 +10,12 @@ import (
 	"gorm.io/gorm"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
@@ -81,12 +85,28 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchDataType, id string) (*dbTypes.VulnerabilityData, error) {
-	return nil, errors.New("not implemented yet")
+func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries ...string) iter.Seq2[dbTypes.VulnerabilityData, error] {
+	return func(yield func(dbTypes.VulnerabilityData, error) bool) {
+		if !yield(dbTypes.VulnerabilityData{}, errors.New("not implemented yet")) {
+			return
+		}
+	}
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
+}
+
+func (c *Connection) GetRoot(rootID dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetAdvisory(advisoryID advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetVulnerability(vulnerabilityID vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error) {
+	return nil, errors.New("not implemented yet")
 }
 
 func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
@@ -95,14 +115,6 @@ func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...s
 
 func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
 	return nil, errors.New("not implemented yet")
-}
-
-func (c *Connection) GetVulnerabilityDetections(searchType dbTypes.SearchDetectionType, queries ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error] {
-	return func(yield func(dbTypes.VulnerabilityDataDetection, error) bool) {
-		if !yield(dbTypes.VulnerabilityDataDetection{}, errors.New("not implemented yet")) {
-			return
-		}
-	}
 }
 
 func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {

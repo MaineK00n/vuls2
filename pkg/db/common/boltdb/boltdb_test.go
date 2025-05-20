@@ -6,8 +6,12 @@ import (
 	"testing"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
@@ -122,6 +126,175 @@ func TestConnection_PutMetadata(t *testing.T) {
 	}
 }
 
+func TestConnection_GetVulnerabilityData(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		searchType dbTypes.SearchType
+		queries    []string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   iter.Seq2[dbTypes.VulnerabilityData, error]
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			if got := c.GetVulnerabilityData(tt.args.searchType, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetVulnerabilityData() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConnection_PutVulnerabilityData(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		root string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			if err := c.PutVulnerabilityData(tt.args.root); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.PutVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConnection_GetRoot(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id dataTypes.RootID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *dbTypes.VulnerabilityData
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetRoot(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetRoot() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetRoot() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConnection_GetAdvisory(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id advisoryContentTypes.AdvisoryID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetAdvisory(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetAdvisory() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetAdvisory() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConnection_GetVulnerability(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id vulnerabilityContentTypes.VulnerabilityID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close() //nolint:errcheck
+
+			got, err := c.GetVulnerability(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetVulnerability() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Connection.GetVulnerability() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConnection_GetIndexes(t *testing.T) {
 	type fields struct {
 		Config *boltdb.Config
@@ -191,104 +364,6 @@ func TestConnection_GetDetection(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Connection.GetDetection() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConnection_GetVulnerabilityDetections(t *testing.T) {
-	type fields struct {
-		Config *boltdb.Config
-	}
-	type args struct {
-		searchType dbTypes.SearchDetectionType
-		queries    []string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
-	}{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &boltdb.Connection{
-				Config: tt.fields.Config,
-			}
-			if err := c.Open(); err != nil {
-				t.Fatalf("open db. error = %v", err)
-			}
-			defer c.Close() //nolint:errcheck
-
-			if got := c.GetVulnerabilityDetections(tt.args.searchType, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Connection.GetVulnerabilityDetections() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConnection_GetVulnerabilityData(t *testing.T) {
-	type fields struct {
-		Config *boltdb.Config
-	}
-	type args struct {
-		searchType dbTypes.SearchDataType
-		id         string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *dbTypes.VulnerabilityData
-		wantErr bool
-	}{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &boltdb.Connection{
-				Config: tt.fields.Config,
-			}
-			if err := c.Open(); err != nil {
-				t.Fatalf("open db. error = %v", err)
-			}
-			defer c.Close() //nolint:errcheck
-
-			got, err := c.GetVulnerabilityData(tt.args.searchType, tt.args.id)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Connection.GetVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Connection.GetVulnerabilityData() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConnection_PutVulnerabilityData(t *testing.T) {
-	type fields struct {
-		Config *boltdb.Config
-	}
-	type args struct {
-		root string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &boltdb.Connection{
-				Config: tt.fields.Config,
-			}
-			if err := c.Open(); err != nil {
-				t.Fatalf("open db. error = %v", err)
-			}
-			defer c.Close() //nolint:errcheck
-
-			if err := c.PutVulnerabilityData(tt.args.root); (err != nil) != tt.wantErr {
-				t.Errorf("Connection.PutVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
