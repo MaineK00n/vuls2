@@ -66,7 +66,7 @@ func WithDebug(debug bool) Option {
 	return debugOption(debug)
 }
 
-func Search(searchType string, queries []string, opts ...Option) error {
+func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) error {
 	options := &options{
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -100,95 +100,16 @@ func Search(searchType string, queries []string, opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
+	slog.Info("Get Vulnerability Data", "queries", queries)
 	e := json.NewEncoder(os.Stdout)
-	e.SetIndent("", "  ")
 	e.SetEscapeHTML(false)
-	switch searchType {
-	case "detection-pkg":
-		slog.Info("Get Vulnerability Detections", "ecosystem", queries[0], "key", queries[1])
-		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionPkg, queries[0], queries[1]) {
-			if err != nil {
-				return errors.Wrap(err, "get pkg detections")
-			}
-			if err := e.Encode(item); err != nil {
-				return errors.Wrapf(err, "encode %s %s", queries[0], queries[1])
-			}
-		}
-
-		return nil
-	case "detection-root":
-		slog.Info("Get Vulnerability Detections", "root id", queries[0])
-		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionRoot, queries[0]) {
-			if err != nil {
-				return errors.Wrap(err, "get root detections")
-			}
-			if err := e.Encode(item); err != nil {
-				return errors.Wrapf(err, "encode %s", queries[0])
-			}
-		}
-
-		return nil
-	case "detection-advisory":
-		slog.Info("Get Vulnerability Detections", "advisory id", queries[0])
-		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionAdvisory, queries[0]) {
-			if err != nil {
-				return errors.Wrap(err, "get advisory detections")
-			}
-			if err := e.Encode(item); err != nil {
-				return errors.Wrapf(err, "encode %s", queries[0])
-			}
-		}
-
-		return nil
-	case "detection-vulnerability":
-		slog.Info("Get Vulnerability Detections", "vulnerability id", queries[0])
-		for item, err := range dbc.GetVulnerabilityDetections(dbTypes.SearchDetectionVulnerability, queries[0]) {
-			if err != nil {
-				return errors.Wrap(err, "get vulnerability detections")
-			}
-			if err := e.Encode(item); err != nil {
-				return errors.Wrapf(err, "encode %s", queries[0])
-			}
-		}
-
-		return nil
-	case "data-root":
-		slog.Info("Get Vulnerability Data", "root id", queries[0])
-		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, queries[0])
-		if err != nil {
-			return errors.Wrap(err, "get root data")
-		}
-
-		if err := e.Encode(d); err != nil {
-			return errors.Wrapf(err, "encode %s", d.ID)
-		}
-
-		return nil
-	case "data-advisory":
-		slog.Info("Get Vulnerability Data", "advisory id", queries[0])
-		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataAdvisory, queries[0])
-		if err != nil {
-			return errors.Wrap(err, "get advisory data")
-		}
-
-		if err := e.Encode(d); err != nil {
-			return errors.Wrapf(err, "encode %s", d.ID)
-		}
-
-		return nil
-	case "data-vulnerability":
-		slog.Info("Get Vulnerability Data", "vulnerability id", queries[0])
-		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataVulnerability, queries[0])
+	for d, err := range dbc.GetVulnerabilityData(searchType, queries...) {
 		if err != nil {
 			return errors.Wrap(err, "get vulnerability data")
 		}
-
 		if err := e.Encode(d); err != nil {
 			return errors.Wrapf(err, "encode %s", d.ID)
 		}
-
-		return nil
-	default:
-		return errors.Errorf("unexpected search type. expected: %q, actual: %q", []string{"detection-pkg", "detection-root", "detection-advisory", "detection-vulnerability", "data-root", "data-advisory", "data-vulnerability"}, searchType)
 	}
+	return nil
 }

@@ -241,13 +241,14 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 	}
 
 	for rootID, base := range detected {
-		d, err := dbc.GetVulnerabilityData(dbTypes.SearchDataRoot, string(rootID))
-		if err != nil {
-			return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
+		for d, err := range dbc.GetVulnerabilityData(dbTypes.SearchRoot, string(rootID)) {
+			if err != nil {
+				return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
+			}
+			base.Advisories = d.Advisories
+			base.Vulnerabilities = d.Vulnerabilities
+			detected[rootID] = base
 		}
-		base.Advisories = d.Advisories
-		base.Vulnerabilities = d.Vulnerabilities
-		detected[rootID] = base
 	}
 
 	var sourceIDs []sourceTypes.SourceID

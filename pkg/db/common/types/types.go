@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"slices"
 	"time"
 
@@ -16,21 +17,22 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
-type SearchDetectionType string
-
-const (
-	SearchDetectionPkg           SearchDetectionType = "pkg"
-	SearchDetectionRoot          SearchDetectionType = "root"
-	SearchDetectionAdvisory      SearchDetectionType = "advisory"
-	SearchDetectionVulnerability SearchDetectionType = "vulnerability"
+var (
+	ErrNotFoundMetadata      = errors.New("metadata not found")
+	ErrNotFoundRoot          = errors.New("root not found")
+	ErrNotFoundAdvisory      = errors.New("advisory not found")
+	ErrNotFoundVulnerability = errors.New("vulnerability not found")
+	ErrNotFoundDetection     = errors.New("detection not found")
+	ErrNotFoundDataSource    = errors.New("datasource not found")
 )
 
-type SearchDataType string
+type SearchType string
 
 const (
-	SearchDataRoot          SearchDataType = "root"
-	SearchDataAdvisory      SearchDataType = "advisory"
-	SearchDataVulnerability SearchDataType = "vulnerability"
+	SearchRoot          SearchType = "root"
+	SearchAdvisory      SearchType = "advisory"
+	SearchVulnerability SearchType = "vulnerability"
+	SearchPackage       SearchType = "package"
 )
 
 type Metadata struct {

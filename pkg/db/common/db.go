@@ -9,8 +9,12 @@ import (
 	"gorm.io/gorm"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
@@ -30,11 +34,13 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityData(dbTypes.SearchDataType, string) (*dbTypes.VulnerabilityData, error)
+	GetVulnerabilityData(dbTypes.SearchType, ...string) iter.Seq2[dbTypes.VulnerabilityData, error]
 	PutVulnerabilityData(string) error
+	GetRoot(dataTypes.RootID) (*dbTypes.VulnerabilityData, error)
+	GetAdvisory(advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error)
+	GetVulnerability(vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error)
 	GetIndexes(ecosystemTypes.Ecosystem, ...string) (map[dataTypes.RootID][]string, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
-	GetVulnerabilityDetections(dbTypes.SearchDetectionType, ...string) iter.Seq2[dbTypes.VulnerabilityDataDetection, error]
 
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error

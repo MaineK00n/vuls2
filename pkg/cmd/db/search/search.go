@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
@@ -19,29 +20,16 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newDataCmd(),
-		newDetectionCmd(),
+		newRootCmd(),
+		newAdvisoryCmd(),
+		newVulnerabilityCmd(),
+		newPackageCmd(),
 	)
 
 	return cmd
 }
 
-func newDataCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "data",
-		Short: "search data in vuls db",
-	}
-
-	cmd.AddCommand(
-		newDataRootCmd(),
-		newDataAdvisoryCmd(),
-		newDataVulnerabilityCmd(),
-	)
-
-	return cmd
-}
-
-func newDataRootCmd() *cobra.Command {
+func newRootCmd() *cobra.Command {
 	options := struct {
 		dbtype utilflag.DBType
 		dbpath string
@@ -53,15 +41,15 @@ func newDataRootCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "root <Root ID>",
+		Use:   "root [<Root ID>]",
 		Short: "search data in vuls db by root id",
 		Example: heredoc.Doc(`
 		$ vuls db search data root AVG-1
 		$ vuls db search data root CVE-2016-6352
 		`),
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-root", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchRoot, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -76,7 +64,7 @@ func newDataRootCmd() *cobra.Command {
 	return cmd
 }
 
-func newDataAdvisoryCmd() *cobra.Command {
+func newAdvisoryCmd() *cobra.Command {
 	options := struct {
 		dbtype utilflag.DBType
 		dbpath string
@@ -88,14 +76,14 @@ func newDataAdvisoryCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "advisory <Advisory ID>",
+		Use:   "advisory [<Advisory ID>]",
 		Short: "search data in vuls db by advisory id",
 		Example: heredoc.Doc(`
-		$ vuls db search data AVG-1
+		$ vuls db search advisory AVG-1
 		`),
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-advisory", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchAdvisory, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -110,7 +98,7 @@ func newDataAdvisoryCmd() *cobra.Command {
 	return cmd
 }
 
-func newDataVulnerabilityCmd() *cobra.Command {
+func newVulnerabilityCmd() *cobra.Command {
 	options := struct {
 		dbtype utilflag.DBType
 		dbpath string
@@ -122,14 +110,14 @@ func newDataVulnerabilityCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "vulnerability <Vulnerability ID>",
+		Use:   "vulnerability [<Vulnerability ID>]",
 		Short: "search data in vuls db by vulnerability id",
 		Example: heredoc.Doc(`
-		$ vuls db search data CVE-2016-6352
+		$ vuls db search vulnerability CVE-2016-6352
 		`),
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("data-vulnerability", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchVulnerability, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -144,23 +132,7 @@ func newDataVulnerabilityCmd() *cobra.Command {
 	return cmd
 }
 
-func newDetectionCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "detection",
-		Short: "search detection criteria in vuls db",
-	}
-
-	cmd.AddCommand(
-		newDetectionPkgCmd(),
-		newDetectionRootCmd(),
-		newDetectionAdvisoryCmd(),
-		newDetectionVulnerabilityCmd(),
-	)
-
-	return cmd
-}
-
-func newDetectionPkgCmd() *cobra.Command {
+func newPackageCmd() *cobra.Command {
 	options := struct {
 		dbtype utilflag.DBType
 		dbpath string
@@ -172,118 +144,14 @@ func newDetectionPkgCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "pkg <Ecosystem> <Package name | CPE>",
-		Short: "search detection criteria in vuls db by package name or CPE",
+		Use:   "package <Ecosystem> [<Package Name>]",
+		Short: "search data in vuls db by ecosystem and package names",
 		Example: heredoc.Doc(`
-		$ vuls db search detection pkg arch bash
-		$ vuls db search detection pkg nvd linux:linux
+		$ vuls db search package redhat:9 kernel
 		`),
-		Args: cobra.ExactArgs(2),
+		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-pkg", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
-				return errors.Wrap(err, "db search")
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
-	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
-	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
-	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
-
-	return cmd
-}
-
-func newDetectionRootCmd() *cobra.Command {
-	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
-	}{
-		dbtype: utilflag.DBTypeBoltDB,
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
-	}
-
-	cmd := &cobra.Command{
-		Use:   "root <Root ID>",
-		Short: "search detection criteria in vuls db by root id",
-		Example: heredoc.Doc(`
-		$ vuls db search detection root AVG-1
-		$ vuls db search detection root CVE-2016-6352
-		`),
-		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-root", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
-				return errors.Wrap(err, "db search")
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
-	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
-	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
-	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
-
-	return cmd
-}
-
-func newDetectionAdvisoryCmd() *cobra.Command {
-	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
-	}{
-		dbtype: utilflag.DBTypeBoltDB,
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
-	}
-
-	cmd := &cobra.Command{
-		Use:   "advisory <Advisory ID>",
-		Short: "search detection criteria in vuls db by advisory id",
-		Example: heredoc.Doc(`
-		$ vuls db search detection advisory AVG-1
-		`),
-		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-advisory", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
-				return errors.Wrap(err, "db search")
-			}
-			return nil
-		},
-	}
-
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
-	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
-	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
-	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
-
-	return cmd
-}
-
-func newDetectionVulnerabilityCmd() *cobra.Command {
-	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
-	}{
-		dbtype: utilflag.DBTypeBoltDB,
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
-	}
-
-	cmd := &cobra.Command{
-		Use:   "vulnerability <Vulnerability ID>",
-		Short: "search detection criteria in vuls db by vulnerability id",
-		Example: heredoc.Doc(`
-		$ vuls db search detection vulnerability CVE-2016-6352
-		`),
-		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search("detection-vulnerability", args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
