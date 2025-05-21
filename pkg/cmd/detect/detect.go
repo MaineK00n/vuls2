@@ -26,7 +26,7 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "detect ([]<UUID>)",
+		Use:   "detect [<UUID>]...",
 		Short: "detect vulnerabilities",
 		Example: heredoc.Doc(`
 		$ vuls scan results
