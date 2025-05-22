@@ -44,7 +44,7 @@ func newRootCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "root [<Root ID>]",
+		Use:   "root <Root ID>...",
 		Short: "search data in vuls db by root id",
 		Example: heredoc.Doc(`
 		$ vuls db search data root AVG-1
@@ -79,7 +79,7 @@ func newAdvisoryCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "advisory [<Advisory ID>]",
+		Use:   "advisory <Advisory ID>...",
 		Short: "search data in vuls db by advisory id",
 		Example: heredoc.Doc(`
 		$ vuls db search advisory AVG-1
@@ -113,7 +113,7 @@ func newVulnerabilityCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "vulnerability [<Vulnerability ID>]",
+		Use:   "vulnerability <Vulnerability ID>...",
 		Short: "search data in vuls db by vulnerability id",
 		Example: heredoc.Doc(`
 		$ vuls db search vulnerability CVE-2016-6352
@@ -147,7 +147,7 @@ func newPackageCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "package <Ecosystem> [<Package Name>]",
+		Use:   "package <Ecosystem> <Package Name>...",
 		Short: "search data in vuls db by ecosystem and package names",
 		Example: heredoc.Doc(`
 		$ vuls db search package redhat:9 kernel
