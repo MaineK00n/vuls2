@@ -51,7 +51,7 @@ type VulnerabilityData struct {
 	Advisories      []VulnerabilityDataAdvisory      `json:"advisories,omitempty"`
 	Vulnerabilities []VulnerabilityDataVulnerability `json:"vulnerabilities,omitempty"`
 	Detections      []VulnerabilityDataDetection     `json:"detections,omitempty"`
-	DataSources     []datasourceTypes.DataSource     `json:"data_sources,omitempty"`
+	DataSources     []datasourceTypes.DataSource     `json:"datasources,omitempty"`
 }
 
 type VulnerabilityDataAdvisory struct {

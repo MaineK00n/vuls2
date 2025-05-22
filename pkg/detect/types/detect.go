@@ -17,7 +17,7 @@ type DetectResult struct {
 	ServerName  string `json:"server_name,omitempty"`
 
 	Detected    []VulnerabilityData          `json:"detected,omitempty"`
-	DataSources []datasourceTypes.DataSource `json:"data_sources,omitempty"`
+	DataSources []datasourceTypes.DataSource `json:"datasources,omitempty"`
 
 	DetectedAt time.Time `json:"detected_at,omitempty"`
 	DetectedBy string    `json:"detected_by,omitempty"`
