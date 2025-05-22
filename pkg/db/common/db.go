@@ -39,9 +39,11 @@ type DB interface {
 	GetRoot(dataTypes.RootID) (*dbTypes.VulnerabilityData, error)
 	GetAdvisory(advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error)
 	GetVulnerability(vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error)
+	GetEcosystems() ([]ecosystemTypes.Ecosystem, error)
 	GetIndexes(ecosystemTypes.Ecosystem, ...string) (map[dataTypes.RootID][]string, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
 
+	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error
 

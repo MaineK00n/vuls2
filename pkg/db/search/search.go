@@ -100,16 +100,44 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
-	slog.Info("Get Vulnerability Data", "queries", queries)
 	e := json.NewEncoder(os.Stdout)
 	e.SetEscapeHTML(false)
-	for d, err := range dbc.GetVulnerabilityData(searchType, queries...) {
-		if err != nil {
-			return errors.Wrap(err, "get vulnerability data")
+	switch searchType {
+	case dbTypes.SearchMetadata:
+		if err := e.Encode(meta); err != nil {
+			return errors.Wrap(err, "encode metadata")
 		}
-		if err := e.Encode(d); err != nil {
-			return errors.Wrapf(err, "encode %s", d.ID)
+	case dbTypes.SearchDataSources:
+		slog.Info("Get DataSources")
+		datasources, err := dbc.GetDataSources()
+		if err != nil {
+			return errors.Wrap(err, "get data sources")
+		}
+
+		if err := e.Encode(datasources); err != nil {
+			return errors.Wrap(err, "encode data sources")
+		}
+	case dbTypes.SearchEcosystems:
+		slog.Info("Get Ecosystems")
+		ecosystems, err := dbc.GetEcosystems()
+		if err != nil {
+			return errors.Wrap(err, "get ecosystems")
+		}
+
+		if err := e.Encode(ecosystems); err != nil {
+			return errors.Wrap(err, "encode ecosystems")
+		}
+	default:
+		slog.Info("Get Vulnerability Data", "queries", queries)
+		for d, err := range dbc.GetVulnerabilityData(searchType, queries...) {
+			if err != nil {
+				return errors.Wrap(err, "get vulnerability data")
+			}
+			if err := e.Encode(d); err != nil {
+				return errors.Wrapf(err, "encode %s", d.ID)
+			}
 		}
 	}
+
 	return nil
 }

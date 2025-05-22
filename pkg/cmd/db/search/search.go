@@ -24,6 +24,9 @@ func NewCmd() *cobra.Command {
 		newAdvisoryCmd(),
 		newVulnerabilityCmd(),
 		newPackageCmd(),
+		newMetadataCmd(),
+		newDataSourcesCmd(),
+		newEcosystemsCmd(),
 	)
 
 	return cmd
@@ -152,6 +155,108 @@ func newPackageCmd() *cobra.Command {
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newMetadataCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "metadata",
+		Short: "search metadata in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search metadata
+		`),
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := db.Search(dbTypes.SearchMetadata, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newDataSourcesCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "datasources",
+		Short: "search datasources in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search datasources
+		`),
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := db.Search(dbTypes.SearchDataSources, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newEcosystemsCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "ecosystems",
+		Short: "search ecosystems in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search ecosystems
+		`),
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := db.Search(dbTypes.SearchEcosystems, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
