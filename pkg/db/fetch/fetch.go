@@ -194,36 +194,42 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 }
 
 func (o *options) finish(dbpath, digest string) error {
-	dbc, err := (&db.Config{
-		Type:    "boltdb",
-		Path:    dbpath,
-		Debug:   o.debug,
-		Options: o.dbopts,
-	}).New()
-	if err != nil {
-		return errors.Wrap(err, "new db connection")
-	}
-	if err := dbc.Open(); err != nil {
-		return errors.Wrap(err, "db open")
-	}
-	defer dbc.Close() //nolint:errcheck
+	if err := func() error {
+		dbc, err := (&db.Config{
+			Type:    "boltdb",
+			Path:    dbpath,
+			Debug:   o.debug,
+			Options: o.dbopts,
+		}).New()
+		if err != nil {
+			return errors.Wrap(err, "new db connection")
+		}
+		if err := dbc.Open(); err != nil {
+			return errors.Wrap(err, "db open")
+		}
+		defer dbc.Close() //nolint:errcheck
 
-	meta, err := dbc.GetMetadata()
-	if err != nil || meta == nil {
-		return errors.Wrap(err, "get metadata")
-	}
-	if meta.SchemaVersion != db.SchemaVersion {
-		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
-	}
+		meta, err := dbc.GetMetadata()
+		if err != nil || meta == nil {
+			return errors.Wrap(err, "get metadata")
+		}
+		if meta.SchemaVersion != db.SchemaVersion {
+			return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
+		}
 
-	meta.Digest = &digest
-	meta.Downloaded = func() *time.Time {
-		t := time.Now().UTC()
-		return &t
-	}()
+		meta.Digest = &digest
+		meta.Downloaded = func() *time.Time {
+			t := time.Now().UTC()
+			return &t
+		}()
 
-	if err := dbc.PutMetadata(*meta); err != nil {
-		return errors.Wrap(err, "put metadata")
+		if err := dbc.PutMetadata(*meta); err != nil {
+			return errors.Wrap(err, "put metadata")
+		}
+
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "update metadata")
 	}
 
 	if err := os.Chmod(dbpath, 0644); err != nil {
