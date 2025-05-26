@@ -18,7 +18,7 @@ require (
 	golang.org/x/sync v0.14.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
-	gorm.io/gorm v1.26.1
+	gorm.io/gorm v1.30.0
 	oras.land/oras-go/v2 v2.6.0
 )
 
