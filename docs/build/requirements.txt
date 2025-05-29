@@ -32,4 +32,4 @@ six==1.17.0
 urllib3==2.4.0
 verspec==0.1.0
 watchdog==6.0.0
-zipp==3.21.0
+zipp==3.22.0
