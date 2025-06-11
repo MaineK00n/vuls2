@@ -15,7 +15,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.9.1
 	go.etcd.io/bbolt v1.4.0
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.15.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
