@@ -94,7 +94,7 @@ func Init(opts ...Option) error {
 	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer dbc.Close() //nolint:errcheck
+	defer dbc.Close()
 
 	slog.Info("Delete All Data")
 	if err := dbc.DeleteAll(); err != nil {

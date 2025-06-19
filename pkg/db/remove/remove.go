@@ -1,17 +1,18 @@
-package search
+package remove
 
 import (
-	"encoding/json"
 	"log/slog"
-	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
+	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
 type options struct {
@@ -66,7 +67,7 @@ func WithDebug(debug bool) Option {
 	return debugOption(debug)
 }
 
-func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) error {
+func Remove(id string, opts ...Option) error {
 	options := &options{
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -100,43 +101,23 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
-	e := json.NewEncoder(os.Stdout)
-	e.SetEscapeHTML(false)
-	switch searchType {
-	case dbTypes.SearchMetadata:
-		if err := e.Encode(meta); err != nil {
-			return errors.Wrap(err, "encode metadata")
-		}
-	case dbTypes.SearchDataSources:
-		slog.Info("Get DataSources")
-		datasources, err := dbc.GetDataSources()
-		if err != nil {
-			return errors.Wrap(err, "get data sources")
-		}
+	slog.Info("Remove DataSource")
+	if err := dbc.RemoveDataSource(sourceTypes.SourceID(id)); err != nil {
+		return errors.Wrap(err, "remove datasource")
+	}
 
-		if err := e.Encode(datasources); err != nil {
-			return errors.Wrap(err, "encode data sources")
-		}
-	case dbTypes.SearchEcosystems:
-		slog.Info("Get Ecosystems")
-		ecosystems, err := dbc.GetEcosystems()
-		if err != nil {
-			return errors.Wrap(err, "get ecosystems")
-		}
+	slog.Info("Remove Vulnerability Data")
+	if err := dbc.RemoveVulnerabilityData(sourceTypes.SourceID(id)); err != nil {
+		return errors.Wrap(err, "remove data")
+	}
 
-		if err := e.Encode(ecosystems); err != nil {
-			return errors.Wrap(err, "encode ecosystems")
-		}
-	default:
-		slog.Info("Get Vulnerability Data", "queries", queries)
-		for d, err := range dbc.GetVulnerabilityData(searchType, queries...) {
-			if err != nil {
-				return errors.Wrap(err, "get vulnerability data")
-			}
-			if err := e.Encode(d); err != nil {
-				return errors.Wrapf(err, "encode %s", d.ID)
-			}
-		}
+	slog.Info("Put Metadata")
+	if err := dbc.PutMetadata(dbTypes.Metadata{
+		SchemaVersion: db.SchemaVersion,
+		CreatedBy:     version.String(),
+		LastModified:  time.Now().UTC(),
+	}); err != nil {
+		return errors.Wrap(err, "put metadata")
 	}
 
 	return nil

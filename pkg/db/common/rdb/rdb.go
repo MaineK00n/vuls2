@@ -74,7 +74,7 @@ func (c *Connection) Close() error {
 	if err != nil {
 		return errors.Wrap(err, "get *sql.DB")
 	}
-	return db.Close() //nolint:errcheck
+	return db.Close()
 }
 
 func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
@@ -94,6 +94,10 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries
 }
 
 func (c *Connection) PutVulnerabilityData(root string) error {
+	return errors.New("not implemented yet")
+}
+
+func (c *Connection) RemoveVulnerabilityData(sourceID sourceTypes.SourceID) error {
 	return errors.New("not implemented yet")
 }
 
@@ -130,6 +134,10 @@ func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.Da
 }
 
 func (c *Connection) PutDataSource(root string) error {
+	return errors.New("not implemented yet")
+}
+
+func (c *Connection) RemoveDataSource(sourceID sourceTypes.SourceID) error {
 	return errors.New("not implemented yet")
 }
 

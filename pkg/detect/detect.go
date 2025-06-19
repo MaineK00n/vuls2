@@ -129,7 +129,7 @@ func Detect(targets []string, opts ...Option) error {
 	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer dbc.Close() //nolint:errcheck
+	defer dbc.Close()
 
 	slog.Info("Get Metadata")
 	meta, err := dbc.GetMetadata()
@@ -172,7 +172,7 @@ func Detect(targets []string, opts ...Option) error {
 			if err != nil {
 				return errors.Wrapf(err, "open %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "scan.json"))
 			}
-			defer f.Close() //nolint:errcheck
+			defer f.Close()
 
 			var sr scanTypes.ScanResult
 			if err := json.NewDecoder(f).Decode(&sr); err != nil {
@@ -189,7 +189,7 @@ func Detect(targets []string, opts ...Option) error {
 			if err != nil {
 				return errors.Wrapf(err, "open %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "detect.json"))
 			}
-			defer f.Close() //nolint:errcheck
+			defer f.Close()
 
 			e := json.NewEncoder(f)
 			e.SetEscapeHTML(false)

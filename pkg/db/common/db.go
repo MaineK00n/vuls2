@@ -36,6 +36,7 @@ type DB interface {
 
 	GetVulnerabilityData(dbTypes.SearchType, ...string) iter.Seq2[dbTypes.VulnerabilityData, error]
 	PutVulnerabilityData(string) error
+	RemoveVulnerabilityData(sourceTypes.SourceID) error
 	GetRoot(dataTypes.RootID) (*dbTypes.VulnerabilityData, error)
 	GetAdvisory(advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error)
 	GetVulnerability(vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error)
@@ -46,6 +47,7 @@ type DB interface {
 	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
 	PutDataSource(string) error
+	RemoveDataSource(sourceTypes.SourceID) error
 
 	DeleteAll() error
 	Initialize() error
@@ -71,7 +73,11 @@ func (c *Config) New() (DB, error) {
 	case "redis":
 		conf := c.Options.Redis
 		if conf == nil {
-			conf = &rueidis.ClientOption{InitAddress: []string{c.Path}}
+			c, err := rueidis.ParseURL(c.Path)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse redis url")
+			}
+			conf = &c
 		}
 		return &redis.Connection{Config: conf}, nil
 	case "sqlite3", "mysql", "postgres":
