@@ -151,7 +151,7 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 	sn, sv, err := func() (string, string, error) {
 		switch family {
 		case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosytemCentOS:
-			// TODO: Theoretically, we should check non-emptiess of p.SrcVersion here too. However, for workaround
+			// TODO: Theoretically, we should check non-emptiness of p.SrcVersion here too. However, for workaround
 			// in RHEL oval v2 -> vex transition, we accept empty SrcVersion and skip validation at the moment.
 			// This switch MUST BE removed soon.
 			if p.SrcName == "" {
