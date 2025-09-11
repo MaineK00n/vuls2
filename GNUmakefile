@@ -65,7 +65,7 @@ db-build:
 db-add: 
 	vuls-data-update dotgit pull --dir . --restore ghcr.io/vulsio/vuls-data-db:${REPO}
 
-	cat ${REPO}/datasource.json | jq --arg hash $$(git -C ${REPO} rev-parse HEAD) --arg date $$(git -C ${REPO} show -s --format=%at | xargs -I{} date -d @{} --utc +%Y-%m-%dT%TZ) '.extracted.commit |= $$hash | .extracted.date |= $$date' > tmp
-	mv tmp ${REPO}/datasource.json
-	vuls db add --dbtype ${DBTYPE} --dbpath ${DBPATH} ${REPO}
-	rm -rf ${REPO}
+	cat ghcr.io/vulsio/vuls-data-db/${REPO}/datasource.json | jq --arg hash $$(git -C ghcr.io/vulsio/vuls-data-db/${REPO} rev-parse HEAD) --arg date $$(git -C ghcr.io/vulsio/vuls-data-db/${REPO} show -s --format=%at | xargs -I{} date -d @{} --utc +%Y-%m-%dT%TZ) '.extracted.commit |= $$hash | .extracted.date |= $$date' > tmp
+	mv tmp ghcr.io/vulsio/vuls-data-db/${REPO}/datasource.json
+	vuls db add --dbtype ${DBTYPE} --dbpath ${DBPATH} ghcr.io/vulsio/vuls-data-db/${REPO}
+	rm -rf ghcr.io
