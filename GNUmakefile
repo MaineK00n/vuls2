@@ -54,12 +54,14 @@ db-build:
 	make db-add REPO=vuls-data-extracted-arch BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-cisa-kev BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-epss BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-fedora BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-freebsd BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-mitre-v5 BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-nvd-api-cve BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
-	make db-add REPO=vuls-data-extracted-oracle BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-oracle-linux BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-redhat-vex-rhel BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 	make db-add REPO=vuls-data-extracted-rocky-errata BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
+	make db-add REPO=vuls-data-extracted-ubuntu-cve-tracker BRANCH=${BRANCH} DBTYPE=${DBTYPE} DBPATH=${DBPATH}
 
 .PHONY: db-add
 db-add: 
