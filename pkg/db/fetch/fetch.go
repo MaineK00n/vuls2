@@ -122,7 +122,7 @@ func Fetch(opts ...Option) error {
 	if err != nil {
 		return errors.Wrap(err, "fetch manifest")
 	}
-	defer r.Close() //nolint:errcheck
+	defer r.Close()
 
 	var manifest ocispec.Manifest
 	if err := json.NewDecoder(content.NewVerifyReader(r, manifestDescriptor)).Decode(&manifest); err != nil {
@@ -145,13 +145,13 @@ func Fetch(opts ...Option) error {
 	if err != nil {
 		return errors.Wrap(err, "fetch content")
 	}
-	defer r.Close() //nolint:errcheck
+	defer r.Close()
 
 	d, err := zstd.NewReader(content.NewVerifyReader(r, *l))
 	if err != nil {
 		return errors.Wrap(err, "new zstd reader")
 	}
-	defer d.Close() //nolint:errcheck
+	defer d.Close()
 
 	if err := os.MkdirAll(filepath.Dir(options.dbpath), 0755); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
@@ -175,7 +175,7 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "create %s", filepath.Join(filepath.Dir(o.dbpath), fmt.Sprintf("%s.*", filepath.Base(o.dbpath))))
 	}
-	defer f.Close() //nolint:errcheck
+	defer f.Close()
 
 	pb := func() *progressbar.ProgressBar {
 		if o.noProgress {
@@ -183,7 +183,7 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 		}
 		return progressbar.DefaultBytes(-1, "fetching")
 	}()
-	defer pb.Close() //nolint:errcheck
+	defer pb.Close()
 
 	if _, err := d.WriteTo(io.MultiWriter(f, pb)); err != nil {
 		_ = os.Remove(f.Name()) // nolint:errcheck
@@ -207,7 +207,7 @@ func (o *options) finish(dbpath, digest string) error {
 		if err := dbc.Open(); err != nil {
 			return errors.Wrap(err, "db open")
 		}
-		defer dbc.Close() //nolint:errcheck
+		defer dbc.Close()
 
 		meta, err := dbc.GetMetadata()
 		if err != nil || meta == nil {

@@ -1,1 +1,8 @@
 version: "2"
+
+linters:
+  exclusions:
+    rules:
+      - source: "defer .+\\.Close\\(\\)"
+        linters:
+          - errcheck

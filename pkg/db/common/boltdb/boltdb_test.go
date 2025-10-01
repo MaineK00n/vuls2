@@ -35,7 +35,7 @@ func TestConnection_Open(t *testing.T) {
 			if err := c.Open(); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.Open() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 		})
 	}
 }
@@ -82,7 +82,7 @@ func TestConnection_GetMetadata(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetMetadata()
 			if (err != nil) != tt.wantErr {
@@ -117,7 +117,7 @@ func TestConnection_PutMetadata(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if err := c.PutMetadata(tt.args.metadata); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.PutMetadata() error = %v, wantErr %v", err, tt.wantErr)
@@ -148,7 +148,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if got := c.GetVulnerabilityData(tt.args.searchType, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Connection.GetVulnerabilityData() = %v, want %v", got, tt.want)
@@ -178,10 +178,40 @@ func TestConnection_PutVulnerabilityData(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if err := c.PutVulnerabilityData(tt.args.root); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.PutVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConnection_RemoveVulnerabilityData(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id sourceTypes.SourceID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.RemoveVulnerabilityData(tt.args.id); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.RemoveVulnerabilityData() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -209,7 +239,7 @@ func TestConnection_GetRoot(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetRoot(tt.args.id)
 			if (err != nil) != tt.wantErr {
@@ -245,7 +275,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetAdvisory(tt.args.id)
 			if (err != nil) != tt.wantErr {
@@ -281,7 +311,7 @@ func TestConnection_GetVulnerability(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetVulnerability(tt.args.id)
 			if (err != nil) != tt.wantErr {
@@ -350,7 +380,7 @@ func TestConnection_GetIndexes(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetIndexes(tt.args.ecosystem, tt.args.queries...)
 			if (err != nil) != tt.wantErr {
@@ -387,7 +417,7 @@ func TestConnection_GetDetection(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetDetection(tt.args.ecosystem, tt.args.rootID)
 			if (err != nil) != tt.wantErr {
@@ -455,7 +485,7 @@ func TestConnection_GetDataSource(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			got, err := c.GetDataSource(tt.args.id)
 			if (err != nil) != tt.wantErr {
@@ -490,10 +520,40 @@ func TestConnection_PutDataSource(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if err := c.PutDataSource(tt.args.root); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.PutDataSource() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConnection_RemoveDataSource(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id sourceTypes.SourceID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.RemoveDataSource(tt.args.id); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.RemoveDataSource() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -516,7 +576,7 @@ func TestConnection_DeleteAll(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if err := c.DeleteAll(); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.DeleteAll() error = %v, wantErr %v", err, tt.wantErr)
@@ -542,7 +602,7 @@ func TestConnection_Initialize(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close() //nolint:errcheck
+			defer c.Close()
 
 			if err := c.Initialize(); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.Initialize() error = %v, wantErr %v", err, tt.wantErr)

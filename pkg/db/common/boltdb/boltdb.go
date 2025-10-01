@@ -68,7 +68,7 @@ func (c *Connection) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	return c.conn.Close() //nolint:errcheck
+	return c.conn.Close()
 }
 
 func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
@@ -506,7 +506,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries
 
 func (c *Connection) PutVulnerabilityData(root string) error {
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
@@ -519,7 +519,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 			if err != nil {
 				return errors.Wrapf(err, "open %s", path)
 			}
-			defer f.Close() //nolint:errcheck
+			defer f.Close()
 
 			var data dataTypes.Data
 			if err := json.NewDecoder(f).Decode(&data); err != nil {
@@ -773,6 +773,10 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
+func (c *Connection) RemoveVulnerabilityData(id sourceTypes.SourceID) error {
+	return errors.New("boltdb does not support remove vulnerability data")
+}
+
 func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
 	var d dbTypes.VulnerabilityData
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -1021,16 +1025,11 @@ func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.Da
 
 func (c *Connection) PutDataSource(root string) error {
 	return c.conn.Update(func(tx *bolt.Tx) error {
-		sb := tx.Bucket([]byte("datasource"))
-		if sb == nil {
-			return errors.Errorf("bucket: %s is not exists", "datasource")
-		}
-
 		f, err := os.Open(root)
 		if err != nil {
 			return errors.Wrapf(err, "open %s", root)
 		}
-		defer f.Close() //nolint:errcheck
+		defer f.Close()
 
 		var datasource datasourceTypes.DataSource
 		if err := json.NewDecoder(f).Decode(&datasource); err != nil {
@@ -1042,12 +1041,25 @@ func (c *Connection) PutDataSource(root string) error {
 			return errors.Wrap(err, "marshal datasource")
 		}
 
+		sb := tx.Bucket([]byte("datasource"))
+		if sb == nil {
+			return errors.Errorf("bucket: %s is not exists", "datasource")
+		}
+
+		if sb.Get([]byte(datasource.ID)) != nil {
+			return errors.Errorf("%s already exists", fmt.Sprintf("datasource -> %s", datasource.ID))
+		}
+
 		if err := sb.Put([]byte(datasource.ID), bs); err != nil {
 			return errors.Wrapf(err, "put %s", fmt.Sprintf("datasource -> %s", datasource.ID))
 		}
 
 		return nil
 	})
+}
+
+func (c *Connection) RemoveDataSource(id sourceTypes.SourceID) error {
+	return errors.New("boltdb does not support remove datasource")
 }
 
 func (c *Connection) DeleteAll() error {

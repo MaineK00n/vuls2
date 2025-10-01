@@ -89,7 +89,7 @@ func Add(root string, opts ...Option) error {
 	if err := dbc.Open(); err != nil {
 		return errors.Wrap(err, "open db")
 	}
-	defer dbc.Close() //nolint:errcheck
+	defer dbc.Close()
 
 	slog.Info("Get Metadata")
 	meta, err := dbc.GetMetadata()
@@ -100,14 +100,14 @@ func Add(root string, opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
-	slog.Info("Put Vulnerability Data")
-	if err := dbc.PutVulnerabilityData(filepath.Join(root, "data")); err != nil {
-		return errors.Wrap(err, "put data")
-	}
-
 	slog.Info("Put DataSource")
 	if err := dbc.PutDataSource(filepath.Join(root, "datasource.json")); err != nil {
 		return errors.Wrap(err, "put datasource")
+	}
+
+	slog.Info("Put Vulnerability Data")
+	if err := dbc.PutVulnerabilityData(root); err != nil {
+		return errors.Wrap(err, "put data")
 	}
 
 	slog.Info("Put Metadata")
