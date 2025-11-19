@@ -1,7 +1,8 @@
 package scan
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -92,7 +93,7 @@ func Scan(root string, opts ...Option) error {
 				defer f.Close()
 
 				var old scanResult
-				if err := json.NewDecoder(f).Decode(&old); err != nil {
+				if err := json.UnmarshalRead(f, &old); err != nil {
 					return errors.Wrapf(err, "decode %s", filepath.Join(root, t, name))
 				}
 
@@ -159,10 +160,7 @@ func Scan(root string, opts ...Option) error {
 				}
 				defer f.Close()
 
-				e := json.NewEncoder(f)
-				e.SetEscapeHTML(false)
-				e.SetIndent("", "  ")
-				if err := e.Encode(new); err != nil {
+				if err := json.MarshalWrite(f, new, jsontext.WithIndent("  ")); err != nil {
 					return errors.Wrapf(err, "encode %s", filepath.Join(options.resultsDir, id.String(), t, "scan.json"))
 				}
 
