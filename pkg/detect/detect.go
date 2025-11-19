@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"log/slog"
 	"maps"
@@ -191,7 +192,7 @@ func Detect(targets []string, opts ...Option) error {
 			}
 			defer f.Close()
 
-			if err := json.MarshalWrite(f, dr); err != nil {
+			if err := json.MarshalWrite(f, dr, jsontext.WithIndent("  ")); err != nil {
 				return errors.Wrapf(err, "encode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "detect.json"))
 			}
 
