@@ -1,7 +1,10 @@
 name: Test
 
-on: 
+on:
   pull_request:
+
+env:
+  GOEXPERIMENT: jsonv2
 
 jobs:
   test:
@@ -21,6 +24,6 @@ jobs:
       with:
         version: latest
         args: --timeout=10m
-        
+
     - name: testing
       run: go test -race ./...
