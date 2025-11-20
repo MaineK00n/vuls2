@@ -2,7 +2,7 @@ package fetch
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -125,7 +125,7 @@ func Fetch(opts ...Option) error {
 	defer r.Close()
 
 	var manifest ocispec.Manifest
-	if err := json.NewDecoder(content.NewVerifyReader(r, manifestDescriptor)).Decode(&manifest); err != nil {
+	if err := json.UnmarshalRead(content.NewVerifyReader(r, manifestDescriptor), &manifest); err != nil {
 		return errors.Wrap(err, "decode manifest")
 	}
 

@@ -9,6 +9,9 @@ on:
     tags:
       - "v*"
 
+env:
+  GOEXPERIMENT: jsonv2
+
 jobs:
   binary:
     name: Release Binary

@@ -2,7 +2,7 @@ package redis
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io/fs"
 	"iter"
@@ -496,7 +496,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 		defer f.Close()
 
 		var datasource datasourceTypes.DataSource
-		if err := json.NewDecoder(f).Decode(&datasource); err != nil {
+		if err := json.UnmarshalRead(f, &datasource); err != nil {
 			return datasourceTypes.DataSource{}, errors.Wrapf(err, "decode %s", path)
 		}
 
@@ -528,7 +528,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 		defer f.Close()
 
 		var data dataTypes.Data
-		if err := json.NewDecoder(f).Decode(&data); err != nil {
+		if err := json.UnmarshalRead(f, &data); err != nil {
 			return errors.Wrapf(err, "decode %s", path)
 		}
 
@@ -1126,7 +1126,7 @@ func (c *Connection) PutDataSource(root string) error {
 	defer f.Close()
 
 	var datasource datasourceTypes.DataSource
-	if err := json.NewDecoder(f).Decode(&datasource); err != nil {
+	if err := json.UnmarshalRead(f, &datasource); err != nil {
 		return errors.Wrapf(err, "decode %s", root)
 	}
 

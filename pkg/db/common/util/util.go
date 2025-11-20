@@ -2,7 +2,7 @@ package util
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/knqyf263/go-cpe/common"
@@ -16,9 +16,7 @@ import (
 
 func Marshal(v any) ([]byte, error) {
 	var buf bytes.Buffer
-	je := json.NewEncoder(&buf)
-	je.SetEscapeHTML(false)
-	if err := je.Encode(v); err != nil {
+	if err := json.MarshalWrite(&buf, v); err != nil {
 		return nil, errors.Wrap(err, "json encode")
 	}
 	return buf.Bytes(), nil

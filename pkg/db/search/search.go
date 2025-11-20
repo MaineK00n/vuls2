@@ -1,7 +1,7 @@
 package search
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -100,11 +100,9 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
 	}
 
-	e := json.NewEncoder(os.Stdout)
-	e.SetEscapeHTML(false)
 	switch searchType {
 	case dbTypes.SearchMetadata:
-		if err := e.Encode(meta); err != nil {
+		if err := json.MarshalWrite(os.Stdout, meta); err != nil {
 			return errors.Wrap(err, "encode metadata")
 		}
 	case dbTypes.SearchDataSources:
@@ -114,7 +112,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 			return errors.Wrap(err, "get data sources")
 		}
 
-		if err := e.Encode(datasources); err != nil {
+		if err := json.MarshalWrite(os.Stdout, datasources); err != nil {
 			return errors.Wrap(err, "encode data sources")
 		}
 	case dbTypes.SearchEcosystems:
@@ -124,7 +122,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 			return errors.Wrap(err, "get ecosystems")
 		}
 
-		if err := e.Encode(ecosystems); err != nil {
+		if err := json.MarshalWrite(os.Stdout, ecosystems); err != nil {
 			return errors.Wrap(err, "encode ecosystems")
 		}
 	default:
@@ -133,7 +131,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 			if err != nil {
 				return errors.Wrap(err, "get vulnerability data")
 			}
-			if err := e.Encode(d); err != nil {
+			if err := json.MarshalWrite(os.Stdout, d); err != nil {
 				return errors.Wrapf(err, "encode %s", d.ID)
 			}
 		}

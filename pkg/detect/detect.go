@@ -1,7 +1,8 @@
 package detect
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"log/slog"
 	"maps"
 	"os"
@@ -175,7 +176,7 @@ func Detect(targets []string, opts ...Option) error {
 			defer f.Close()
 
 			var sr scanTypes.ScanResult
-			if err := json.NewDecoder(f).Decode(&sr); err != nil {
+			if err := json.UnmarshalRead(f, &sr); err != nil {
 				return errors.Wrapf(err, "decode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "scan.json"))
 			}
 
@@ -191,10 +192,7 @@ func Detect(targets []string, opts ...Option) error {
 			}
 			defer f.Close()
 
-			e := json.NewEncoder(f)
-			e.SetEscapeHTML(false)
-			e.SetIndent("", "  ")
-			if err := e.Encode(dr); err != nil {
+			if err := json.MarshalWrite(f, dr, jsontext.WithIndent("  ")); err != nil {
 				return errors.Wrapf(err, "encode %s", filepath.Join(options.resultsDir, target, latest.Format("2006-01-02T15-04-05-0700"), "detect.json"))
 			}
 
