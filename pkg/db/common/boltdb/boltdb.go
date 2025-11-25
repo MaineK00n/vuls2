@@ -48,7 +48,8 @@ type Config struct {
 type Connection struct {
 	Config *Config
 
-	conn *bolt.DB
+	conn  *bolt.DB
+	cache *util.Cache
 }
 
 func (c *Connection) Open() error {
@@ -60,11 +61,16 @@ func (c *Connection) Open() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+
 	c.conn = db
+	c.cache = util.NewCache()
+
 	return nil
 }
 
 func (c *Connection) Close() error {
+	c.cache = nil
+
 	if c.conn == nil {
 		return nil
 	}
@@ -836,6 +842,10 @@ func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, e
 }
 
 func (c *Connection) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
+	if m, ok := c.cache.LoadAdvisory(id); ok {
+		return m, nil
+	}
+
 	var m map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		vb := tx.Bucket([]byte("vulnerability"))
@@ -861,10 +871,16 @@ func (c *Connection) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[source
 	}); err != nil {
 		return nil, errors.WithStack(err)
 	}
+
+	c.cache.StoreAdvisory(id, m)
 	return m, nil
 }
 
 func (c *Connection) GetVulnerability(id vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error) {
+	if m, ok := c.cache.LoadVulnerability(id); ok {
+		return m, nil
+	}
+
 	var m map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		vb := tx.Bucket([]byte("vulnerability"))
@@ -890,6 +906,8 @@ func (c *Connection) GetVulnerability(id vulnerabilityContentTypes.Vulnerability
 	}); err != nil {
 		return nil, errors.WithStack(err)
 	}
+
+	c.cache.StoreVulnerability(id, m)
 	return m, nil
 }
 
