@@ -1,8 +1,8 @@
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/MaineK00n/vuls-data-update v0.0.0-20251119040922-d7602a3c6123 h1:X6m8W8HN7ROj7/Il6+OoNtf2bB3o2mbRX5NL50rHiJ4=
-github.com/MaineK00n/vuls-data-update v0.0.0-20251119040922-d7602a3c6123/go.mod h1:PPnHKRINm9EpZ/HRwKD366yMeEcZGhTfuWxS96BMWcc=
+github.com/MaineK00n/vuls-data-update v0.0.0-20251125094749-e6f7ed9f8ca3 h1:uftaNsM9F0yMtnS6chKvTgnvU50O/FQxHDv9DZcufms=
+github.com/MaineK00n/vuls-data-update v0.0.0-20251125094749-e6f7ed9f8ca3/go.mod h1:PPnHKRINm9EpZ/HRwKD366yMeEcZGhTfuWxS96BMWcc=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/aquasecurity/go-gem-version v0.0.0-20201115065557-8eed6fe000ce h1:QgBRgJvtEOBtUXilDb1MLi1p1MWoyFDXAu5DEUl5nwM=
