@@ -887,50 +887,44 @@ func (c *Connection) removeVulnerabilityDataCommands(ctx context.Context, source
 }
 
 func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
-	bs, err := c.conn.Do(context.TODO(), c.conn.B().Get().Key(fmt.Sprintf("vulnerability#root#%s", id)).Build()).AsBytes()
+	m, err := c.conn.Do(context.TODO(), c.conn.B().Hgetall().Key(fmt.Sprintf("vulnerability#root#%s", id)).Build()).AsMap()
 	if err != nil {
 		if rueidis.IsRedisNil(err) {
 			return nil, errors.Wrapf(dbTypes.ErrNotFoundRoot, "vulnerability#root#%s not found", id)
 		}
-		return nil, errors.Wrapf(err, "GET %s", fmt.Sprintf("vulnerability#root#%s", id))
+		return nil, errors.Wrapf(err, "HGETALL %s", fmt.Sprintf("vulnerability#root#%s", id))
 	}
 
-	var r vulnerabilityRoot
-	if err := util.Unmarshal(bs, &r); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("vulnerability#root#%s", id))
+	d := dbTypes.VulnerabilityData{
+		ID: string(id),
 	}
 
-	return &dbTypes.VulnerabilityData{
-		ID: string(r.ID),
-		Advisories: func() []dbTypes.VulnerabilityDataAdvisory {
-			as := make([]dbTypes.VulnerabilityDataAdvisory, 0, len(r.Advisories))
-			for _, a := range r.Advisories {
-				as = append(as, dbTypes.VulnerabilityDataAdvisory{ID: a})
-			}
-			return as
-		}(),
-		Vulnerabilities: func() []dbTypes.VulnerabilityDataVulnerability {
-			vs := make([]dbTypes.VulnerabilityDataVulnerability, 0, len(r.Vulnerabilities))
-			for _, v := range r.Vulnerabilities {
-				vs = append(vs, dbTypes.VulnerabilityDataVulnerability{ID: v})
-			}
-			return vs
-		}(),
-		Detections: func() []dbTypes.VulnerabilityDataDetection {
-			ds := make([]dbTypes.VulnerabilityDataDetection, 0, len(r.Ecosystems))
-			for _, e := range r.Ecosystems {
-				ds = append(ds, dbTypes.VulnerabilityDataDetection{Ecosystem: e})
-			}
-			return ds
-		}(),
-		DataSources: func() []datasourceTypes.DataSource {
-			ds := make([]datasourceTypes.DataSource, 0, len(r.DataSources))
-			for _, d := range r.DataSources {
-				ds = append(ds, datasourceTypes.DataSource{ID: d})
-			}
-			return ds
-		}(),
-	}, nil
+	for sid, v := range m {
+		bs, err := v.AsBytes()
+		if err != nil {
+			return nil, errors.Wrapf(err, "as bytes. key: %s, field: %s", fmt.Sprintf("vulnerability#root#%s", id), sid)
+		}
+
+		var r vulnerabilityRoot
+		if err := util.Unmarshal(bs, &r); err != nil {
+			return nil, errors.Wrapf(err, "unmarshal %s", fmt.Sprintf("%s -> %s", fmt.Sprintf("vulnerability#root#%s", id), sid))
+		}
+
+		for _, a := range r.Advisories {
+			d.Advisories = append(d.Advisories, dbTypes.VulnerabilityDataAdvisory{ID: a})
+		}
+		for _, v := range r.Vulnerabilities {
+			d.Vulnerabilities = append(d.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{ID: v})
+		}
+		for _, e := range r.Ecosystems {
+			d.Detections = append(d.Detections, dbTypes.VulnerabilityDataDetection{Ecosystem: e})
+		}
+		for _, ds := range r.DataSources {
+			d.DataSources = append(d.DataSources, datasourceTypes.DataSource{ID: ds})
+		}
+	}
+
+	return &d, nil
 }
 
 func (c *Connection) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
