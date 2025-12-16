@@ -68,7 +68,6 @@ func TestConnection_Close(t *testing.T) {
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
 			}
-			defer c.Close()
 
 			if err := c.Close(); (err != nil) != tt.wantErr {
 				t.Errorf("Connection.Close() error = %v, wantErr %v", err, tt.wantErr)

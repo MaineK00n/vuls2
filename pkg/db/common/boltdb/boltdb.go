@@ -69,7 +69,9 @@ func (c *Connection) Open() error {
 }
 
 func (c *Connection) Close() error {
-	c.cache = nil
+	if c.cache != nil {
+		c.cache.Close()
+	}
 
 	if c.conn == nil {
 		return nil
