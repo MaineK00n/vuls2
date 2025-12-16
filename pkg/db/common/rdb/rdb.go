@@ -97,10 +97,6 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) RemoveVulnerabilityData(sourceID sourceTypes.SourceID) error {
-	return errors.New("not implemented yet")
-}
-
 func (c *Connection) GetRoot(rootID dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }
@@ -134,10 +130,6 @@ func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.Da
 }
 
 func (c *Connection) PutDataSource(root string) error {
-	return errors.New("not implemented yet")
-}
-
-func (c *Connection) RemoveDataSource(sourceID sourceTypes.SourceID) error {
 	return errors.New("not implemented yet")
 }
 
