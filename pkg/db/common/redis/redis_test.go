@@ -151,7 +151,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 			}
 			defer c.Close()
 
-			if got := c.GetVulnerabilityData(tt.args.searchType, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
+			if got := c.GetVulnerabilityData(tt.args.searchType, dbTypes.Filter{}, tt.args.queries...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Connection.GetVulnerabilityData() = %v, want %v", got, tt.want)
 			}
 		})

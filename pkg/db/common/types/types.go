@@ -1,9 +1,11 @@
 package types
 
 import (
-	"errors"
+	"fmt"
 	"slices"
 	"time"
+
+	"github.com/pkg/errors"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
@@ -69,73 +71,174 @@ type VulnerabilityDataDetection struct {
 	Contents  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition `json:"contents,omitempty"`
 }
 
-func (data VulnerabilityData) Filter(ecosystems ...ecosystemTypes.Ecosystem) VulnerabilityData {
-	filtered := VulnerabilityData{ID: data.ID}
-	srcs := make(map[sourceTypes.SourceID]struct{})
-	for _, adv := range data.Advisories {
-		a := VulnerabilityDataAdvisory{ID: adv.ID, Contents: make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)}
-		for sid, m := range adv.Contents {
-			for rid, cs := range m {
-				for _, c := range cs {
-					if slices.ContainsFunc(c.Segments, func(s segmentTypes.Segment) bool {
-						return slices.Contains(ecosystems, s.Ecosystem)
-					}) {
-						sm, ok := a.Contents[sid]
-						if !ok {
-							sm = make(map[dataTypes.RootID][]advisoryTypes.Advisory)
-						}
-						sm[rid] = append(sm[rid], c)
-						a.Contents[sid] = sm
-						srcs[sid] = struct{}{}
+type Filter struct {
+	Contents   []FilterContentType
+	RootIDs    []dataTypes.RootID
+	Ecosystems []ecosystemTypes.Ecosystem
+}
+
+type FilterContentType int
+
+const (
+	FilterContentTypeAdvisories FilterContentType = iota + 1
+	FilterContentTypeVulnerabilities
+	FilterContentTypeDetections
+	FilterContentTypeDataSources
+)
+
+func NewFilterContentType(s string) (FilterContentType, error) {
+	switch s {
+	case "advisories":
+		return FilterContentTypeAdvisories, nil
+	case "vulnerabilities":
+		return FilterContentTypeVulnerabilities, nil
+	case "detections":
+		return FilterContentTypeDetections, nil
+	case "datasources":
+		return FilterContentTypeDataSources, nil
+	default:
+		return 0, errors.Errorf("unexpected content type. expected: %q, actual: %q", []string{"advisories", "vulnerabilities", "detections", "datasources"}, s)
+	}
+}
+
+func AllFilterContentTypes() []FilterContentType {
+	return []FilterContentType{
+		FilterContentTypeAdvisories,
+		FilterContentTypeVulnerabilities,
+		FilterContentTypeDetections,
+		FilterContentTypeDataSources,
+	}
+}
+
+func (f FilterContentType) String() string {
+	switch f {
+	case FilterContentTypeAdvisories:
+		return "advisories"
+	case FilterContentTypeVulnerabilities:
+		return "vulnerabilities"
+	case FilterContentTypeDetections:
+		return "detections"
+	case FilterContentTypeDataSources:
+		return "datasources"
+	default:
+		return fmt.Sprintf("unknown(%d)", f)
+	}
+}
+
+func (f Filter) ApplyShallowly(v VulnerabilityData) VulnerabilityData {
+	if !slices.Contains(f.Contents, FilterContentTypeAdvisories) {
+		v.Advisories = nil
+	}
+	if !slices.Contains(f.Contents, FilterContentTypeVulnerabilities) {
+		v.Vulnerabilities = nil
+	}
+	if !slices.Contains(f.Contents, FilterContentTypeDetections) {
+		v.Detections = nil
+	}
+	if !slices.Contains(f.Contents, FilterContentTypeDataSources) {
+		v.DataSources = nil
+	}
+
+	return v
+}
+
+func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory {
+	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 {
+		return asmm
+	}
+
+	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
+	for sid, asm := range asmm {
+		for rid, as := range asm {
+			if f.ExcludesRootId(rid) {
+				continue
+			}
+
+			for _, a := range as {
+				ss := make([]segmentTypes.Segment, 0, len(a.Segments))
+				for _, s := range a.Segments {
+					if f.ExcludesEcosystem(s.Ecosystem) {
+						continue
 					}
+					ss = append(ss, s)
 				}
-			}
-		}
-		if len(a.Contents) > 0 {
-			filtered.Advisories = append(filtered.Advisories, a)
-		}
-	}
-
-	for _, vuln := range data.Vulnerabilities {
-		v := VulnerabilityDataVulnerability{ID: vuln.ID, Contents: make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)}
-		for sid, m := range vuln.Contents {
-			for rid, cs := range m {
-				for _, c := range cs {
-					if slices.ContainsFunc(c.Segments, func(s segmentTypes.Segment) bool {
-						return slices.Contains(ecosystems, s.Ecosystem)
-					}) {
-						sm, ok := v.Contents[sid]
-						if !ok {
-							sm = make(map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
-						}
-						sm[rid] = append(sm[rid], c)
-						v.Contents[sid] = sm
-						srcs[sid] = struct{}{}
-					}
+				if len(ss) == 0 {
+					continue
 				}
-			}
-		}
-		if len(v.Contents) > 0 {
-			filtered.Vulnerabilities = append(filtered.Vulnerabilities, v)
-		}
-	}
+				a.Segments = ss
 
-	for _, d := range data.Detections {
-		if slices.Contains(ecosystems, d.Ecosystem) {
-			filtered.Detections = append(filtered.Detections, d)
-			for _, m := range d.Contents {
-				for id := range m {
-					srcs[id] = struct{}{}
+				if _, found := filtered[sid]; !found {
+					filtered[sid] = make(map[dataTypes.RootID][]advisoryTypes.Advisory)
 				}
+				filtered[sid][rid] = append(filtered[sid][rid], a)
 			}
-		}
-	}
-
-	for _, src := range data.DataSources {
-		if _, ok := srcs[src.ID]; ok {
-			filtered.DataSources = append(filtered.DataSources, src)
 		}
 	}
 
 	return filtered
+}
+
+func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability {
+	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 {
+		return vsmm
+	}
+
+	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
+	for sid, vsm := range vsmm {
+		for rid, vs := range vsm {
+			if f.ExcludesRootId(rid) {
+				continue
+			}
+
+			for _, v := range vs {
+				ss := make([]segmentTypes.Segment, 0, len(v.Segments))
+				for _, s := range v.Segments {
+					if f.ExcludesEcosystem(s.Ecosystem) {
+						continue
+					}
+					ss = append(ss, s)
+				}
+				if len(ss) == 0 {
+					continue
+				}
+				v.Segments = ss
+
+				if _, found := filtered[sid]; !found {
+					filtered[sid] = make(map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
+				}
+				filtered[sid][rid] = append(filtered[sid][rid], v)
+			}
+		}
+	}
+
+	return filtered
+}
+
+func (f Filter) ApplyToEcosystems(es []ecosystemTypes.Ecosystem) []ecosystemTypes.Ecosystem {
+	if len(f.Ecosystems) == 0 {
+		return es
+	}
+
+	filtered := make([]ecosystemTypes.Ecosystem, 0, len(es))
+	for _, e := range es {
+		if !f.ExcludesEcosystem(e) {
+			filtered = append(filtered, e)
+		}
+	}
+
+	return filtered
+}
+
+func (f Filter) ExcludesRootId(rid dataTypes.RootID) bool {
+	if len(f.RootIDs) == 0 {
+		return false
+	}
+	return !slices.Contains(f.RootIDs, rid)
+}
+
+func (f Filter) ExcludesEcosystem(e ecosystemTypes.Ecosystem) bool {
+	if len(f.Ecosystems) == 0 {
+		return false
+	}
+	return !slices.Contains(f.Ecosystems, e)
 }

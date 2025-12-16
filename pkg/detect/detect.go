@@ -239,7 +239,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 	}
 
 	for rootID, base := range detected {
-		for d, err := range dbc.GetVulnerabilityData(dbTypes.SearchRoot, string(rootID)) {
+		for d, err := range dbc.GetVulnerabilityData(dbTypes.SearchRoot, dbTypes.Filter{}, string(rootID)) {
 			if err != nil {
 				return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
 			}
@@ -280,7 +280,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrapf(err, "get datasource with %s", sourceID)
 		}
-		datasources = append(datasources, *s)
+		datasources = append(datasources, s)
 	}
 
 	return detectTypes.DetectResult{
