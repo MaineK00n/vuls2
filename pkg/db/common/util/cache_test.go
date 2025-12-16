@@ -18,12 +18,14 @@ func TestNewCache(t *testing.T) {
 		name string
 		want *util.Cache
 	}{
-		// TODO: Add test cases.
+		{
+			name: "happy",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := util.NewCache(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewCache() = %v, want %v", got, tt.want)
+			if got := util.NewCache(); got == nil {
+				t.Errorf("NewCache() = %v, want %v", got, "not nil")
 			}
 		})
 	}
@@ -119,7 +121,23 @@ func TestCache_StoreAdvisory(t *testing.T) {
 		name string
 		args args
 	}{
-		// TODO: Add test cases.
+		{
+			name: "happy",
+			args: args{
+				key: "advisory1",
+				value: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source1": {
+						"root1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "key1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -219,7 +237,23 @@ func TestCache_StoreVulnerability(t *testing.T) {
 		name string
 		args args
 	}{
-		// TODO: Add test cases.
+		{
+			name: "happy",
+			args: args{
+				key: "vulnerability1",
+				value: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source1": {
+						"root1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
