@@ -54,6 +54,7 @@ func TestConnection_Open(t *testing.T) {
 func TestConnection_Close(t *testing.T) {
 	type fields struct {
 		Config *boltdb.Config
+		cache  *util.Cache
 	}
 	tests := []struct {
 		name    string
@@ -67,6 +68,10 @@ func TestConnection_Close(t *testing.T) {
 			}
 			if err := c.Open(); err != nil {
 				t.Fatalf("open db. error = %v", err)
+			}
+
+			if tt.fields.cache != nil {
+				c.SetCache(tt.fields.cache)
 			}
 
 			if err := c.Close(); (err != nil) != tt.wantErr {
