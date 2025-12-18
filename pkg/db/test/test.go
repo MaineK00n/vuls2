@@ -2,8 +2,6 @@ package test
 
 import (
 	"errors"
-	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
 
@@ -23,60 +21,15 @@ func PopulateDB(c db.Config, fixtureDir string) error {
 		return err
 	}
 
-	parent := filepath.Join(filepath.Dir(c.Path), "fixtures")
-	if err := queryUnescapeFileTree(fixtureDir, parent); err != nil {
-		return err
-	}
-
-	datasources, err := os.ReadDir(parent)
+	datasources, err := os.ReadDir(fixtureDir)
 	if err != nil {
 		return err
 	}
 
 	for _, ds := range datasources {
-		if err := dbAdd.Add(filepath.Join(parent, ds.Name()), dbAdd.WithDBType(c.Type), dbAdd.WithDBPath(c.Path), dbAdd.WithDBOptions(c.Options), dbAdd.WithDebug(c.Debug)); err != nil {
+		if err := dbAdd.Add(filepath.Join(fixtureDir, ds.Name()), dbAdd.WithDBType(c.Type), dbAdd.WithDBPath(c.Path), dbAdd.WithDBOptions(c.Options), dbAdd.WithDebug(c.Debug)); err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-// queryUnescapeFileTree copies a file tree at fixturePath to a outdir directory by query-unescaping file names.
-func queryUnescapeFileTree(fixturePath, outdir string) error {
-	if err := os.MkdirAll(outdir, fs.ModePerm); err != nil {
-		return err
-	}
-
-	if err := filepath.WalkDir(fixturePath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		rel, err := filepath.Rel(fixturePath, path)
-		if err != nil {
-			return err
-		}
-		unescaped, err := url.QueryUnescape(rel)
-		if err != nil {
-			return err
-		}
-
-		targetDir := filepath.Join(outdir, filepath.Dir(unescaped))
-		if err := os.MkdirAll(targetDir, fs.ModePerm); err != nil {
-			return err
-		}
-		if err := os.Link(path, filepath.Join(outdir, unescaped)); err != nil {
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	return nil
