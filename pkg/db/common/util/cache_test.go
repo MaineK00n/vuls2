@@ -1,8 +1,9 @@
 package util_test
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
@@ -102,11 +103,11 @@ func TestCache_LoadAdvisory(t *testing.T) {
 			})
 
 			got1, got2 := c.LoadAdvisory(tt.args.key)
-			if !reflect.DeepEqual(got1, tt.want.am) {
-				t.Errorf("cache.LoadAdvisory() got = %v, want %v", got1, tt.want.am)
+			if diff := cmp.Diff(tt.want.am, got1); diff != "" {
+				t.Errorf("Connection.LoadAdvisory() fist value. (-expected +got):\n%s", diff)
 			}
-			if got2 != tt.want.ok {
-				t.Errorf("cache.LoadAdvisory() got1 = %v, want %v", got2, tt.want.ok)
+			if diff := cmp.Diff(tt.want.ok, got2); diff != "" {
+				t.Errorf("Connection.LoadAdvisory() second value. (-expected +got):\n%s", diff)
 			}
 		})
 	}
@@ -218,11 +219,11 @@ func TestCache_LoadVulnerability(t *testing.T) {
 			})
 
 			got1, got2 := c.LoadVulnerability(tt.args.key)
-			if !reflect.DeepEqual(got1, tt.want.vm) {
-				t.Errorf("cache.LoadVulnerability() got = %v, want %v", got1, tt.want.vm)
+			if diff := cmp.Diff(tt.want.vm, got1); diff != "" {
+				t.Errorf("Connection.GetVulnerability() fist value. (-expected +got):\n%s", diff)
 			}
-			if got2 != tt.want.ok {
-				t.Errorf("cache.LoadVulnerability() got1 = %v, want %v", got2, tt.want.ok)
+			if diff := cmp.Diff(tt.want.ok, got2); diff != "" {
+				t.Errorf("Connection.GetVulnerability() second value. (-expected +got):\n%s", diff)
 			}
 		})
 	}

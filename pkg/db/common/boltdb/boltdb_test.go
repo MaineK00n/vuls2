@@ -1,32 +1,27 @@
 package boltdb_test
 
 import (
-	"encoding/json/v2"
-	"fmt"
 	"iter"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
-	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
-	versoncriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
-	criterionpackage "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package"
-	binaryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package/binary"
+	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
-	"github.com/google/go-cmp/cmp"
+	"github.com/MaineK00n/vuls2/pkg/db/test"
 )
 
 func TestConnection_Open(t *testing.T) {
@@ -35,11 +30,24 @@ func TestConnection_Open(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -58,11 +66,24 @@ func TestConnection_Close(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -88,12 +109,25 @@ func TestConnection_GetMetadata(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		want    *dbTypes.Metadata
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -128,12 +162,25 @@ func TestConnection_PutMetadata(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -163,13 +210,26 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		queries    []string
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   iter.Seq2[dbTypes.VulnerabilityData, error]
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    iter.Seq2[dbTypes.VulnerabilityData, error]
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -200,12 +260,25 @@ func TestConnection_PutVulnerabilityData(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -235,6 +308,7 @@ func TestConnection_GetRoot(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		want    *dbTypes.VulnerabilityData
@@ -242,6 +316,18 @@ func TestConnection_GetRoot(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -277,6 +363,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
+		fixture string
 		args    args
 		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
 		wantErr bool
@@ -288,6 +375,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 					Path: filepath.Join(t.TempDir(), "boltdb_test.db"),
 				},
 			},
+			fixture: "testdata/fixtures/alma-small",
 			args: args{
 				id: "ADV-NOT-EXISTS",
 			},
@@ -300,6 +388,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 					Path: filepath.Join(t.TempDir(), "boltdb_test.db"),
 				},
 			},
+			fixture: "testdata/fixtures/alma-small",
 			args: args{
 				id: "ALSA-2019:3708",
 			},
@@ -309,6 +398,11 @@ func TestConnection_GetAdvisory(t *testing.T) {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "ALSA-2019:3708",
+							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
 							},
 						},
 					},
@@ -331,6 +425,11 @@ func TestConnection_GetAdvisory(t *testing.T) {
 										ID:    "ALSA-2019:3708",
 										Title: "cache tainted advisory",
 									},
+									Segments: []segmentTypes.Segment{
+										{
+											Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+										},
+									},
 								},
 							},
 						},
@@ -338,6 +437,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 					return c
 				}(),
 			},
+			fixture: "testdata/fixtures/alma-small",
 			args: args{
 				id: "ALSA-2019:3708",
 			},
@@ -349,6 +449,11 @@ func TestConnection_GetAdvisory(t *testing.T) {
 								ID:    "ALSA-2019:3708",
 								Title: "cache tainted advisory",
 							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
+							},
 						},
 					},
 				},
@@ -357,8 +462,16 @@ func TestConnection_GetAdvisory(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := populateDB(tt.fields.Config.Path); err != nil {
-				t.Fatalf("populate db. error = %v", err)
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
 			}
 
 			c := &boltdb.Connection{
@@ -395,13 +508,15 @@ func TestConnection_GetVulnerability(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
 		wantErr bool
 	}{
 		{
-			name: "not found",
+			name:    "not found",
+			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
 				Config: &boltdb.Config{
 					Path: filepath.Join(t.TempDir(), "boltdb_test.db"),
@@ -413,7 +528,8 @@ func TestConnection_GetVulnerability(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "happy",
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
 				Config: &boltdb.Config{
 					Path: filepath.Join(t.TempDir(), "boltdb_test.db"),
@@ -429,13 +545,19 @@ func TestConnection_GetVulnerability(t *testing.T) {
 							Content: vulnerabilityContentTypes.Content{
 								ID: "CVE-2019-2510",
 							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
+							},
 						},
 					},
 				},
 			},
 		},
 		{
-			name: "cache first",
+			name:    "cache first",
+			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
 				Config: &boltdb.Config{
 					Path: filepath.Join(t.TempDir(), "boltdb_test.db"),
@@ -449,6 +571,11 @@ func TestConnection_GetVulnerability(t *testing.T) {
 									Content: vulnerabilityContentTypes.Content{
 										ID:    "CVE-2019-2510",
 										Title: "cache tainted vulnerability",
+									},
+									Segments: []segmentTypes.Segment{
+										{
+											Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+										},
 									},
 								},
 							},
@@ -468,6 +595,11 @@ func TestConnection_GetVulnerability(t *testing.T) {
 								ID:    "CVE-2019-2510",
 								Title: "cache tainted vulnerability",
 							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
+							},
 						},
 					},
 				},
@@ -476,8 +608,16 @@ func TestConnection_GetVulnerability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := populateDB(tt.fields.Config.Path); err != nil {
-				t.Fatalf("populate db. error = %v", err)
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
 			}
 
 			c := &boltdb.Connection{
@@ -511,12 +651,25 @@ func TestConnection_GetEcosystems(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		want    []ecosystemTypes.Ecosystem
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -552,6 +705,7 @@ func TestConnection_GetIndexes(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		want    map[dataTypes.RootID][]string
@@ -559,6 +713,18 @@ func TestConnection_GetIndexes(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -594,6 +760,7 @@ func TestConnection_GetDetection(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		want    map[sourceTypes.SourceID][]conditionTypes.Condition
@@ -601,6 +768,18 @@ func TestConnection_GetDetection(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -632,12 +811,25 @@ func TestConnection_GetDataSources(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		want    []datasourceTypes.DataSource
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -672,6 +864,7 @@ func TestConnection_GetDataSource(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		want    *datasourceTypes.DataSource
@@ -679,6 +872,18 @@ func TestConnection_GetDataSource(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -713,12 +918,25 @@ func TestConnection_PutDataSource(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		args    args
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -745,11 +963,24 @@ func TestConnection_DeleteAll(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -776,11 +1007,24 @@ func TestConnection_Initialize(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
+		fixture string
 		fields  fields
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.fixture != "" {
+				if err := test.PopulateDB(db.Config{
+					Type: "boltdb",
+					Path: tt.fields.Config.Path,
+					Options: db.DBOptions{
+						BoltDB: tt.fields.Config.Options,
+					},
+				}, tt.fixture); err != nil {
+					t.Fatalf("populate db. error = %v", err)
+				}
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
@@ -798,95 +1042,4 @@ func TestConnection_Initialize(t *testing.T) {
 			}
 		})
 	}
-}
-
-func populateDB(dbpath string) error {
-	c := &boltdb.Connection{
-		Config: &boltdb.Config{
-			Path: dbpath,
-		},
-	}
-	if err := c.Open(); err != nil {
-		return err
-	}
-	defer c.Close()
-
-	if err := c.Initialize(); err != nil {
-		return err
-	}
-
-	d := dataTypes.Data{
-		ID: "ALSA-2019:3708",
-		Advisories: []advisoryTypes.Advisory{
-			{
-				Content: advisoryContentTypes.Content{
-					ID: "ALSA-2019:3708",
-				},
-			},
-		},
-		Vulnerabilities: []vulnerabilityTypes.Vulnerability{
-			{
-				Content: vulnerabilityContentTypes.Content{
-					ID: "CVE-2019-2510",
-				},
-			},
-			{
-				Content: vulnerabilityContentTypes.Content{
-					ID: "CVE-2019-2537",
-				},
-			},
-		},
-		Detections: []detectionTypes.Detection{
-			{
-				Ecosystem: "alma:8",
-				Conditions: []conditionTypes.Condition{
-					{
-						Criteria: criteriaTypes.Criteria{
-							Operator: criteriaTypes.CriteriaOperatorTypeOR,
-							Criterions: []criterionTypes.Criterion{
-								{
-									Type: criterionTypes.CriterionTypeVersion,
-									Version: &versoncriterionTypes.Criterion{
-										Vulnerable: true,
-										Package: criterionpackage.Package{
-											Type: criterionpackage.PackageTypeBinary,
-											Binary: &binaryTypes.Package{
-												Name: "mariadb-devel:10.3::Judy",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		DataSource: sourceTypes.Source{
-			ID: "alma-errata",
-			Raws: []string{
-				"fixtures/8/ALSA/2019/ALSA-2019:3708.json",
-			},
-		},
-	}
-
-	dataPath := filepath.Join(filepath.Dir(dbpath), "fixture", "data")
-	if err := os.MkdirAll(dataPath, 0755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(filepath.Join(dataPath, fmt.Sprintf("%s.json", d.ID)), os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if err := json.MarshalWrite(f, d); err != nil {
-		return err
-	}
-	if err := c.PutVulnerabilityData(filepath.Dir(dataPath)); err != nil {
-		return err
-	}
-
-	return nil
-
 }

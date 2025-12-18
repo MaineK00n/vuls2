@@ -12,14 +12,14 @@ import (
 )
 
 type Cache struct {
-	advisoryCache      *sync.Map
-	vulnerabilityCache *sync.Map
+	advisories      *sync.Map
+	vulnerabilities *sync.Map
 }
 
 func NewCache() *Cache {
 	return &Cache{
-		advisoryCache:      &sync.Map{},
-		vulnerabilityCache: &sync.Map{},
+		advisories:      &sync.Map{},
+		vulnerabilities: &sync.Map{},
 	}
 }
 
@@ -28,12 +28,12 @@ func (c *Cache) Close() {
 		return
 	}
 
-	c.advisoryCache = nil
-	c.vulnerabilityCache = nil
+	c.advisories = nil
+	c.vulnerabilities = nil
 }
 
 func (c *Cache) LoadAdvisory(key advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, bool) {
-	value, ok := c.advisoryCache.Load(key)
+	value, ok := c.advisories.Load(key)
 	if ok {
 		return value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory), true
 	}
@@ -41,11 +41,11 @@ func (c *Cache) LoadAdvisory(key advisoryContentTypes.AdvisoryID) (map[sourceTyp
 }
 
 func (c *Cache) StoreAdvisory(key advisoryContentTypes.AdvisoryID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) {
-	c.advisoryCache.Store(key, value)
+	c.advisories.Store(key, value)
 }
 
 func (c *Cache) LoadVulnerability(key vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, bool) {
-	value, ok := c.vulnerabilityCache.Load(key)
+	value, ok := c.vulnerabilities.Load(key)
 	if ok {
 		return value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability), true
 	}
@@ -53,5 +53,5 @@ func (c *Cache) LoadVulnerability(key vulnerabilityContentTypes.VulnerabilityID)
 }
 
 func (c *Cache) StoreVulnerability(key vulnerabilityContentTypes.VulnerabilityID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) {
-	c.vulnerabilityCache.Store(key, value)
+	c.vulnerabilities.Store(key, value)
 }
