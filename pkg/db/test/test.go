@@ -17,6 +17,10 @@ func PopulateDB(c db.Config, fixtureDir string) error {
 		return errors.New("Config.Path must not be empty")
 	}
 
+	if fixtureDir == "" { // fool proof
+		return errors.New("fixtureDir must not be empty")
+	}
+
 	if err := dbInit.Init(dbInit.WithDBType(c.Type), dbInit.WithDBPath(c.Path), dbInit.WithDBOptions(c.Options), dbInit.WithDebug(c.Debug)); err != nil {
 		return err
 	}
