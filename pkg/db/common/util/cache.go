@@ -33,11 +33,21 @@ func (c *Cache) Close() {
 }
 
 func (c *Cache) LoadAdvisory(key advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, bool) {
-	value, ok := c.advisories.Load(key)
-	if ok {
-		return value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory), true
+	if c == nil || c.advisories == nil {
+		return nil, false
 	}
-	return nil, false
+
+	value, ok := c.advisories.Load(key)
+	if !ok {
+		return nil, false
+	}
+
+	as, ok := value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
+	if !ok {
+		return nil, false
+	}
+
+	return as, true
 }
 
 func (c *Cache) StoreAdvisory(key advisoryContentTypes.AdvisoryID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) {
@@ -45,11 +55,21 @@ func (c *Cache) StoreAdvisory(key advisoryContentTypes.AdvisoryID, value map[sou
 }
 
 func (c *Cache) LoadVulnerability(key vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, bool) {
-	value, ok := c.vulnerabilities.Load(key)
-	if ok {
-		return value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability), true
+	if c == nil || c.vulnerabilities == nil {
+		return nil, false
 	}
-	return nil, false
+
+	value, ok := c.vulnerabilities.Load(key)
+	if !ok {
+		return nil, false
+	}
+
+	vs, ok := value.(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
+	if !ok {
+		return nil, false
+	}
+
+	return vs, true
 }
 
 func (c *Cache) StoreVulnerability(key vulnerabilityContentTypes.VulnerabilityID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) {
