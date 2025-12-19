@@ -51,6 +51,10 @@ func (c *Cache) LoadAdvisory(key advisoryContentTypes.AdvisoryID) (map[sourceTyp
 }
 
 func (c *Cache) StoreAdvisory(key advisoryContentTypes.AdvisoryID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) {
+	if c == nil || c.advisories == nil {
+		return
+	}
+
 	c.advisories.Store(key, value)
 }
 
@@ -73,5 +77,9 @@ func (c *Cache) LoadVulnerability(key vulnerabilityContentTypes.VulnerabilityID)
 }
 
 func (c *Cache) StoreVulnerability(key vulnerabilityContentTypes.VulnerabilityID, value map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) {
+	if c == nil || c.vulnerabilities == nil {
+		return
+	}
+
 	c.vulnerabilities.Store(key, value)
 }
