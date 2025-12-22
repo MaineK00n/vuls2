@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/redis/rueidis v1.0.66
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/sync v0.18.0
 	gorm.io/driver/mysql v1.6.0
