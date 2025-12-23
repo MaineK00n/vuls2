@@ -15,7 +15,7 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 )
 
 type Connection struct {
@@ -45,17 +45,17 @@ func (c *Connection) Close() error {
 	return nil
 }
 
-func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
+func (c *Connection) GetMetadata() (*db.Metadata, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
+func (c *Connection) PutMetadata(metadata db.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries ...string) iter.Seq2[dbTypes.VulnerabilityData, error] {
-	return func(yield func(dbTypes.VulnerabilityData, error) bool) {
-		if !yield(dbTypes.VulnerabilityData{}, errors.New("not implemented yet")) {
+func (c *Connection) GetVulnerabilityData(searchType db.SearchType, queries ...string) iter.Seq2[db.VulnerabilityData, error] {
+	return func(yield func(db.VulnerabilityData, error) bool) {
+		if !yield(db.VulnerabilityData{}, errors.New("not implemented yet")) {
 			return
 		}
 	}
@@ -65,7 +65,7 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
+func (c *Connection) GetRoot(id dataTypes.RootID) (*db.VulnerabilityData, error) {
 	return nil, errors.New("not implemented yet")
 }
 

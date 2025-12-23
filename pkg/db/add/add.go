@@ -8,8 +8,7 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )
@@ -111,7 +110,7 @@ func Add(root string, opts ...Option) error {
 	}
 
 	slog.Info("Put Metadata")
-	if err := dbc.PutMetadata(dbTypes.Metadata{
+	if err := dbc.PutMetadata(db.Metadata{
 		SchemaVersion: db.SchemaVersion,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now().UTC(),

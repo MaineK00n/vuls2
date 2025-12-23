@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
-	db "github.com/MaineK00n/vuls2/pkg/db/search"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
+	dbSearch "github.com/MaineK00n/vuls2/pkg/db/search"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
@@ -52,7 +52,7 @@ func newRootCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchRoot, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchRoot, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -86,7 +86,7 @@ func newAdvisoryCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchAdvisory, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchAdvisory, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -120,7 +120,7 @@ func newVulnerabilityCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchVulnerability, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchVulnerability, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -154,7 +154,7 @@ func newPackageCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchPackage, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -188,7 +188,7 @@ func newMetadataCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchMetadata, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchMetadata, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -222,7 +222,7 @@ func newDataSourcesCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchDataSources, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchDataSources, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -256,7 +256,7 @@ func newEcosystemsCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchEcosystems, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(db.SearchEcosystems, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil

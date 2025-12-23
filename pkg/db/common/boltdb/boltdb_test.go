@@ -17,10 +17,10 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
+	"github.com/MaineK00n/vuls2/pkg/db/common/config"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	"github.com/MaineK00n/vuls2/pkg/db/common/internal/test"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
 )
 
@@ -36,10 +36,10 @@ func TestConnection_Open(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -70,10 +70,10 @@ func TestConnection_Close(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -107,15 +107,15 @@ func TestConnection_GetMetadata(t *testing.T) {
 		name    string
 		fixture string
 		fields  fields
-		want    *dbTypes.Metadata
+		want    *db.Metadata
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -152,7 +152,7 @@ func TestConnection_PutMetadata(t *testing.T) {
 		cache  *util.Cache
 	}
 	type args struct {
-		metadata dbTypes.Metadata
+		metadata db.Metadata
 	}
 	tests := []struct {
 		name    string
@@ -163,10 +163,10 @@ func TestConnection_PutMetadata(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -198,7 +198,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		cache  *util.Cache
 	}
 	type args struct {
-		searchType dbTypes.SearchType
+		searchType db.SearchType
 		queries    []string
 	}
 	tests := []struct {
@@ -206,14 +206,14 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		fixture string
 		fields  fields
 		args    args
-		want    iter.Seq2[dbTypes.VulnerabilityData, error]
+		want    iter.Seq2[db.VulnerabilityData, error]
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -257,10 +257,10 @@ func TestConnection_PutVulnerabilityData(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -299,15 +299,15 @@ func TestConnection_GetRoot(t *testing.T) {
 		fixture string
 		fields  fields
 		args    args
-		want    *dbTypes.VulnerabilityData
+		want    *db.VulnerabilityData
 		wantErr bool
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -448,10 +448,10 @@ func TestConnection_GetAdvisory(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -592,10 +592,10 @@ func TestConnection_GetVulnerability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -640,10 +640,10 @@ func TestConnection_GetEcosystems(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -693,10 +693,10 @@ func TestConnection_GetIndexes(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -746,10 +746,10 @@ func TestConnection_GetDetection(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -794,10 +794,10 @@ func TestConnection_GetDataSources(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -846,10 +846,10 @@ func TestConnection_GetDataSource(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -897,10 +897,10 @@ func TestConnection_PutDataSource(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -939,10 +939,10 @@ func TestConnection_DeleteAll(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -981,10 +981,10 @@ func TestConnection_Initialize(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(db.Config{
+			if err := test.PopulateDB(config.Config{
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
-				Options: db.DBOptions{
+				Options: config.DBOptions{
 					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {

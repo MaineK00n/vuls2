@@ -14,8 +14,8 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	"github.com/MaineK00n/vuls2/pkg/db/common/redis"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/redis/rueidis"
 )
 
@@ -72,7 +72,7 @@ func TestConnection_GetMetadata(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
-		want    *dbTypes.Metadata
+		want    *db.Metadata
 		wantErr bool
 	}{}
 	for _, tt := range tests {
@@ -102,7 +102,7 @@ func TestConnection_PutMetadata(t *testing.T) {
 		Config *rueidis.ClientOption
 	}
 	type args struct {
-		metadata dbTypes.Metadata
+		metadata db.Metadata
 	}
 	tests := []struct {
 		name    string
@@ -132,14 +132,14 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		Config *rueidis.ClientOption
 	}
 	type args struct {
-		searchType dbTypes.SearchType
+		searchType db.SearchType
 		queries    []string
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
-		want   iter.Seq2[dbTypes.VulnerabilityData, error]
+		want   iter.Seq2[db.VulnerabilityData, error]
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,7 +199,7 @@ func TestConnection_GetRoot(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *dbTypes.VulnerabilityData
+		want    *db.VulnerabilityData
 		wantErr bool
 	}{}
 	for _, tt := range tests {

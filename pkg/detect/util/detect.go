@@ -13,7 +13,7 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
