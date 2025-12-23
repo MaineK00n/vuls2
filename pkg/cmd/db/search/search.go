@@ -9,6 +9,7 @@ import (
 
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	"github.com/MaineK00n/vuls2/pkg/db/common/db"
+	"github.com/MaineK00n/vuls2/pkg/db/common/types"
 	dbSearch "github.com/MaineK00n/vuls2/pkg/db/search"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
@@ -154,7 +155,7 @@ func newPackageCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := dbSearch.Search(db.SearchPackage, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(types.SearchPackage, args, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -188,7 +189,7 @@ func newMetadataCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := dbSearch.Search(db.SearchMetadata, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(types.SearchMetadata, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -222,7 +223,7 @@ func newDataSourcesCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := dbSearch.Search(db.SearchDataSources, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(types.SearchDataSources, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -256,7 +257,7 @@ func newEcosystemsCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := dbSearch.Search(db.SearchEcosystems, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
+			if err := dbSearch.Search(types.SearchEcosystems, nil, dbSearch.WithDBType(options.dbtype.String()), dbSearch.WithDBPath(options.dbpath), dbSearch.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil

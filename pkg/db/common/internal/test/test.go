@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 
 	dbAdd "github.com/MaineK00n/vuls2/pkg/db/add"
-	"github.com/MaineK00n/vuls2/pkg/db/common/config"
+	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	dbInit "github.com/MaineK00n/vuls2/pkg/db/init"
 )
 
 // PopulateDB populates the database specified by c with test data from fixtureDir.
 // Children of fixtureDir are datasource directories, each has "datasource.json" file and "data/" directory.
-func PopulateDB(c config.Config, fixtureDir string) error {
+func PopulateDB(c db.Config, fixtureDir string) error {
 	if c.Path == "" { // fool proof
 		return errors.New("Config.Path must not be empty")
 	}
