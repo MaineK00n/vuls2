@@ -18,7 +18,7 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	"github.com/MaineK00n/vuls2/pkg/db/common/db"
+	db "github.com/MaineK00n/vuls2/pkg/db/common/types"
 )
 
 type Config struct {

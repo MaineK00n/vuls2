@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	"github.com/MaineK00n/vuls2/pkg/db/common/config"
 	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
@@ -16,7 +17,7 @@ import (
 type options struct {
 	dbtype string
 	dbpath string
-	dbopts db.DBOptions
+	dbopts config.DBOptions
 
 	debug bool
 }

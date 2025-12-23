@@ -19,8 +19,8 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/common/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/common/config"
-	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 	"github.com/MaineK00n/vuls2/pkg/db/common/internal/test"
+	db "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	"github.com/MaineK00n/vuls2/pkg/db/common/util"
 )
 
