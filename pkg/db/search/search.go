@@ -127,7 +127,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		}
 	default:
 		slog.Info("Get Vulnerability Data", "queries", queries)
-		for d, err := range dbTypes.GetVulnerabilityData(dbc, searchType, queries...) {
+		for d, err := range db.GetVulnerabilityData(dbc, searchType, queries...) {
 			if err != nil {
 				return errors.Wrap(err, "get vulnerability data")
 			}
