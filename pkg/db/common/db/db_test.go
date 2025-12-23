@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MaineK00n/vuls2/pkg/db/common/config"
 	"github.com/MaineK00n/vuls2/pkg/db/common/db"
 )
 
@@ -13,7 +12,7 @@ func TestConfig_New(t *testing.T) {
 		Type    string
 		Path    string
 		Debug   bool
-		Options config.DBOptions
+		Options db.DBOptions
 	}
 	tests := []struct {
 		name    string
@@ -23,7 +22,7 @@ func TestConfig_New(t *testing.T) {
 	}{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := (&config.Config{
+			got, err := (&db.Config{
 				Type:    tt.fields.Type,
 				Path:    tt.fields.Path,
 				Debug:   tt.fields.Debug,
