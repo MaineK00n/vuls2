@@ -20,13 +20,13 @@ import (
 	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
 type options struct {
-	dbpath string
-	dbopts db.DBOptions
+	dbpath      string
+	storageopts session.StorageOptions
 
 	repository string
 	noProgress bool
@@ -47,14 +47,14 @@ func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
 }
 
-type dboptsOption db.DBOptions
+type storageoptsOption session.StorageOptions
 
-func (o dboptsOption) apply(opts *options) {
-	opts.dbopts = db.DBOptions(o)
+func (o storageoptsOption) apply(opts *options) {
+	opts.storageopts = session.StorageOptions(o)
 }
 
-func WithDBOptions(dbopts db.DBOptions) Option {
-	return dboptsOption(dbopts)
+func WithStorageOptions(storageopts session.StorageOptions) Option {
+	return storageoptsOption(storageopts)
 }
 
 type repositoryOption string
@@ -89,11 +89,11 @@ func WithNoProgress(noProgress bool) Option {
 
 func Fetch(opts ...Option) error {
 	options := &options{
-		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		dbopts:     db.DBOptions{BoltDB: bolt.DefaultOptions},
-		repository: "ghcr.io/mainek00n/vuls2:latest",
-		debug:      false,
-		noProgress: false,
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		repository:  "ghcr.io/mainek00n/vuls2:latest",
+		debug:       false,
+		noProgress:  false,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -195,26 +195,31 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 
 func (o *options) finish(dbpath, digest string) error {
 	if err := func() error {
-		dbc, err := (&db.Config{
+		dbc, err := (&session.Config{
 			Type:    "boltdb",
 			Path:    dbpath,
 			Debug:   o.debug,
-			Options: o.dbopts,
+			Options: o.storageopts,
 		}).New()
 		if err != nil {
 			return errors.Wrap(err, "new db connection")
 		}
-		if err := dbc.Open(); err != nil {
-			return errors.Wrap(err, "db open")
-		}
-		defer dbc.Close()
 
-		meta, err := dbc.GetMetadata()
+		if err := dbc.Storage().Open(); err != nil {
+			return errors.Wrap(err, "open db connection")
+		}
+		defer dbc.Storage().Close()
+
+		meta, err := dbc.Storage().GetMetadata()
 		if err != nil || meta == nil {
 			return errors.Wrap(err, "get metadata")
 		}
-		if meta.SchemaVersion != db.SchemaVersion {
-			return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
+		sv, err := session.SchemaVersion("boltdb")
+		if err != nil {
+			return errors.Wrap(err, "get schema version")
+		}
+		if meta.SchemaVersion != sv {
+			return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 		}
 
 		meta.Digest = &digest
@@ -223,7 +228,7 @@ func (o *options) finish(dbpath, digest string) error {
 			return &t
 		}()
 
-		if err := dbc.PutMetadata(*meta); err != nil {
+		if err := dbc.Storage().PutMetadata(*meta); err != nil {
 			return errors.Wrap(err, "put metadata")
 		}
 

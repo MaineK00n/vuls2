@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/MaineK00n/vuls2/pkg/cmd/db/search"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
 
 func setUpCSFlagSet(cs *[]dbTypes.FilterContentType) *pflag.FlagSet {

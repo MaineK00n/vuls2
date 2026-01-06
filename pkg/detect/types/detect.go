@@ -8,7 +8,7 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
 
 type DetectResult struct {

@@ -11,8 +11,8 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 

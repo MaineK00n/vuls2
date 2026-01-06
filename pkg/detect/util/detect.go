@@ -13,7 +13,7 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
@@ -23,8 +23,8 @@ type Request struct {
 	Indexes []int
 }
 
-func Detect(dbc db.DB, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	m, err := dbc.GetIndexes(ecosystem, queries...)
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
+	m, err := s.GetIndexes(ecosystem, queries...)
 	if err != nil {
 		return nil, errors.Wrap(err, "get indexes")
 	}
@@ -43,7 +43,7 @@ func Detect(dbc db.DB, ecosystem ecosystemTypes.Ecosystem, queries []string, cre
 	g.SetLimit(concurrency)
 	for req := range reqChan {
 		g.Go(func() error {
-			m, err := dbc.GetDetection(ecosystem, req.RootID)
+			m, err := s.GetDetection(ecosystem, req.RootID)
 			if err != nil {
 				return errors.Wrap(err, "get detection")
 			}

@@ -16,8 +16,8 @@ import (
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/cpe"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
@@ -29,9 +29,9 @@ import (
 type options struct {
 	resultsDir string
 
-	dbtype string
-	dbpath string
-	dbopts db.DBOptions
+	dbtype      string
+	dbpath      string
+	storageopts session.StorageOptions
 
 	concurrency int
 
@@ -72,14 +72,14 @@ func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
 }
 
-type dboptsOption db.DBOptions
+type storageoptsOption session.StorageOptions
 
-func (o dboptsOption) apply(opts *options) {
-	opts.dbopts = db.DBOptions(o)
+func (o storageoptsOption) apply(opts *options) {
+	opts.storageopts = session.StorageOptions(o)
 }
 
-func WithDBOptions(dbopts db.DBOptions) Option {
-	return dboptsOption(dbopts)
+func WithStorageOptions(storageopts session.StorageOptions) Option {
+	return storageoptsOption(storageopts)
 }
 
 type concurrencyOption int
@@ -106,9 +106,9 @@ func Detect(targets []string, opts ...Option) error {
 	options := &options{
 		resultsDir: filepath.Join(utilos.UserCacheDir(), "results"),
 
-		dbtype: "boltdb",
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
 
 		concurrency: 1,
 
@@ -118,27 +118,35 @@ func Detect(targets []string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	dbc, err := (&db.Config{
-		Type:    options.dbtype,
-		Path:    options.dbpath,
-		Debug:   options.debug,
-		Options: options.dbopts,
+	dbc, err := (&session.Config{
+		Type:      options.dbtype,
+		Path:      options.dbpath,
+		Debug:     options.debug,
+		Options:   options.storageopts,
+		WithCache: true,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
-	if err := dbc.Open(); err != nil {
-		return errors.Wrap(err, "open db")
+
+	if err := dbc.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Close()
+	defer dbc.Storage().Close()
+
+	defer dbc.Cache().Close()
 
 	slog.Info("Get Metadata")
-	meta, err := dbc.GetMetadata()
+	meta, err := dbc.Storage().GetMetadata()
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
-	if meta.SchemaVersion != db.SchemaVersion {
-		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", db.SchemaVersion, meta.SchemaVersion)
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 	}
 
 	if len(targets) == 0 {
@@ -205,11 +213,11 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
+func detect(dbc *session.Session, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
 	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
 	if len(sr.OSPackages) > 0 {
-		m, err := ospkg.Detect(dbc, sr, concurrency)
+		m, err := ospkg.Detect(dbc.Storage(), sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
 		}
@@ -224,7 +232,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 	}
 
 	if len(sr.CPE) > 0 {
-		m, err := cpe.Detect(dbc, sr, concurrency)
+		m, err := cpe.Detect(dbc.Storage(), sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
 		}
@@ -281,7 +289,7 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 
 	datasources := make([]datasourceTypes.DataSource, 0, len(sourceIDs))
 	for _, sourceID := range sourceIDs {
-		s, err := dbc.GetDataSource(sourceID)
+		s, err := dbc.Storage().GetDataSource(sourceID)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrapf(err, "get datasource with %s", sourceID)
 		}
