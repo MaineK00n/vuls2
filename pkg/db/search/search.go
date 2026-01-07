@@ -82,8 +82,10 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
-		filter: dbTypes.Filter{},
-		debug:  false,
+		filter: dbTypes.Filter{
+			Contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 	for _, o := range opts {
 		o.apply(options)
