@@ -229,7 +229,7 @@ func (f Filter) ApplyToEcosystems(es []ecosystemTypes.Ecosystem) []ecosystemType
 	return filtered
 }
 
-func (f Filter) ExcludesRootId(rid dataTypes.RootID) bool {
+func (f Filter) ExcludesRootID(rid dataTypes.RootID) bool {
 	if len(f.RootIDs) == 0 {
 		return false
 	}
