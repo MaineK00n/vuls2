@@ -2,7 +2,6 @@ package search
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
@@ -36,7 +35,7 @@ func NewCmd() *cobra.Command {
 }
 
 type filterOptions struct {
-	contents   filterContentOption
+	contents   []dbTypes.FilterContentType
 	rootIDs    []string
 	ecosystems []string
 }
@@ -48,10 +47,12 @@ func newRootCmd() *cobra.Command {
 		filterOpts filterOptions
 		debug      bool
 	}{
-		dbtype:     utilflag.DBTypeBoltDB,
-		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		filterOpts: filterOptions{},
-		debug:      false,
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -77,9 +78,8 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
-	contentFlag := cmd.Flags().VarPF(&options.filterOpts.contents, "content", "", "types of content to include")
-	contentFlag.DefValue = strings.Join(options.filterOpts.contents.AllCandidates(), ",")
-	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(options.filterOpts.contents.AllCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -93,10 +93,12 @@ func newAdvisoryCmd() *cobra.Command {
 		filterOpts filterOptions
 		debug      bool
 	}{
-		dbtype:     utilflag.DBTypeBoltDB,
-		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		filterOpts: filterOptions{},
-		debug:      false,
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -121,9 +123,8 @@ func newAdvisoryCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
-	contentFlag := cmd.Flags().VarPF(&options.filterOpts.contents, "content", "", "types of content to include")
-	contentFlag.DefValue = strings.Join(options.filterOpts.contents.AllCandidates(), ",")
-	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(options.filterOpts.contents.AllCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -137,10 +138,12 @@ func newVulnerabilityCmd() *cobra.Command {
 		filterOpts filterOptions
 		debug      bool
 	}{
-		dbtype:     utilflag.DBTypeBoltDB,
-		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		filterOpts: filterOptions{},
-		debug:      false,
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -165,9 +168,8 @@ func newVulnerabilityCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
-	contentFlag := cmd.Flags().VarPF(&options.filterOpts.contents, "content", "", "types of content to include")
-	contentFlag.DefValue = strings.Join(options.filterOpts.contents.AllCandidates(), ",")
-	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(options.filterOpts.contents.AllCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -181,10 +183,12 @@ func newPackageCmd() *cobra.Command {
 		filterOpts filterOptions
 		debug      bool
 	}{
-		dbtype:     utilflag.DBTypeBoltDB,
-		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		filterOpts: filterOptions{},
-		debug:      false,
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -209,9 +213,8 @@ func newPackageCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
-	contentFlag := cmd.Flags().VarPF(&options.filterOpts.contents, "content", "", "types of content to include")
-	contentFlag.DefValue = strings.Join(options.filterOpts.contents.AllCandidates(), ",")
-	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(options.filterOpts.contents.AllCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -320,6 +323,14 @@ func newEcosystemsCmd() *cobra.Command {
 	return cmd
 }
 
+func allFilterContentCandidates() []string {
+	ss := make([]string, 0, len(dbTypes.AllFilterContentTypes()))
+	for _, v := range dbTypes.AllFilterContentTypes() {
+		ss = append(ss, v.String())
+	}
+	return ss
+}
+
 func (o filterOptions) buildFilter() dbTypes.Filter {
 	return dbTypes.Filter{
 		Ecosystems: func() []ecosystemTypes.Ecosystem {
@@ -336,6 +347,6 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 			}
 			return rs
 		}(),
-		Contents: o.contents.ContentTypes(),
+		Contents: o.contents,
 	}
 }
