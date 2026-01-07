@@ -240,7 +240,10 @@ func detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (detectTypes.De
 
 	for rootID, base := range detected {
 		for d, err := range dbc.GetVulnerabilityData(dbTypes.SearchRoot, dbTypes.Filter{
-			Contents: dbTypes.AllFilterContentTypes(),
+			Contents: []dbTypes.FilterContentType{
+				dbTypes.FilterContentTypeAdvisories,
+				dbTypes.FilterContentTypeVulnerabilities,
+			},
 		}, string(rootID)) {
 			if err != nil {
 				return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
