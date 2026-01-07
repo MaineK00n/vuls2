@@ -79,5 +79,9 @@ func (c *filterContentOption) ContentTypes() []dbTypes.FilterContentType {
 }
 
 func (c *filterContentOption) AllCandidates() []string {
-	return []string{"advisories", "vulnerabilities", "detections", "datasources"}
+	var ss []string
+	for _, t := range dbTypes.AllFilterContentTypes() {
+		ss = append(ss, t.String())
+	}
+	return ss
 }
