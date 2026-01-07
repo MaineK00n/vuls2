@@ -128,7 +128,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 		switch searchType {
 		case dbTypes.SearchRoot:
 			for _, query := range queries {
-				if filter.ExcludesRootId(dataTypes.RootID(query)) {
+				if filter.ExcludesRootID(dataTypes.RootID(query)) {
 					continue
 				}
 
@@ -477,7 +477,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 			}
 
 			for rootID := range im {
-				if filter.ExcludesRootId(rootID) {
+				if filter.ExcludesRootID(rootID) {
 					continue
 				}
 

@@ -150,7 +150,7 @@ func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.Ro
 	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
 	for sid, asm := range asmm {
 		for rid, as := range asm {
-			if f.ExcludesRootId(rid) {
+			if f.ExcludesRootID(rid) {
 				continue
 			}
 
@@ -186,7 +186,7 @@ func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTyp
 	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
 	for sid, vsm := range vsmm {
 		for rid, vs := range vsm {
-			if f.ExcludesRootId(rid) {
+			if f.ExcludesRootID(rid) {
 				continue
 			}
 

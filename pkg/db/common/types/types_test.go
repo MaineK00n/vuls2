@@ -1987,7 +1987,7 @@ func TestFilter_ApplyToEcosystems(t *testing.T) {
 	}
 }
 
-func TestFilter_ExcludesRootId(t *testing.T) {
+func TestFilter_ExcludesRootID(t *testing.T) {
 	type fields struct {
 		rootIDs []dataTypes.RootID
 	}
@@ -2040,9 +2040,9 @@ func TestFilter_ExcludesRootId(t *testing.T) {
 			f := dbTypes.Filter{
 				RootIDs: tt.fields.rootIDs,
 			}
-			got := f.ExcludesRootId(tt.rootID)
+			got := f.ExcludesRootID(tt.rootID)
 			if got != tt.want {
-				t.Errorf("ExcludesRootId() = %v, want %v", got, tt.want)
+				t.Errorf("ExcludesRootID() = %v, want %v", got, tt.want)
 			}
 		})
 	}
