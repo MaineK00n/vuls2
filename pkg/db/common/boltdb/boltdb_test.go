@@ -387,6 +387,24 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 				},
 				wantPath: "testdata/golden/get-vulnerability-data/search-root/ecosystem-filter.json",
 			},
+			{
+				name:    "datasource filter",
+				fixture: "testdata/fixtures/get-vulnerability-data",
+				fields: fields{
+					Config: &boltdb.Config{
+						Path: filepath.Join(t.TempDir(), "vuls.db"),
+					},
+				},
+				args: args{
+					searchType: dbTypes.SearchRoot,
+					filter: dbTypes.Filter{
+						Contents:    dbTypes.AllFilterContentTypes(),
+						DataSources: []sourceTypes.SourceID{"redhat-vex"},
+					},
+					queries: []string{"CVE-2019-2510"},
+				},
+				wantPath: "testdata/golden/get-vulnerability-data/search-root/datasource-filter.json",
+			},
 		},
 		"SearchAdvisory": {
 			{
@@ -561,6 +579,24 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 					queries: []string{"RHSA-2019:2511"},
 				},
 				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/ecosystem-filter.json",
+			},
+			{
+				name:    "datasource filter",
+				fixture: "testdata/fixtures/get-vulnerability-data",
+				fields: fields{
+					Config: &boltdb.Config{
+						Path: filepath.Join(t.TempDir(), "vuls.db"),
+					},
+				},
+				args: args{
+					searchType: dbTypes.SearchAdvisory,
+					filter: dbTypes.Filter{
+						Contents:    dbTypes.AllFilterContentTypes(),
+						DataSources: []sourceTypes.SourceID{"redhat-vex"},
+					},
+					queries: []string{"RHSA-2019:2511"},
+				},
+				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/datasource-filter.json",
 			},
 		},
 		"SearchVulnerability": {
@@ -737,6 +773,24 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 				},
 				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/ecosystem-filter.json",
 			},
+			{
+				name:    "datasource filter",
+				fixture: "testdata/fixtures/get-vulnerability-data",
+				fields: fields{
+					Config: &boltdb.Config{
+						Path: filepath.Join(t.TempDir(), "vuls.db"),
+					},
+				},
+				args: args{
+					searchType: dbTypes.SearchVulnerability,
+					filter: dbTypes.Filter{
+						Contents:    dbTypes.AllFilterContentTypes(),
+						DataSources: []sourceTypes.SourceID{"alma-errata"},
+					},
+					queries: []string{"CVE-2019-2510"},
+				},
+				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/datasource-filter.json",
+			},
 		},
 		"SearchPackage": {
 			{
@@ -912,6 +966,24 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 					queries: []string{"redhat:8", "mysql:8.0::mecab"},
 				},
 				wantPath: "testdata/golden/get-vulnerability-data/search-package/ecosystem-filter.json",
+			},
+			{
+				name:    "datasource filter",
+				fixture: "testdata/fixtures/get-vulnerability-data",
+				fields: fields{
+					Config: &boltdb.Config{
+						Path: filepath.Join(t.TempDir(), "vuls.db"),
+					},
+				},
+				args: args{
+					searchType: dbTypes.SearchPackage,
+					filter: dbTypes.Filter{
+						Contents:    dbTypes.AllFilterContentTypes(),
+						DataSources: []sourceTypes.SourceID{"redhat-vex"},
+					},
+					queries: []string{"redhat:8", "mysql:8.0::mecab"},
+				},
+				wantPath: "testdata/golden/get-vulnerability-data/search-package/datasource-filter.json",
 			},
 		},
 	}

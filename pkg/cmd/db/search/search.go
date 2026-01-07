@@ -9,6 +9,7 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
@@ -35,9 +36,10 @@ func NewCmd() *cobra.Command {
 }
 
 type filterOptions struct {
-	contents   []dbTypes.FilterContentType
-	rootIDs    []string
-	ecosystems []string
+	contents    []dbTypes.FilterContentType
+	rootIDs     []string
+	ecosystems  []string
+	datasources []string
 }
 
 func newRootCmd() *cobra.Command {
@@ -77,6 +79,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 
 	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
@@ -122,6 +125,7 @@ func newAdvisoryCmd() *cobra.Command {
 
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 
 	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
@@ -167,6 +171,7 @@ func newVulnerabilityCmd() *cobra.Command {
 
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 
 	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
@@ -212,6 +217,7 @@ func newPackageCmd() *cobra.Command {
 
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 
 	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
@@ -346,6 +352,13 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 				rs = append(rs, dataTypes.RootID(r))
 			}
 			return rs
+		}(),
+		DataSources: func() []sourceTypes.SourceID {
+			ds := make([]sourceTypes.SourceID, 0, len(o.datasources))
+			for _, d := range o.datasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			return ds
 		}(),
 		Contents: o.contents,
 	}

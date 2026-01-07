@@ -72,9 +72,10 @@ type VulnerabilityDataDetection struct {
 }
 
 type Filter struct {
-	Contents   []FilterContentType
-	RootIDs    []dataTypes.RootID
-	Ecosystems []ecosystemTypes.Ecosystem
+	Contents    []FilterContentType
+	RootIDs     []dataTypes.RootID
+	Ecosystems  []ecosystemTypes.Ecosystem
+	DataSources []sourceTypes.SourceID
 }
 
 type FilterContentType int
@@ -143,12 +144,16 @@ func (f Filter) ApplyShallowly(v VulnerabilityData) VulnerabilityData {
 }
 
 func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory {
-	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 {
+	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 && len(f.DataSources) == 0 {
 		return asmm
 	}
 
 	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
 	for sid, asm := range asmm {
+		if f.ExcludesDataSource(sid) {
+			continue
+		}
+
 		for rid, as := range asm {
 			if f.ExcludesRootID(rid) {
 				continue
@@ -179,12 +184,16 @@ func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.Ro
 }
 
 func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability {
-	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 {
+	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 && len(f.DataSources) == 0 {
 		return vsmm
 	}
 
 	filtered := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
 	for sid, vsm := range vsmm {
+		if f.ExcludesDataSource(sid) {
+			continue
+		}
+
 		for rid, vs := range vsm {
 			if f.ExcludesRootID(rid) {
 				continue
@@ -214,7 +223,24 @@ func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTyp
 	return filtered
 }
 
-func (f Filter) ApplyToEcosystems(es []ecosystemTypes.Ecosystem) []ecosystemTypes.Ecosystem {
+func (f Filter) ApplyToDetections(dsm map[sourceTypes.SourceID][]conditionTypes.Condition) map[sourceTypes.SourceID][]conditionTypes.Condition {
+	if len(f.DataSources) == 0 {
+		return dsm
+	}
+
+	filtered := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
+	for sid, ds := range dsm {
+		if f.ExcludesDataSource(sid) {
+			continue
+		}
+
+		filtered[sid] = ds
+	}
+
+	return filtered
+}
+
+func (f Filter) ScreenEcosystems(es []ecosystemTypes.Ecosystem) []ecosystemTypes.Ecosystem {
 	if len(f.Ecosystems) == 0 {
 		return es
 	}
@@ -241,4 +267,11 @@ func (f Filter) ExcludesEcosystem(e ecosystemTypes.Ecosystem) bool {
 		return false
 	}
 	return !slices.Contains(f.Ecosystems, e)
+}
+
+func (f Filter) ExcludesDataSource(sid sourceTypes.SourceID) bool {
+	if len(f.DataSources) == 0 {
+		return false
+	}
+	return !slices.Contains(f.DataSources, sid)
 }

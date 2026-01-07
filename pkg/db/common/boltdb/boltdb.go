@@ -196,6 +196,11 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 							return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
 						}
 
+						m = filter.ApplyToDetections(m)
+						if len(m) == 0 {
+							continue
+						}
+
 						root.Detections = append(root.Detections, dbTypes.VulnerabilityDataDetection{
 							Ecosystem: d.Ecosystem,
 							Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{dataTypes.RootID(query): m},
@@ -203,6 +208,10 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 					}
 
 					for _, datasource := range r.DataSources {
+						if filter.ExcludesDataSource(datasource.ID) {
+							continue
+						}
+
 						ds, err := c.GetDataSource(datasource.ID)
 						if err != nil {
 							if errors.Is(err, dbTypes.ErrNotFoundDataSource) {
@@ -210,6 +219,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 							}
 							return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get datasource")
 						}
+
 						root.DataSources = append(root.DataSources, ds)
 					}
 
@@ -279,6 +289,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 									if len(vm) == 0 {
 										continue
 									}
+
 									root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
 										ID:       v.ID,
 										Contents: vm,
@@ -299,17 +310,26 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 									return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
 								}
 
+								m = filter.ApplyToDetections(m)
+								if len(m) == 0 {
+									continue
+								}
+
 								if _, ok := dm[d.Ecosystem]; !ok {
 									dm[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
 								}
 								dm[d.Ecosystem][rootID] = m
 							}
 
-							for _, datasource := range r.DataSources {
+							for _, d := range r.DataSources {
+								if filter.ExcludesDataSource(d.ID) {
+									continue
+								}
+
 								if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
-									return e.ID == datasource.ID
+									return e.ID == d.ID
 								}) {
-									ds, err := c.GetDataSource(datasource.ID)
+									ds, err := c.GetDataSource(d.ID)
 									if err != nil {
 										if errors.Is(err, dbTypes.ErrNotFoundDataSource) {
 											return dbTypes.VulnerabilityData{}, errors.WithStack(err)
@@ -414,17 +434,26 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 									return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
 								}
 
+								m = filter.ApplyToDetections(m)
+								if len(m) == 0 {
+									continue
+								}
+
 								if _, ok := dm[d.Ecosystem]; !ok {
 									dm[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
 								}
 								dm[d.Ecosystem][rootID] = m
 							}
 
-							for _, datasource := range r.DataSources {
+							for _, d := range r.DataSources {
+								if filter.ExcludesDataSource(d.ID) {
+									continue
+								}
+
 								if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
-									return e.ID == datasource.ID
+									return e.ID == d.ID
 								}) {
-									ds, err := c.GetDataSource(datasource.ID)
+									ds, err := c.GetDataSource(d.ID)
 									if err != nil {
 										if errors.Is(err, dbTypes.ErrNotFoundDataSource) {
 											return dbTypes.VulnerabilityData{}, errors.WithStack(err)
@@ -506,6 +535,11 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 							return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
 						}
 
+						dm = filter.ApplyToDetections(dm)
+						if len(dm) == 0 {
+							continue
+						}
+
 						root.Detections = []dbTypes.VulnerabilityDataDetection{
 							{
 								Ecosystem: d.Ecosystem,
@@ -554,8 +588,12 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 						})
 					}
 
-					for _, datasource := range r.DataSources {
-						ds, err := c.GetDataSource(datasource.ID)
+					for _, d := range r.DataSources {
+						if filter.ExcludesDataSource(d.ID) {
+							continue
+						}
+
+						ds, err := c.GetDataSource(d.ID)
 						if err != nil {
 							if errors.Is(err, dbTypes.ErrNotFoundDataSource) {
 								return dbTypes.VulnerabilityData{}, errors.WithStack(err)

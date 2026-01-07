@@ -8,6 +8,8 @@ import (
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	"github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
@@ -450,7 +452,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 
 			got := f.ApplyShallowly(tt.args.vd)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Fetch(). (-expected +got):\n%s", diff)
+				t.Errorf("ApplyShallowly(). (-expected +got):\n%s", diff)
 			}
 		})
 	}
@@ -458,8 +460,9 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 
 func TestFilter_ApplyToAdvisories(t *testing.T) {
 	type fields struct {
-		Ecosystems []ecosystemTypes.Ecosystem
-		RootIDs    []dataTypes.RootID
+		Ecosystems  []ecosystemTypes.Ecosystem
+		RootIDs     []dataTypes.RootID
+		DataSources []sourceTypes.SourceID
 	}
 	type args struct {
 		asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
@@ -474,8 +477,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 			name: "no filter",
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -489,8 +492,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -510,8 +513,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -521,7 +524,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -532,8 +535,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -544,7 +547,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -555,7 +558,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -578,8 +581,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -590,8 +593,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-3",
@@ -601,7 +604,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"root5": {
+					"root-5": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-5-1",
@@ -621,8 +624,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -632,7 +635,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -643,8 +646,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -655,7 +658,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -666,7 +669,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -689,8 +692,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -700,7 +703,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"root2": {
+					"root-2": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-2",
@@ -711,8 +714,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-3",
@@ -722,7 +725,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"root5": {
+					"root-5": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-5-1",
@@ -746,12 +749,12 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by root ID",
 			fields: fields{
-				RootIDs: []dataTypes.RootID{"root1"},
+				RootIDs: []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -761,7 +764,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -775,8 +778,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -792,12 +795,12 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by two root IDs",
 			fields: fields{
-				RootIDs: []dataTypes.RootID{"root1", "root3"},
+				RootIDs: []dataTypes.RootID{"root-1", "root-3"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -807,7 +810,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -818,8 +821,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -830,7 +833,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -841,7 +844,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -864,8 +867,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -876,8 +879,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-3",
@@ -892,15 +895,165 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 			},
 		},
 		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-1-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracaaale:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-1-2": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-3": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-3": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "filter by ecosystem and root ID",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -911,7 +1064,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -922,8 +1075,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -934,7 +1087,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -945,7 +1098,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -968,8 +1121,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -985,13 +1138,13 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID results in no data",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -1001,7 +1154,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -1012,8 +1165,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -1024,7 +1177,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -1035,7 +1188,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -1062,13 +1215,13 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by two ecosystems and two root IDs",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1", "root5"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-1",
@@ -1078,7 +1231,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-2",
@@ -1089,8 +1242,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-3",
@@ -1101,7 +1254,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-4",
@@ -1112,7 +1265,7 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: advisoryContentTypes.Content{
 									ID: "adv-5-1",
@@ -1135,8 +1288,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-1",
@@ -1147,8 +1300,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root5": {
+				"source-2": {
+					"root-5": {
 						{
 							Content: advisoryContentTypes.Content{
 								ID: "adv-5-2",
@@ -1161,12 +1314,74 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "filter by root ID and datasource",
+			fields: fields{
+				RootIDs:     []dataTypes.RootID{"root-1"},
+				DataSources: []sourceTypes.SourceID{"source-2"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-2": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:22.04"},
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := dbTypes.Filter{
-				Ecosystems: tt.fields.Ecosystems,
-				RootIDs:    tt.fields.RootIDs,
+				Ecosystems:  tt.fields.Ecosystems,
+				RootIDs:     tt.fields.RootIDs,
+				DataSources: tt.fields.DataSources,
 			}
 
 			got := f.ApplyToAdvisories(tt.args.asmm)
@@ -1195,8 +1410,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 			name: "no filter",
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1210,8 +1425,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1231,8 +1446,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1242,7 +1457,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1253,8 +1468,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1265,7 +1480,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1276,7 +1491,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1299,8 +1514,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1311,8 +1526,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-3",
@@ -1322,7 +1537,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"root5": {
+					"root-5": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-5-1",
@@ -1342,8 +1557,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1353,7 +1568,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1364,8 +1579,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1376,7 +1591,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1387,7 +1602,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1410,8 +1625,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1421,7 +1636,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"root2": {
+					"root-2": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-2",
@@ -1432,8 +1647,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-3",
@@ -1443,7 +1658,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"root5": {
+					"root-5": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-5-1",
@@ -1467,12 +1682,12 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by root ID",
 			fields: fields{
-				RootIDs: []dataTypes.RootID{"root1"},
+				RootIDs: []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1482,7 +1697,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1496,8 +1711,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1513,12 +1728,12 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by two root IDs",
 			fields: fields{
-				RootIDs: []dataTypes.RootID{"root1", "root3"},
+				RootIDs: []dataTypes.RootID{"root-1", "root-3"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1528,7 +1743,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1539,8 +1754,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1551,7 +1766,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1562,7 +1777,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1585,8 +1800,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1597,8 +1812,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root3": {
+				"source-2": {
+					"root-3": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-3",
@@ -1615,13 +1830,13 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1631,7 +1846,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1642,8 +1857,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1654,7 +1869,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1665,7 +1880,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1688,8 +1903,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1705,13 +1920,13 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID results in no data",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1721,7 +1936,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1732,8 +1947,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1744,7 +1959,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1755,7 +1970,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1782,13 +1997,13 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by two ecosystems and two root IDs",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root1", "root5"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-					"source1": {
-						"root1": {
+					"source-1": {
+						"root-1": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-1",
@@ -1798,7 +2013,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root2": {
+						"root-2": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-2",
@@ -1809,8 +2024,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 						},
 					},
-					"source2": {
-						"root3": {
+					"source-2": {
+						"root-3": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-3",
@@ -1821,7 +2036,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root4": {
+						"root-4": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-4",
@@ -1832,7 +2047,7 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 								},
 							},
 						},
-						"root5": {
+						"root-5": {
 							{
 								Content: vulnerabilityContentTypes.Content{
 									ID: "vuln-5-1",
@@ -1855,8 +2070,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
-				"source1": {
-					"root1": {
+				"source-1": {
+					"root-1": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-1",
@@ -1867,8 +2082,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 						},
 					},
 				},
-				"source2": {
-					"root5": {
+				"source-2": {
+					"root-5": {
 						{
 							Content: vulnerabilityContentTypes.Content{
 								ID: "vuln-5-2",
@@ -1891,13 +2106,147 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 
 			got := f.ApplyToVulnerabilities(tt.args.vsmm)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Fetch(). (-expected +got):\n%s", diff)
+				t.Errorf("ApplyToVulnerabilities(). (-expected +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestFilter_ApplyToEcosystems(t *testing.T) {
+func TestFilter_ApplyToDetections(t *testing.T) {
+	type fields struct {
+		Ecosystems  []ecosystemTypes.Ecosystem
+		RootIDs     []dataTypes.RootID
+		DataSources []sourceTypes.SourceID
+	}
+	type args struct {
+		dsm map[sourceTypes.SourceID][]conditionTypes.Condition
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[sourceTypes.SourceID][]conditionTypes.Condition
+	}{
+		{
+			name: "no filter",
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-1": {
+					{
+						Criteria: criteria.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-1"),
+					},
+				},
+				"source-2": {
+					{
+						Criteria: criteria.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-2"),
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-2"},
+			},
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-2": {
+					{
+						Criteria: criteria.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-2"),
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+					"source-3": {
+						{
+							Criteria: criteria.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-3"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-1": {
+					{
+						Criteria: criteria.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-1"),
+					},
+				},
+				"source-3": {
+					{
+						Criteria: criteria.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-3"),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				DataSources: tt.fields.DataSources,
+			}
+			got := f.ApplyToDetections(tt.args.dsm)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ApplyToDetections(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ScreenEcosystems(t *testing.T) {
 	type fields struct {
 		Ecosystems []ecosystemTypes.Ecosystem
 		RootIDs    []dataTypes.RootID
@@ -1979,9 +2328,9 @@ func TestFilter_ApplyToEcosystems(t *testing.T) {
 				RootIDs:    tt.fields.RootIDs,
 			}
 
-			got := f.ApplyToEcosystems(tt.args.es)
+			got := f.ScreenEcosystems(tt.args.es)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Fetch(). (-expected +got):\n%s", diff)
+				t.Errorf("ScreenEcosystems(). (-expected +got):\n%s", diff)
 			}
 		})
 	}
@@ -2104,6 +2453,67 @@ func TestFilter_ExcludesEcosystem(t *testing.T) {
 			got := f.ExcludesEcosystem(tt.ecosystem)
 			if got != tt.want {
 				t.Errorf("ExcludesEcosystem() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_ExcludesDataSource(t *testing.T) {
+	type fields struct {
+		datasources []sourceTypes.SourceID
+	}
+	tests := []struct {
+		name       string
+		fields     fields
+		datasource sourceTypes.SourceID
+		want       bool
+	}{
+		{
+			name:       "no filter",
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "one datasource, matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex"},
+			},
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "one datasource, not matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"ubuntu-cve-tracker"},
+			},
+			datasource: "redhat-vex",
+			want:       true,
+		},
+		{
+			name: "two datasources, matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex", "ubuntu-cve-tracker"},
+			},
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "two datasources, not matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex", "ubuntu-cve-tracker"},
+			},
+			datasource: "rocky-errata",
+			want:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				DataSources: tt.fields.datasources,
+			}
+			got := f.ExcludesDataSource(tt.datasource)
+			if got != tt.want {
+				t.Errorf("ExcludesDataSource() = %v, want %v", got, tt.want)
 			}
 		})
 	}
