@@ -251,13 +251,15 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 					}
 
 					am = filter.ApplyToAdvisories(am)
-					if len(am) != 0 {
-						root.Advisories = []dbTypes.VulnerabilityDataAdvisory{
-							{
-								ID:       advisoryContentTypes.AdvisoryID(query),
-								Contents: am,
-							},
-						}
+					if len(am) == 0 {
+						return root, nil
+					}
+
+					root.Advisories = []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID:       advisoryContentTypes.AdvisoryID(query),
+							Contents: am,
+						},
 					}
 
 					dm := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
