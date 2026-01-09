@@ -158,6 +158,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 						if len(m) == 0 {
 							continue
 						}
+
 						root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
 							ID:       a.ID,
 							Contents: m,
@@ -177,6 +178,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 						if len(m) == 0 {
 							continue
 						}
+
 						root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
 							ID:       v.ID,
 							Contents: m,
@@ -378,13 +380,15 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 					}
 
 					vm = filter.ApplyToVulnerabilities(vm)
-					if len(vm) != 0 {
-						root.Vulnerabilities = []dbTypes.VulnerabilityDataVulnerability{
-							{
-								ID:       vulnerabilityContentTypes.VulnerabilityID(query),
-								Contents: vm,
-							},
-						}
+					if len(vm) == 0 {
+						return root, nil
+					}
+
+					root.Vulnerabilities = []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID:       vulnerabilityContentTypes.VulnerabilityID(query),
+							Contents: vm,
+						},
 					}
 
 					dm := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
@@ -416,6 +420,7 @@ func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter 
 									if len(am) == 0 {
 										continue
 									}
+
 									root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
 										ID:       a.ID,
 										Contents: am,
