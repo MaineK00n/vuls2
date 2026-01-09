@@ -37,9 +37,9 @@ func NewCmd() *cobra.Command {
 
 type filterOptions struct {
 	contents    []dbTypes.FilterContentType
-	rootIDs     []string
-	ecosystems  []string
 	datasources []string
+	ecosystems  []string
+	rootIDs     []string
 }
 
 func newRootCmd() *cobra.Command {
