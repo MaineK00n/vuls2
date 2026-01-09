@@ -78,9 +78,7 @@ func TestNewFilterContentType(t *testing.T) {
 
 func TestFilter_ApplyShallowly(t *testing.T) {
 	type fields struct {
-		Contents   []dbTypes.FilterContentType
-		RootIDs    []dataTypes.RootID
-		Ecosystems []ecosystemTypes.Ecosystem
+		Contents []dbTypes.FilterContentType
 	}
 	type args struct {
 		vd dbTypes.VulnerabilityData
@@ -445,9 +443,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := dbTypes.Filter{
-				Contents:   tt.fields.Contents,
-				RootIDs:    tt.fields.RootIDs,
-				Ecosystems: tt.fields.Ecosystems,
+				Contents: tt.fields.Contents,
 			}
 
 			got := f.ApplyShallowly(tt.args.vd)
@@ -460,9 +456,9 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 
 func TestFilter_ApplyToAdvisories(t *testing.T) {
 	type fields struct {
+		DataSources []sourceTypes.SourceID
 		Ecosystems  []ecosystemTypes.Ecosystem
 		RootIDs     []dataTypes.RootID
-		DataSources []sourceTypes.SourceID
 	}
 	type args struct {
 		asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
@@ -500,6 +496,156 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 							},
 							Segments: []segmentTypes.Segment{
 								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-1-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracaaale:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-1-2": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-3": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-3": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
 							},
 						},
 					},
@@ -895,160 +1041,10 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 			},
 		},
 		{
-			name: "filter by datasource",
-			fields: fields{
-				DataSources: []sourceTypes.SourceID{"source-1"},
-			},
-			args: args{
-				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source-1": {
-						"root-1-1": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-1-1",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "ubuntu:24.04"},
-								},
-							},
-						},
-						"root-1-2": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-1-2",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "oracle:9"},
-								},
-							},
-						},
-					},
-					"source-2": {
-						"root-2-1": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-2-1",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "ubuntu:24.04"},
-								},
-							},
-						},
-						"root-2-2": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-2-2",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "oracaaale:9"},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source-1": {
-					"root-1-1": {
-						{
-							Content: advisoryContentTypes.Content{
-								ID: "adv-1-1",
-							},
-							Segments: []segmentTypes.Segment{
-								{Ecosystem: "ubuntu:24.04"},
-							},
-						},
-					},
-					"root-1-2": {
-						{
-							Content: advisoryContentTypes.Content{
-								ID: "adv-1-2",
-							},
-							Segments: []segmentTypes.Segment{
-								{Ecosystem: "oracle:9"},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "filter by two datasources",
-			fields: fields{
-				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
-			},
-			args: args{
-				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-					"source-1": {
-						"root-1": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-1",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "ubuntu:24.04"},
-								},
-							},
-						},
-					},
-					"source-2": {
-						"root-2": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-2",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "ubuntu:24.04"},
-								},
-							},
-						},
-					},
-					"source-3": {
-						"root-3": {
-							{
-								Content: advisoryContentTypes.Content{
-									ID: "adv-3",
-								},
-								Segments: []segmentTypes.Segment{
-									{Ecosystem: "oracle:9"},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
-				"source-1": {
-					"root-1": {
-						{
-							Content: advisoryContentTypes.Content{
-								ID: "adv-1",
-							},
-							Segments: []segmentTypes.Segment{
-								{Ecosystem: "ubuntu:24.04"},
-							},
-						},
-					},
-				},
-				"source-3": {
-					"root-3": {
-						{
-							Content: advisoryContentTypes.Content{
-								ID: "adv-3",
-							},
-							Segments: []segmentTypes.Segment{
-								{Ecosystem: "oracle:9"},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
 			name: "filter by ecosystem and root ID",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
@@ -1138,8 +1134,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID results in no data",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
@@ -1215,8 +1211,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by two ecosystems and two root IDs",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
@@ -1317,8 +1313,8 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 		{
 			name: "filter by root ID and datasource",
 			fields: fields{
-				RootIDs:     []dataTypes.RootID{"root-1"},
 				DataSources: []sourceTypes.SourceID{"source-2"},
+				RootIDs:     []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
@@ -1830,8 +1826,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
@@ -1920,8 +1916,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by ecosystem and root ID results in no data",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
@@ -1997,8 +1993,8 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 		{
 			name: "filter by two ecosystems and two root IDs",
 			fields: fields{
-				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
 			},
 			args: args{
 				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
@@ -2114,9 +2110,9 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 
 func TestFilter_ApplyToDetections(t *testing.T) {
 	type fields struct {
+		DataSources []sourceTypes.SourceID
 		Ecosystems  []ecosystemTypes.Ecosystem
 		RootIDs     []dataTypes.RootID
-		DataSources []sourceTypes.SourceID
 	}
 	type args struct {
 		dsm map[sourceTypes.SourceID][]conditionTypes.Condition

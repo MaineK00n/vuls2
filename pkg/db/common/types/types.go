@@ -225,11 +225,11 @@ func (f Filter) ApplyToDetections(dsm map[sourceTypes.SourceID][]conditionTypes.
 	return filtered
 }
 
-func (f Filter) ExcludesRootID(rid dataTypes.RootID) bool {
-	if len(f.RootIDs) == 0 {
+func (f Filter) ExcludesDataSource(sid sourceTypes.SourceID) bool {
+	if len(f.DataSources) == 0 {
 		return false
 	}
-	return !slices.Contains(f.RootIDs, rid)
+	return !slices.Contains(f.DataSources, sid)
 }
 
 func (f Filter) ExcludesEcosystem(e ecosystemTypes.Ecosystem) bool {
@@ -239,11 +239,11 @@ func (f Filter) ExcludesEcosystem(e ecosystemTypes.Ecosystem) bool {
 	return !slices.Contains(f.Ecosystems, e)
 }
 
-func (f Filter) ExcludesDataSource(sid sourceTypes.SourceID) bool {
-	if len(f.DataSources) == 0 {
+func (f Filter) ExcludesRootID(rid dataTypes.RootID) bool {
+	if len(f.RootIDs) == 0 {
 		return false
 	}
-	return !slices.Contains(f.DataSources, sid)
+	return !slices.Contains(f.RootIDs, rid)
 }
 
 func (f Filter) applyToSegments(ss []segmentTypes.Segment) []segmentTypes.Segment {
