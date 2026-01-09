@@ -143,7 +143,7 @@ func (f Filter) ApplyShallowly(v VulnerabilityData) VulnerabilityData {
 }
 
 func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory) map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory {
-	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 && len(f.DataSources) == 0 {
+	if len(f.DataSources) == 0 && len(f.Ecosystems) == 0 && len(f.RootIDs) == 0 {
 		return asmm
 	}
 
@@ -176,7 +176,7 @@ func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.Ro
 }
 
 func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability) map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability {
-	if len(f.RootIDs) == 0 && len(f.Ecosystems) == 0 && len(f.DataSources) == 0 {
+	if len(f.DataSources) == 0 && len(f.Ecosystems) == 0 && len(f.RootIDs) == 0 {
 		return vsmm
 	}
 
@@ -202,6 +202,21 @@ func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTyp
 				}
 				filtered[sid][rid] = append(filtered[sid][rid], v)
 			}
+		}
+	}
+
+	return filtered
+}
+
+func (f Filter) applyToSegments(ss []segmentTypes.Segment) []segmentTypes.Segment {
+	if len(f.Ecosystems) == 0 {
+		return ss
+	}
+
+	filtered := make([]segmentTypes.Segment, 0, len(ss))
+	for _, s := range ss {
+		if !f.ExcludesEcosystem(s.Ecosystem) {
+			filtered = append(filtered, s)
 		}
 	}
 
@@ -244,19 +259,4 @@ func (f Filter) ExcludesRootID(rid dataTypes.RootID) bool {
 		return false
 	}
 	return !slices.Contains(f.RootIDs, rid)
-}
-
-func (f Filter) applyToSegments(ss []segmentTypes.Segment) []segmentTypes.Segment {
-	if len(f.Ecosystems) == 0 {
-		return ss
-	}
-
-	filtered := make([]segmentTypes.Segment, 0, len(ss))
-	for _, s := range ss {
-		if !f.ExcludesEcosystem(s.Ecosystem) {
-			filtered = append(filtered, s)
-		}
-	}
-
-	return filtered
 }

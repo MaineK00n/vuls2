@@ -77,11 +77,11 @@ func newRootCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
-	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -122,11 +122,11 @@ func newAdvisoryCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
-	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -167,11 +167,11 @@ func newVulnerabilityCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
-	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -212,11 +212,11 @@ func newPackageCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
-	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
-	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
@@ -335,6 +335,14 @@ func allFilterContentCandidates() []string {
 
 func (o filterOptions) buildFilter() dbTypes.Filter {
 	return dbTypes.Filter{
+		Contents: o.contents,
+		DataSources: func() []sourceTypes.SourceID {
+			ds := make([]sourceTypes.SourceID, 0, len(o.datasources))
+			for _, d := range o.datasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			return ds
+		}(),
 		Ecosystems: func() []ecosystemTypes.Ecosystem {
 			es := make([]ecosystemTypes.Ecosystem, 0, len(o.ecosystems))
 			for _, e := range o.ecosystems {
@@ -349,13 +357,5 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 			}
 			return rs
 		}(),
-		DataSources: func() []sourceTypes.SourceID {
-			ds := make([]sourceTypes.SourceID, 0, len(o.datasources))
-			for _, d := range o.datasources {
-				ds = append(ds, sourceTypes.SourceID(d))
-			}
-			return ds
-		}(),
-		Contents: o.contents,
 	}
 }
