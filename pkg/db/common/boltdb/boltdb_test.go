@@ -205,7 +205,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		filter     dbTypes.Filter
 		queries    []string
 	}
-	tests := map[string][]struct {
+	tests := []struct {
 		name     string
 		fixture  string
 		fields   fields
@@ -213,846 +213,836 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 		wantPath string
 		wantErr  bool
 	}{
-		"SearchRoot": {
-			{
-				name:    "non-existent id",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+		{
+			name:    "non-existent id",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"ROOT-NOT-EXISTS"},
-				},
-				wantErr: true,
 			},
-			{
-				name:    "happy",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/happy.json",
+				queries: []string{"ROOT-NOT-EXISTS"},
 			},
-			{
-				name:    "no advisories",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/no-advisories.json",
-			},
-			{
-				name:    "no vulnerabilities",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/no-vulnerabilities.json",
-			},
-			{
-				name:    "no detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/no-detections.json",
-			},
-			{
-				name:    "no datasources",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/no-datasources.json",
-			},
-			{
-				name:    "only detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/only-detections.json",
-			},
-			{
-				name:    "root id filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-						RootIDs:  []dataTypes.RootID{"CVE-2019-2510", "ALSA-2019:3708"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/root-id-filter.json",
-			},
-			{
-				name:    "ecosystem filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents:   dbTypes.AllFilterContentTypes(),
-						Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:18.04"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/ecosystem-filter.json",
-			},
-			{
-				name:    "datasource filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchRoot,
-					filter: dbTypes.Filter{
-						Contents:    dbTypes.AllFilterContentTypes(),
-						DataSources: []sourceTypes.SourceID{"redhat-vex"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-root/datasource-filter.json",
-			},
+			wantErr: true,
 		},
-		"SearchAdvisory": {
-			{
-				name:    "non-existent id",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"ADV-NOT-EXISTS"},
-				},
-				wantErr: true,
 			},
-			{
-				name:    "happy",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/happy.json",
+				queries: []string{"CVE-2019-2510"},
 			},
-			{
-				name:    "no advisories",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-advisories.json",
-			},
-			{
-				name:    "no vulnerabilities",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-vulnerabilities.json",
-			},
-			{
-				name:    "no detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-detections.json",
-			},
-			{
-				name:    "no datasources",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-datasources.json",
-			},
-			{
-				name:    "only detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/only-detections.json",
-			},
-			{
-				name:    "root id filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-						RootIDs:  []dataTypes.RootID{"CVE-2019-2510"},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/root-id-filter.json",
-			},
-			{
-				name:    "ecosystem filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents:   dbTypes.AllFilterContentTypes(),
-						Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/ecosystem-filter.json",
-			},
-			{
-				name:    "datasource filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchAdvisory,
-					filter: dbTypes.Filter{
-						Contents:    dbTypes.AllFilterContentTypes(),
-						DataSources: []sourceTypes.SourceID{"redhat-vex"},
-					},
-					queries: []string{"RHSA-2019:2511"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-advisory/datasource-filter.json",
-			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/happy.json",
 		},
-		"SearchVulnerability": {
-			{
-				name:    "non-existent id",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+		{
+			name:    "no advisories",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"VULN-NOT-EXISTS"},
-				},
-				wantErr: true,
 			},
-			{
-				name:    "happy",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/happy.json",
+				queries: []string{"CVE-2019-2510"},
 			},
-			{
-				name:    "no advisories",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-advisories.json",
-			},
-			{
-				name:    "no vulnerabilities",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-vulnerabilities.json",
-			},
-			{
-				name:    "no detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-detections.json",
-			},
-			{
-				name:    "no datasources",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-datasources.json",
-			},
-			{
-				name:    "only detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/only-detections.json",
-			},
-			{
-				name:    "root id filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-						RootIDs:  []dataTypes.RootID{"ALSA-2019:3708"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/root-id-filter.json",
-			},
-			{
-				name:    "ecosystem filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents:   dbTypes.AllFilterContentTypes(),
-						Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "alma:8"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/ecosystem-filter.json",
-			},
-			{
-				name:    "datasource filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
-				},
-				args: args{
-					searchType: dbTypes.SearchVulnerability,
-					filter: dbTypes.Filter{
-						Contents:    dbTypes.AllFilterContentTypes(),
-						DataSources: []sourceTypes.SourceID{"alma-errata"},
-					},
-					queries: []string{"CVE-2019-2510"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/datasource-filter.json",
-			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/no-advisories.json",
 		},
-		"SearchPackage": {
-			{
-				name:    "non-existent id (no results)",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+		{
+			name:    "no vulnerabilities",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"redhat:8", "PKG-NOT-EXISTS"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/no-data.json",
 			},
-			{
-				name:    "happy",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/happy.json",
+				queries: []string{"CVE-2019-2510"},
 			},
-			{
-				name:    "no advisories",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/no-vulnerabilities.json",
+		},
+		{
+			name:    "no detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/no-advisories.json",
 			},
-			{
-				name:    "no vulnerabilities",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeDetections,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/no-vulnerabilities.json",
+				queries: []string{"CVE-2019-2510"},
 			},
-			{
-				name:    "no detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/no-detections.json",
+		},
+		{
+			name:    "no datasources",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDataSources,
-						},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/no-detections.json",
 			},
-			{
-				name:    "no datasources",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeAdvisories,
-							dbTypes.FilterContentTypeVulnerabilities,
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/no-datasources.json",
+				queries: []string{"CVE-2019-2510"},
 			},
-			{
-				name:    "only detections",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/no-datasources.json",
+		},
+		{
+			name:    "only detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: []dbTypes.FilterContentType{
-							dbTypes.FilterContentTypeDetections,
-						},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/only-detections.json",
 			},
-			{
-				name:    "root id filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents: dbTypes.AllFilterContentTypes(),
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/only-detections.json",
+		},
+		{
+			name:    "root id filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+					RootIDs:  []dataTypes.RootID{"CVE-2019-2510", "ALSA-2019:3708"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/root-id-filter.json",
+		},
+		{
+			name:    "ecosystem filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents:   dbTypes.AllFilterContentTypes(),
+					Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:18.04"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/ecosystem-filter.json",
+		},
+		{
+			name:    "datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchRoot,
+				filter: dbTypes.Filter{
+					Contents:    dbTypes.AllFilterContentTypes(),
+					DataSources: []sourceTypes.SourceID{"redhat-vex"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-root/datasource-filter.json",
+		},
+		{
+			name:    "non-existent id",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"ADV-NOT-EXISTS"},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/happy.json",
+		},
+		{
+			name:    "no advisories",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-advisories.json",
+		},
+		{
+			name:    "no vulnerabilities",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-vulnerabilities.json",
+		},
+		{
+			name:    "no detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-detections.json",
+		},
+		{
+			name:    "no datasources",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/no-datasources.json",
+		},
+		{
+			name:    "only detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/only-detections.json",
+		},
+		{
+			name:    "root id filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+					RootIDs:  []dataTypes.RootID{"CVE-2019-2510"},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/root-id-filter.json",
+		},
+		{
+			name:    "ecosystem filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents:   dbTypes.AllFilterContentTypes(),
+					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/ecosystem-filter.json",
+		},
+		{
+			name:    "datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchAdvisory,
+				filter: dbTypes.Filter{
+					Contents:    dbTypes.AllFilterContentTypes(),
+					DataSources: []sourceTypes.SourceID{"redhat-vex"},
+				},
+				queries: []string{"RHSA-2019:2511"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-advisory/datasource-filter.json",
+		},
+		{
+			name:    "non-existent id",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"VULN-NOT-EXISTS"},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/happy.json",
+		},
+		{
+			name:    "no advisories",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-advisories.json",
+		},
+		{
+			name:    "no vulnerabilities",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-vulnerabilities.json",
+		},
+		{
+			name:    "no detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-detections.json",
+		},
+		{
+			name:    "no datasources",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/no-datasources.json",
+		},
+		{
+			name:    "only detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/only-detections.json",
+		},
+		{
+			name:    "root id filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+					RootIDs:  []dataTypes.RootID{"ALSA-2019:3708"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/root-id-filter.json",
+		},
+		{
+			name:    "ecosystem filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents:   dbTypes.AllFilterContentTypes(),
+					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "alma:8"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/ecosystem-filter.json",
+		},
+		{
+			name:    "datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchVulnerability,
+				filter: dbTypes.Filter{
+					Contents:    dbTypes.AllFilterContentTypes(),
+					DataSources: []sourceTypes.SourceID{"alma-errata"},
+				},
+				queries: []string{"CVE-2019-2510"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-vulnerability/datasource-filter.json",
+		},
+		{
+			name:    "non-existent id (no results)",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"redhat:8", "PKG-NOT-EXISTS"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/no-data.json",
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/happy.json",
+		},
+		{
+			name:    "no advisories",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/no-advisories.json",
+		},
+		{
+			name:    "no vulnerabilities",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeDetections,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/no-vulnerabilities.json",
+		},
+		{
+			name:    "no detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDataSources,
+					},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/no-detections.json",
+		},
+		{
+			name:    "no datasources",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeAdvisories,
+						dbTypes.FilterContentTypeVulnerabilities,
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/no-datasources.json",
+		},
+		{
+			name:    "only detections",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: []dbTypes.FilterContentType{
+						dbTypes.FilterContentTypeDetections,
+					},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/only-detections.json",
+		},
+		{
+			name:    "root id filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
 
-						RootIDs: []dataTypes.RootID{"ALSA-2019:3708", "CVE-2019-2510"},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
+					RootIDs: []dataTypes.RootID{"ALSA-2019:3708", "CVE-2019-2510"},
 				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/root-id-filter.json",
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
-			{
-				name:    "ecosystem filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/root-id-filter.json",
+		},
+		{
+			name:    "ecosystem filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents:   dbTypes.AllFilterContentTypes(),
-						Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/ecosystem-filter.json",
 			},
-			{
-				name:    "datasource filter",
-				fixture: "testdata/fixtures/get-vulnerability-data",
-				fields: fields{
-					Config: &boltdb.Config{
-						Path: filepath.Join(t.TempDir(), "vuls.db"),
-					},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents:   dbTypes.AllFilterContentTypes(),
+					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
 				},
-				args: args{
-					searchType: dbTypes.SearchPackage,
-					filter: dbTypes.Filter{
-						Contents:    dbTypes.AllFilterContentTypes(),
-						DataSources: []sourceTypes.SourceID{"redhat-vex"},
-					},
-					queries: []string{"redhat:8", "mysql:8.0::mecab"},
-				},
-				wantPath: "testdata/golden/get-vulnerability-data/search-package/datasource-filter.json",
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/ecosystem-filter.json",
+		},
+		{
+			name:    "datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				searchType: dbTypes.SearchPackage,
+				filter: dbTypes.Filter{
+					Contents:    dbTypes.AllFilterContentTypes(),
+					DataSources: []sourceTypes.SourceID{"redhat-vex"},
+				},
+				queries: []string{"redhat:8", "mysql:8.0::mecab"},
+			},
+			wantPath: "testdata/golden/get-vulnerability-data/search-package/datasource-filter.json",
 		},
 	}
-	for group, tts := range tests {
-		for _, tt := range tts {
-			t.Run(fmt.Sprintf("%s:%s", tt.args.searchType, tt.name), func(t *testing.T) {
-				if err := test.PopulateDB(db.Config{
-					Type: "boltdb",
-					Path: tt.fields.Config.Path,
-					Options: db.DBOptions{
-						BoltDB: tt.fields.Config.Options,
-					},
-				}, tt.fixture); err != nil {
-					t.Fatalf("populate db. error = %v", err)
-				}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s:%s", tt.args.searchType, tt.name), func(t *testing.T) {
+			if err := test.PopulateDB(db.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: db.DBOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
 
-				c := &boltdb.Connection{
-					Config: tt.fields.Config,
-				}
-				if err := c.Open(); err != nil {
-					t.Fatalf("open db. error = %v", err)
-				}
-				defer c.Close()
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
 
-				if tt.fields.cache != nil {
-					c.SetCache(tt.fields.cache)
-				}
+			if tt.fields.cache != nil {
+				c.SetCache(tt.fields.cache)
+			}
 
-				it := c.GetVulnerabilityData(tt.args.searchType, tt.args.filter, tt.args.queries...)
-				var got []dbTypes.VulnerabilityData
-				for vd, err := range it {
-					if tt.wantErr {
-						switch err {
-						case nil:
-							t.Errorf("Connection.GetVulnerabilityData() expected error, but got nil")
-						default:
-							return
-						}
+			it := c.GetVulnerabilityData(tt.args.searchType, tt.args.filter, tt.args.queries...)
+			var got []dbTypes.VulnerabilityData
+			for vd, err := range it {
+				if tt.wantErr {
+					switch err {
+					case nil:
+						t.Errorf("Connection.GetVulnerabilityData() expected error, but got nil")
+					default:
+						return
 					}
-					if err != nil {
-						t.Errorf("Connection.GetVulnerabilityData() error = %v", err)
-						break
-					}
-
-					got = append(got, vd)
 				}
-
-				f, err := os.OpenFile(tt.wantPath, os.O_RDONLY, 0o644)
 				if err != nil {
-					t.Fatalf("open golden file. path: %s, error = %v", tt.wantPath, err)
-				}
-				defer f.Close()
-
-				var want []dbTypes.VulnerabilityData
-				if err := json.UnmarshalRead(f, &want); err != nil {
-					t.Fatalf("unmarshal golden file. error = %v", err)
+					t.Errorf("Connection.GetVulnerabilityData() error = %v", err)
+					break
 				}
 
-				if diff := cmp.Diff(want, got,
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
-					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
-				); diff != "" {
-					t.Errorf("Connection.GetVulnerabilityData(). (-expected +got):\n%s", diff)
-				}
-			})
-		}
+				got = append(got, vd)
+			}
+
+			f, err := os.OpenFile(tt.wantPath, os.O_RDONLY, 0o644)
+			if err != nil {
+				t.Fatalf("open golden file. path: %s, error = %v", tt.wantPath, err)
+			}
+			defer f.Close()
+
+			var want []dbTypes.VulnerabilityData
+			if err := json.UnmarshalRead(f, &want); err != nil {
+				t.Fatalf("unmarshal golden file. error = %v", err)
+			}
+
+			if diff := cmp.Diff(want, got,
+				cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+				cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+				cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+				cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+				cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+			); diff != "" {
+				t.Errorf("Connection.GetVulnerabilityData(). (-expected +got):\n%s", diff)
+			}
+		})
 	}
 }
 
