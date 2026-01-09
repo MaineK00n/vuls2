@@ -1013,7 +1013,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 				}
 
 				it := c.GetVulnerabilityData(tt.args.searchType, tt.args.filter, tt.args.queries...)
-				var got = []dbTypes.VulnerabilityData{}
+				var got []dbTypes.VulnerabilityData
 				for vd, err := range it {
 					if tt.wantErr {
 						switch err {
