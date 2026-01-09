@@ -122,7 +122,7 @@ func (f FilterContentType) String() string {
 	case FilterContentTypeDataSources:
 		return "datasources"
 	default:
-		return fmt.Sprintf("unknown(%d)", f)
+		return "unknown"
 	}
 }
 
