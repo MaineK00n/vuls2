@@ -9,12 +9,12 @@ import (
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
-	"github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
-	"github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 )
@@ -113,7 +113,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -136,7 +136,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 						Ecosystem: "ubuntu:24.04",
 					},
 				},
-				DataSources: []datasource.DataSource{
+				DataSources: []datasourceTypes.DataSource{
 					{
 						ID: "source-1",
 					},
@@ -169,7 +169,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -188,7 +188,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 						Ecosystem: "ubuntu:24.04",
 					},
 				},
-				DataSources: []datasource.DataSource{
+				DataSources: []datasourceTypes.DataSource{
 					{
 						ID: "source-1",
 					},
@@ -221,7 +221,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -240,7 +240,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 						Ecosystem: "ubuntu:24.04",
 					},
 				},
-				DataSources: []datasource.DataSource{
+				DataSources: []datasourceTypes.DataSource{
 					{
 						ID: "source-1",
 					},
@@ -273,7 +273,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -292,7 +292,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 					},
 				},
 				Detections: nil,
-				DataSources: []datasource.DataSource{
+				DataSources: []datasourceTypes.DataSource{
 					{
 						ID: "source-1",
 					},
@@ -325,7 +325,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -375,7 +375,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -418,7 +418,7 @@ func TestFilter_ApplyShallowly(t *testing.T) {
 							Ecosystem: "ubuntu:24.04",
 						},
 					},
-					DataSources: []datasource.DataSource{
+					DataSources: []datasourceTypes.DataSource{
 						{
 							ID: "source-1",
 						},
@@ -2133,13 +2133,13 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
 					"source-1": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-1"),
 						},
 					},
 					"source-2": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-2"),
 						},
 					},
@@ -2148,13 +2148,13 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
 				"source-1": {
 					{
-						Criteria: criteria.Criteria{},
+						Criteria: criteriaTypes.Criteria{},
 						Tag:      segmentTypes.DetectionTag("tag-1"),
 					},
 				},
 				"source-2": {
 					{
-						Criteria: criteria.Criteria{},
+						Criteria: criteriaTypes.Criteria{},
 						Tag:      segmentTypes.DetectionTag("tag-2"),
 					},
 				},
@@ -2169,13 +2169,13 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
 					"source-1": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-1"),
 						},
 					},
 					"source-2": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-2"),
 						},
 					},
@@ -2184,7 +2184,7 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
 				"source-2": {
 					{
-						Criteria: criteria.Criteria{},
+						Criteria: criteriaTypes.Criteria{},
 						Tag:      segmentTypes.DetectionTag("tag-2"),
 					},
 				},
@@ -2199,19 +2199,19 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
 					"source-1": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-1"),
 						},
 					},
 					"source-2": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-2"),
 						},
 					},
 					"source-3": {
 						{
-							Criteria: criteria.Criteria{},
+							Criteria: criteriaTypes.Criteria{},
 							Tag:      segmentTypes.DetectionTag("tag-3"),
 						},
 					},
@@ -2220,13 +2220,13 @@ func TestFilter_ApplyToDetections(t *testing.T) {
 			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
 				"source-1": {
 					{
-						Criteria: criteria.Criteria{},
+						Criteria: criteriaTypes.Criteria{},
 						Tag:      segmentTypes.DetectionTag("tag-1"),
 					},
 				},
 				"source-3": {
 					{
-						Criteria: criteria.Criteria{},
+						Criteria: criteriaTypes.Criteria{},
 						Tag:      segmentTypes.DetectionTag("tag-3"),
 					},
 				},
