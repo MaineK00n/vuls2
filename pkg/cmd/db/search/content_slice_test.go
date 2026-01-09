@@ -13,13 +13,13 @@ import (
 
 func setUpCSFlagSet(cs *[]dbTypes.FilterContentType) *pflag.FlagSet {
 	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	search.ContentSliceVarP(f, cs, "cs", "", []dbTypes.FilterContentType{}, "Test content slice flag")
+	f.VarP(search.NewContentSliceValue(nil, cs), "cs", "", "Test content slice flag")
 	return f
 }
 
 func setUpCSFlagSetWithDefault(cs *[]dbTypes.FilterContentType) *pflag.FlagSet {
 	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	search.ContentSliceVarP(f, cs, "cs", "", []dbTypes.FilterContentType{dbTypes.FilterContentTypeAdvisories, dbTypes.FilterContentTypeDataSources}, "Test content slice flag")
+	f.VarP(search.NewContentSliceValue(*cs, cs), "cs", "", "Test content slice flag")
 	return f
 }
 

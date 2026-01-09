@@ -80,8 +80,7 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
-
-	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
@@ -126,8 +125,7 @@ func newAdvisoryCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
-
-	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
@@ -172,8 +170,7 @@ func newVulnerabilityCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
-
-	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
@@ -218,8 +215,7 @@ func newPackageCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
-
-	ContentSliceVarP(cmd.Flags(), &options.filterOpts.contents, "content", "", options.filterOpts.contents, "types of content to include")
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
 	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
 
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")

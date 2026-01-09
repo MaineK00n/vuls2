@@ -5,8 +5,6 @@ import (
 	"encoding/csv"
 	"strings"
 
-	"github.com/spf13/pflag"
-
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 )
 
@@ -116,18 +114,4 @@ func (s *contentSliceValue) GetSlice() []string {
 		ss = append(ss, v.String())
 	}
 	return ss
-}
-
-// ContentSliceVarP defines a filter content type flag with specified name, a shorthand letter, default value, and usage string.
-// The argument p points to a []dbTypes.FilterContentType variable in which to store the value of the flag.
-// ContentSlice flags take comma-separated value as arguments and split them accordingly.
-// For example:
-//
-//	--content="advisories,vulnerabilities" --content="detections"
-//
-// will result in
-//
-//	[]dbTypes.FilterContentType{"advisories", "vulnerabilities", "detections"}
-func ContentSliceVarP(f *pflag.FlagSet, p *[]dbTypes.FilterContentType, name, shorthand string, value []dbTypes.FilterContentType, usage string) {
-	f.VarP(newContentSliceValue(value, p), name, shorthand, usage)
 }
