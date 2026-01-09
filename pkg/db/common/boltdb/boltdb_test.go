@@ -989,7 +989,7 @@ func TestConnection_GetVulnerabilityData(t *testing.T) {
 	}
 	for group, tts := range tests {
 		for _, tt := range tts {
-			t.Run(fmt.Sprintf("%s:%s", group, tt.name), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s:%s", tt.args.searchType, tt.name), func(t *testing.T) {
 				if err := test.PopulateDB(db.Config{
 					Type: "boltdb",
 					Path: tt.fields.Config.Path,
