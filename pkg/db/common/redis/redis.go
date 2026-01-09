@@ -53,7 +53,7 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, queries ...string) iter.Seq2[dbTypes.VulnerabilityData, error] {
+func (c *Connection) GetVulnerabilityData(searchType dbTypes.SearchType, filter dbTypes.Filter, queries ...string) iter.Seq2[dbTypes.VulnerabilityData, error] {
 	return func(yield func(dbTypes.VulnerabilityData, error) bool) {
 		if !yield(dbTypes.VulnerabilityData{}, errors.New("not implemented yet")) {
 			return
@@ -65,8 +65,8 @@ func (c *Connection) PutVulnerabilityData(root string) error {
 	return errors.New("not implemented yet")
 }
 
-func (c *Connection) GetRoot(id dataTypes.RootID) (*dbTypes.VulnerabilityData, error) {
-	return nil, errors.New("not implemented yet")
+func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, error) {
+	return dbTypes.VulnerabilityData{}, errors.New("not implemented yet")
 }
 
 func (c *Connection) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
@@ -93,8 +93,8 @@ func (c *Connection) GetDataSources() ([]datasourceTypes.DataSource, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetDataSource(id sourceTypes.SourceID) (*datasourceTypes.DataSource, error) {
-	return nil, errors.New("not implemented yet")
+func (c *Connection) GetDataSource(id sourceTypes.SourceID) (datasourceTypes.DataSource, error) {
+	return datasourceTypes.DataSource{}, errors.New("not implemented yet")
 }
 
 func (c *Connection) PutDataSource(root string) error {

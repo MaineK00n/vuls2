@@ -7,6 +7,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
@@ -32,27 +35,38 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
+type filterOptions struct {
+	contents    []dbTypes.FilterContentType
+	datasources []string
+	ecosystems  []string
+	rootIDs     []string
+}
+
 func newRootCmd() *cobra.Command {
 	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
+		dbtype     utilflag.DBType
+		dbpath     string
+		filterOpts filterOptions
+		debug      bool
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
 		Use:   "root <Root ID>...",
 		Short: "search data in vuls db by root id",
 		Example: heredoc.Doc(`
-		$ vuls db search data root AVG-1
-		$ vuls db search data root CVE-2016-6352
+		$ vuls db search root AVG-1
+		$ vuls db search root CVE-2016-6352
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchRoot, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchRoot, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -62,6 +76,13 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
@@ -69,13 +90,17 @@ func newRootCmd() *cobra.Command {
 
 func newAdvisoryCmd() *cobra.Command {
 	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
+		dbtype     utilflag.DBType
+		dbpath     string
+		filterOpts filterOptions
+		debug      bool
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -86,7 +111,7 @@ func newAdvisoryCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchAdvisory, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchAdvisory, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -96,6 +121,13 @@ func newAdvisoryCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
@@ -103,13 +135,17 @@ func newAdvisoryCmd() *cobra.Command {
 
 func newVulnerabilityCmd() *cobra.Command {
 	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
+		dbtype     utilflag.DBType
+		dbpath     string
+		filterOpts filterOptions
+		debug      bool
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -120,7 +156,7 @@ func newVulnerabilityCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchVulnerability, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchVulnerability, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -130,6 +166,13 @@ func newVulnerabilityCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
@@ -137,13 +180,17 @@ func newVulnerabilityCmd() *cobra.Command {
 
 func newPackageCmd() *cobra.Command {
 	options := struct {
-		dbtype utilflag.DBType
-		dbpath string
-		debug  bool
+		dbtype     utilflag.DBType
+		dbpath     string
+		filterOpts filterOptions
+		debug      bool
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		debug:  false,
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
@@ -154,7 +201,7 @@ func newPackageCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug), db.WithFilter(options.filterOpts.buildFilter())); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -164,6 +211,13 @@ func newPackageCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
+
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
@@ -269,4 +323,39 @@ func newEcosystemsCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
+}
+
+func allFilterContentCandidates() []string {
+	ss := make([]string, 0, len(dbTypes.AllFilterContentTypes()))
+	for _, v := range dbTypes.AllFilterContentTypes() {
+		ss = append(ss, v.String())
+	}
+	return ss
+}
+
+func (o filterOptions) buildFilter() dbTypes.Filter {
+	return dbTypes.Filter{
+		Contents: o.contents,
+		DataSources: func() []sourceTypes.SourceID {
+			ds := make([]sourceTypes.SourceID, 0, len(o.datasources))
+			for _, d := range o.datasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			return ds
+		}(),
+		Ecosystems: func() []ecosystemTypes.Ecosystem {
+			es := make([]ecosystemTypes.Ecosystem, 0, len(o.ecosystems))
+			for _, e := range o.ecosystems {
+				es = append(es, ecosystemTypes.Ecosystem(e))
+			}
+			return es
+		}(),
+		RootIDs: func() []dataTypes.RootID {
+			rs := make([]dataTypes.RootID, 0, len(o.rootIDs))
+			for _, r := range o.rootIDs {
+				rs = append(rs, dataTypes.RootID(r))
+			}
+			return rs
+		}(),
+	}
 }

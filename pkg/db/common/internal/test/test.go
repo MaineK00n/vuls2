@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -20,6 +21,9 @@ func PopulateDB(c db.Config, fixtureDir string) error {
 	if fixtureDir == "" { // fool proof
 		return errors.New("fixtureDir must not be empty")
 	}
+
+	slog.SetLogLoggerLevel(slog.LevelWarn)
+	defer slog.SetLogLoggerLevel(slog.LevelInfo)
 
 	if err := dbInit.Init(dbInit.WithDBType(c.Type), dbInit.WithDBPath(c.Path), dbInit.WithDBOptions(c.Options), dbInit.WithDebug(c.Debug)); err != nil {
 		return err

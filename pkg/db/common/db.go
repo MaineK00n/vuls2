@@ -34,9 +34,9 @@ type DB interface {
 	GetMetadata() (*dbTypes.Metadata, error)
 	PutMetadata(dbTypes.Metadata) error
 
-	GetVulnerabilityData(dbTypes.SearchType, ...string) iter.Seq2[dbTypes.VulnerabilityData, error]
+	GetVulnerabilityData(dbTypes.SearchType, dbTypes.Filter, ...string) iter.Seq2[dbTypes.VulnerabilityData, error]
 	PutVulnerabilityData(string) error
-	GetRoot(dataTypes.RootID) (*dbTypes.VulnerabilityData, error)
+	GetRoot(dataTypes.RootID) (dbTypes.VulnerabilityData, error)
 	GetAdvisory(advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error)
 	GetVulnerability(vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error)
 	GetEcosystems() ([]ecosystemTypes.Ecosystem, error)
@@ -44,7 +44,7 @@ type DB interface {
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
 
 	GetDataSources() ([]datasourceTypes.DataSource, error)
-	GetDataSource(sourceTypes.SourceID) (*datasourceTypes.DataSource, error)
+	GetDataSource(sourceTypes.SourceID) (datasourceTypes.DataSource, error)
 	PutDataSource(string) error
 
 	DeleteAll() error

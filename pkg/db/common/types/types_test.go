@@ -1,0 +1,2639 @@
+package types_test
+
+import (
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+)
+
+func TestNewFilterContentType(t *testing.T) {
+	tests := []struct {
+		name    string
+		str     string
+		want    dbTypes.FilterContentType
+		wantErr bool
+	}{
+		{
+			name:    "advisories",
+			str:     "advisories",
+			want:    dbTypes.FilterContentTypeAdvisories,
+			wantErr: false,
+		},
+		{
+			name:    "vulnerabilities",
+			str:     "vulnerabilities",
+			want:    dbTypes.FilterContentTypeVulnerabilities,
+			wantErr: false,
+		},
+		{
+			name:    "detections",
+			str:     "detections",
+			want:    dbTypes.FilterContentTypeDetections,
+			wantErr: false,
+		},
+		{
+			name:    "datasources",
+			str:     "datasources",
+			want:    dbTypes.FilterContentTypeDataSources,
+			wantErr: false,
+		},
+		{
+			name:    "invalid content type",
+			str:     "invalid",
+			want:    0,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := dbTypes.NewFilterContentType(tt.str)
+			if gotErr != nil {
+				if !tt.wantErr {
+					t.Errorf("NewFilterContentType() failed: %v", gotErr)
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Error("NewFilterContentType() succeeded unexpectedly")
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("NewFilterContentType(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ApplyShallowly(t *testing.T) {
+	type fields struct {
+		Contents []dbTypes.FilterContentType
+	}
+	type args struct {
+		vd dbTypes.VulnerabilityData
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   dbTypes.VulnerabilityData
+	}{
+		{
+			name: "no filter",
+			fields: fields{
+				Contents: dbTypes.AllFilterContentTypes(),
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "adv-1",
+					},
+				},
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "vuln-1",
+					},
+				},
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "ubuntu:24.04",
+					},
+				},
+				DataSources: []datasourceTypes.DataSource{
+					{
+						ID: "source-1",
+					},
+				},
+			},
+		},
+		{
+			name: "no advisories",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeVulnerabilities,
+					dbTypes.FilterContentTypeDetections,
+					dbTypes.FilterContentTypeDataSources,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: nil,
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "vuln-1",
+					},
+				},
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "ubuntu:24.04",
+					},
+				},
+				DataSources: []datasourceTypes.DataSource{
+					{
+						ID: "source-1",
+					},
+				},
+			},
+		},
+		{
+			name: "no vulnerabilities",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeAdvisories,
+					dbTypes.FilterContentTypeDetections,
+					dbTypes.FilterContentTypeDataSources,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "adv-1",
+					},
+				},
+				Vulnerabilities: nil,
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "ubuntu:24.04",
+					},
+				},
+				DataSources: []datasourceTypes.DataSource{
+					{
+						ID: "source-1",
+					},
+				},
+			},
+		},
+		{
+			name: "no detections",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeAdvisories,
+					dbTypes.FilterContentTypeVulnerabilities,
+					dbTypes.FilterContentTypeDataSources,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "adv-1",
+					},
+				},
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "vuln-1",
+					},
+				},
+				Detections: nil,
+				DataSources: []datasourceTypes.DataSource{
+					{
+						ID: "source-1",
+					},
+				},
+			},
+		},
+		{
+			name: "no datasources",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeAdvisories,
+					dbTypes.FilterContentTypeVulnerabilities,
+					dbTypes.FilterContentTypeDetections,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "adv-1",
+					},
+				},
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "vuln-1",
+					},
+				},
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "ubuntu:24.04",
+					},
+				},
+				DataSources: nil,
+			},
+		},
+		{
+			name: "detections only",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeDetections,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories:      nil,
+				Vulnerabilities: nil,
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "ubuntu:24.04",
+					},
+				},
+				DataSources: nil,
+			},
+		},
+		{
+			name: "advisories and vulnerabilities only",
+			fields: fields{
+				Contents: []dbTypes.FilterContentType{
+					dbTypes.FilterContentTypeAdvisories,
+					dbTypes.FilterContentTypeVulnerabilities,
+				},
+			},
+			args: args{
+				vd: dbTypes.VulnerabilityData{
+					Advisories: []dbTypes.VulnerabilityDataAdvisory{
+						{
+							ID: "adv-1",
+						},
+					},
+					Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+						{
+							ID: "vuln-1",
+						},
+					},
+					Detections: []dbTypes.VulnerabilityDataDetection{
+						{
+							Ecosystem: "ubuntu:24.04",
+						},
+					},
+					DataSources: []datasourceTypes.DataSource{
+						{
+							ID: "source-1",
+						},
+					},
+				},
+			},
+			want: dbTypes.VulnerabilityData{
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "adv-1",
+					},
+				},
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "vuln-1",
+					},
+				},
+				Detections:  nil,
+				DataSources: nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				Contents: tt.fields.Contents,
+			}
+
+			got := f.ApplyShallowly(tt.args.vd)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ApplyShallowly(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ApplyToAdvisories(t *testing.T) {
+	type fields struct {
+		DataSources []sourceTypes.SourceID
+		Ecosystems  []ecosystemTypes.Ecosystem
+		RootIDs     []dataTypes.RootID
+	}
+	type args struct {
+		asmm map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
+	}{
+		{
+			name: "no filter",
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-1-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracaaale:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-1-2": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-3": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-3": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-5": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-5-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two ecosystem",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9", "ubuntu:24.04"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-2": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-5": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-5-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-5-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by root ID",
+			fields: fields{
+				RootIDs: []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two root IDs",
+			fields: fields{
+				RootIDs: []dataTypes.RootID{"root-1", "root-3"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:22.04"},
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource and root ID",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-2"},
+				RootIDs:     []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-2": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:22.04"},
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem and root ID",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem and root ID results in no data",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{},
+		},
+		{
+			name: "filter by two ecosystems and two root IDs",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-5": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-5-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				Ecosystems:  tt.fields.Ecosystems,
+				RootIDs:     tt.fields.RootIDs,
+				DataSources: tt.fields.DataSources,
+			}
+
+			got := f.ApplyToAdvisories(tt.args.asmm)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Filter.ApplyToAdvisories(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ApplyToVulnerabilities(t *testing.T) {
+	type fields struct {
+		DataSources []sourceTypes.SourceID
+		Ecosystems  []ecosystemTypes.Ecosystem
+		RootIDs     []dataTypes.RootID
+	}
+	type args struct {
+		vsmm map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
+	}{
+		{
+			name: "no filter",
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-1-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracaaale:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-1-2": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+					"source-3": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-3": {
+					"root-3": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-5": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-5-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two ecosystem",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9", "ubuntu:24.04"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-2": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-5": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-5-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-5-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by root ID",
+			fields: fields{
+				RootIDs: []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two root IDs",
+			fields: fields{
+				RootIDs: []dataTypes.RootID{"root-1", "root-3"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-3": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:22.04"},
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource and root ID",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-2"},
+				RootIDs:     []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-2": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-3",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:22.04"},
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem and root ID",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by ecosystem and root ID results in no data",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{},
+		},
+		{
+			name: "filter by two ecosystems and two root IDs",
+			fields: fields{
+				Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
+				RootIDs:    []dataTypes.RootID{"root-1", "root-5"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:22.04"},
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-4": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-4",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+						},
+						"root-5": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:20.04"},
+									{Ecosystem: "ubuntu:22.04"},
+								},
+							},
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-5-2",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+				"source-2": {
+					"root-5": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-5-2",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				DataSources: tt.fields.DataSources,
+				Ecosystems:  tt.fields.Ecosystems,
+				RootIDs:     tt.fields.RootIDs,
+			}
+
+			got := f.ApplyToVulnerabilities(tt.args.vsmm)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ApplyToVulnerabilities(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ApplyToDetections(t *testing.T) {
+	type fields struct {
+		DataSources []sourceTypes.SourceID
+		Ecosystems  []ecosystemTypes.Ecosystem
+		RootIDs     []dataTypes.RootID
+	}
+	type args struct {
+		dsm map[sourceTypes.SourceID][]conditionTypes.Condition
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   map[sourceTypes.SourceID][]conditionTypes.Condition
+	}{
+		{
+			name: "no filter",
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-1": {
+					{
+						Criteria: criteriaTypes.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-1"),
+					},
+				},
+				"source-2": {
+					{
+						Criteria: criteriaTypes.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-2"),
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-2"},
+			},
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-2": {
+					{
+						Criteria: criteriaTypes.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-2"),
+					},
+				},
+			},
+		},
+		{
+			name: "filter by two datasources",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1", "source-3"},
+			},
+			args: args{
+				dsm: map[sourceTypes.SourceID][]conditionTypes.Condition{
+					"source-1": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-1"),
+						},
+					},
+					"source-2": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-2"),
+						},
+					},
+					"source-3": {
+						{
+							Criteria: criteriaTypes.Criteria{},
+							Tag:      segmentTypes.DetectionTag("tag-3"),
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"source-1": {
+					{
+						Criteria: criteriaTypes.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-1"),
+					},
+				},
+				"source-3": {
+					{
+						Criteria: criteriaTypes.Criteria{},
+						Tag:      segmentTypes.DetectionTag("tag-3"),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				DataSources: tt.fields.DataSources,
+			}
+			got := f.ApplyToDetections(tt.args.dsm)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ApplyToDetections(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilter_ExcludesRootID(t *testing.T) {
+	type fields struct {
+		rootIDs []dataTypes.RootID
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		rootID dataTypes.RootID
+		want   bool
+	}{
+		{
+			name:   "no filter",
+			rootID: "root-1",
+			want:   false,
+		},
+		{
+			name: "one root id, matches",
+			fields: fields{
+				rootIDs: []dataTypes.RootID{"root-1"},
+			},
+			rootID: "root-1",
+			want:   false,
+		},
+		{
+			name: "one root id, not matches",
+			fields: fields{
+				rootIDs: []dataTypes.RootID{"root-X"},
+			},
+			rootID: "root-1",
+			want:   true,
+		},
+		{
+			name: "two root ids, matches",
+			fields: fields{
+				rootIDs: []dataTypes.RootID{"root-1", "root-2"},
+			},
+			rootID: "root-1",
+			want:   false,
+		},
+		{
+			name: "two root ids, not matches",
+			fields: fields{
+				rootIDs: []dataTypes.RootID{"root-X", "root-Y"},
+			},
+			rootID: "root-1",
+			want:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				RootIDs: tt.fields.rootIDs,
+			}
+			got := f.ExcludesRootID(tt.rootID)
+			if got != tt.want {
+				t.Errorf("ExcludesRootID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_ExcludesEcosystem(t *testing.T) {
+	type fields struct {
+		ecosystems []ecosystemTypes.Ecosystem
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		ecosystem ecosystemTypes.Ecosystem
+		want      bool
+	}{
+		{
+			name:      "no filter",
+			ecosystem: "ubuntu:24.04",
+			want:      false,
+		},
+		{
+			name: "one ecosystem, matches",
+			fields: fields{
+				ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+			},
+			ecosystem: "ubuntu:24.04",
+			want:      false,
+		},
+		{
+			name: "one ecosystem, not matches",
+			fields: fields{
+				ecosystems: []ecosystemTypes.Ecosystem{"oracle:9"},
+			},
+			ecosystem: "ubuntu:24.04",
+			want:      true,
+		},
+		{
+			name: "two ecosystems, matches",
+			fields: fields{
+				ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:24.04", "oracle:9"},
+			},
+			ecosystem: "ubuntu:24.04",
+			want:      false,
+		},
+		{
+			name: "two ecosystems, not matches",
+			fields: fields{
+				ecosystems: []ecosystemTypes.Ecosystem{"debian:12", "oracle:9"},
+			},
+			ecosystem: "ubuntu:24.04",
+			want:      true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				Ecosystems: tt.fields.ecosystems,
+			}
+			got := f.ExcludesEcosystem(tt.ecosystem)
+			if got != tt.want {
+				t.Errorf("ExcludesEcosystem() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_ExcludesDataSource(t *testing.T) {
+	type fields struct {
+		datasources []sourceTypes.SourceID
+	}
+	tests := []struct {
+		name       string
+		fields     fields
+		datasource sourceTypes.SourceID
+		want       bool
+	}{
+		{
+			name:       "no filter",
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "one datasource, matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex"},
+			},
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "one datasource, not matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"ubuntu-cve-tracker"},
+			},
+			datasource: "redhat-vex",
+			want:       true,
+		},
+		{
+			name: "two datasources, matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex", "ubuntu-cve-tracker"},
+			},
+			datasource: "redhat-vex",
+			want:       false,
+		},
+		{
+			name: "two datasources, not matches",
+			fields: fields{
+				datasources: []sourceTypes.SourceID{"redhat-vex", "ubuntu-cve-tracker"},
+			},
+			datasource: "rocky-errata",
+			want:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := dbTypes.Filter{
+				DataSources: tt.fields.datasources,
+			}
+			got := f.ExcludesDataSource(tt.datasource)
+			if got != tt.want {
+				t.Errorf("ExcludesDataSource() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

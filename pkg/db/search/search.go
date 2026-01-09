@@ -18,6 +18,7 @@ type options struct {
 	dbtype string
 	dbpath string
 	dbopts db.DBOptions
+	filter dbTypes.Filter
 
 	debug bool
 }
@@ -56,6 +57,16 @@ func WithDBOptions(dbopts db.DBOptions) Option {
 	return dboptsOption(dbopts)
 }
 
+type filterOption dbTypes.Filter
+
+func (o filterOption) apply(opts *options) {
+	opts.filter = dbTypes.Filter(o)
+}
+
+func WithFilter(filter dbTypes.Filter) Option {
+	return filterOption(filter)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -71,7 +82,10 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		dbtype: "boltdb",
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
-		debug:  false,
+		filter: dbTypes.Filter{
+			Contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -127,7 +141,7 @@ func Search(searchType dbTypes.SearchType, queries []string, opts ...Option) err
 		}
 	default:
 		slog.Info("Get Vulnerability Data", "queries", queries)
-		for d, err := range dbc.GetVulnerabilityData(searchType, queries...) {
+		for d, err := range dbc.GetVulnerabilityData(searchType, options.filter, queries...) {
 			if err != nil {
 				return errors.Wrap(err, "get vulnerability data")
 			}
