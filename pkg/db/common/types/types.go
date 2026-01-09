@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"slices"
 	"time"
 
@@ -73,9 +72,9 @@ type VulnerabilityDataDetection struct {
 
 type Filter struct {
 	Contents    []FilterContentType
-	RootIDs     []dataTypes.RootID
-	Ecosystems  []ecosystemTypes.Ecosystem
 	DataSources []sourceTypes.SourceID
+	Ecosystems  []ecosystemTypes.Ecosystem
+	RootIDs     []dataTypes.RootID
 }
 
 type FilterContentType int
