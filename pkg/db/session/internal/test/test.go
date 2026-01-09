@@ -20,17 +20,17 @@ func PopulateDB(c session.Config, fixtureDir string) error {
 		return errors.New("fixtureDir must not be empty")
 	}
 
-	dbc, err := c.New()
+	s, err := c.New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
 
-	if err := dbc.Storage().Open(); err != nil {
+	if err := s.Storage().Open(); err != nil {
 		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Storage().Close()
+	defer s.Storage().Close()
 
-	if err := dbc.Storage().Initialize(); err != nil {
+	if err := s.Storage().Initialize(); err != nil {
 		return errors.Wrap(err, "initialize")
 	}
 
@@ -40,7 +40,7 @@ func PopulateDB(c session.Config, fixtureDir string) error {
 	}
 
 	for _, ds := range datasources {
-		if err := dbc.Storage().Put(filepath.Join(fixtureDir, ds.Name())); err != nil {
+		if err := s.Storage().Put(filepath.Join(fixtureDir, ds.Name())); err != nil {
 			return errors.Wrapf(err, "put %s", ds.Name())
 		}
 	}

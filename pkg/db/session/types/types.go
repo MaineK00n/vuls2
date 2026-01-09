@@ -23,20 +23,10 @@ var (
 	ErrNotFoundRoot          = errors.New("root not found")
 	ErrNotFoundAdvisory      = errors.New("advisory not found")
 	ErrNotFoundVulnerability = errors.New("vulnerability not found")
+	ErrNotFoundEcosystem     = errors.New("ecosystem not found")
+	ErrNotFoundIndex         = errors.New("index not found")
 	ErrNotFoundDetection     = errors.New("detection not found")
 	ErrNotFoundDataSource    = errors.New("datasource not found")
-)
-
-type SearchType string
-
-const (
-	SearchRoot          SearchType = "root"
-	SearchAdvisory      SearchType = "advisory"
-	SearchVulnerability SearchType = "vulnerability"
-	SearchPackage       SearchType = "package"
-	SearchMetadata      SearchType = "metadata"
-	SearchDataSources   SearchType = "datasources"
-	SearchEcosystems    SearchType = "ecosystems"
 )
 
 type Metadata struct {

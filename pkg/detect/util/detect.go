@@ -24,9 +24,15 @@ type Request struct {
 }
 
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	m, err := s.GetIndexes(ecosystem, queries...)
-	if err != nil {
-		return nil, errors.Wrap(err, "get indexes")
+	m := make(map[dataTypes.RootID][]string)
+	for _, q := range queries {
+		rs, err := s.GetIndex(ecosystem, q)
+		if err != nil {
+			return nil, errors.Wrap(err, "get index")
+		}
+		for _, r := range rs {
+			m[r] = append(m[r], q)
+		}
 	}
 
 	reqChan := make(chan Request, concurrency)

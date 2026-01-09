@@ -8,7 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	utilflag "github.com/MaineK00n/vuls2/pkg/cmd/util/flag"
 	db "github.com/MaineK00n/vuls2/pkg/db/search"
@@ -66,7 +68,11 @@ func newRootCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchRoot, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
+			as := make([]dataTypes.RootID, 0, len(args))
+			for _, a := range args {
+				as = append(as, dataTypes.RootID(a))
+			}
+			if err := db.SearchRoot(as, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -111,7 +117,11 @@ func newAdvisoryCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchAdvisory, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
+			as := make([]advisoryContentTypes.AdvisoryID, 0, len(args))
+			for _, a := range args {
+				as = append(as, advisoryContentTypes.AdvisoryID(a))
+			}
+			if err := db.SearchAdisory(as, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -156,7 +166,11 @@ func newVulnerabilityCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchVulnerability, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
+			as := make([]vulnerabilityContentTypes.VulnerabilityID, 0, len(args))
+			for _, a := range args {
+				as = append(as, vulnerabilityContentTypes.VulnerabilityID(a))
+			}
+			if err := db.SearchVulnerability(as, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -201,7 +215,7 @@ func newPackageCmd() *cobra.Command {
 		`),
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.Search(dbTypes.SearchPackage, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug), db.WithFilter(options.filterOpts.buildFilter())); err != nil {
+			if err := db.SearchPackage(ecosystemTypes.Ecosystem(args[0]), args[1:], db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug), db.WithFilter(options.filterOpts.buildFilter())); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -242,7 +256,7 @@ func newMetadataCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchMetadata, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.SearchMetadata(db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -276,7 +290,7 @@ func newDataSourcesCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchDataSources, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.SearchDataSources(db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -310,7 +324,7 @@ func newEcosystemsCmd() *cobra.Command {
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Search(dbTypes.SearchEcosystems, nil, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.SearchEcosystems(db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil

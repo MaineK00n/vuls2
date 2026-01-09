@@ -118,7 +118,7 @@ func Detect(targets []string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	dbc, err := (&session.Config{
+	s, err := (&session.Config{
 		Type:      options.dbtype,
 		Path:      options.dbpath,
 		Debug:     options.debug,
@@ -129,15 +129,15 @@ func Detect(targets []string, opts ...Option) error {
 		return errors.Wrap(err, "new db connection")
 	}
 
-	if err := dbc.Storage().Open(); err != nil {
+	if err := s.Storage().Open(); err != nil {
 		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Storage().Close()
+	defer s.Storage().Close()
 
-	defer dbc.Cache().Close()
+	defer s.Cache().Close()
 
 	slog.Info("Get Metadata")
-	meta, err := dbc.Storage().GetMetadata()
+	meta, err := s.Storage().GetMetadata()
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
@@ -189,7 +189,7 @@ func Detect(targets []string, opts ...Option) error {
 			}
 
 			slog.Info("Detect", "ServerUUID", sr.ServerUUID, "scanned", latest)
-			dr, err := detect(dbc, sr, options.concurrency)
+			dr, err := detect(s, sr, options.concurrency)
 			if err != nil {
 				return errors.Wrapf(err, "detect %s", sr.ServerUUID)
 			}
@@ -213,11 +213,11 @@ func Detect(targets []string, opts ...Option) error {
 	return nil
 }
 
-func detect(dbc *session.Session, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
+func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
 	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
 	if len(sr.OSPackages) > 0 {
-		m, err := ospkg.Detect(dbc.Storage(), sr, concurrency)
+		m, err := ospkg.Detect(s.Storage(), sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
 		}
@@ -232,7 +232,7 @@ func detect(dbc *session.Session, sr scanTypes.ScanResult, concurrency int) (det
 	}
 
 	if len(sr.CPE) > 0 {
-		m, err := cpe.Detect(dbc.Storage(), sr, concurrency)
+		m, err := cpe.Detect(s.Storage(), sr, concurrency)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
 		}
@@ -247,19 +247,18 @@ func detect(dbc *session.Session, sr scanTypes.ScanResult, concurrency int) (det
 	}
 
 	for rootID, base := range detected {
-		for d, err := range dbc.GetVulnerabilityData(dbTypes.SearchRoot, dbTypes.Filter{
+		d, err := s.GetVulnerabilityDataByRootID(rootID, dbTypes.Filter{
 			Contents: []dbTypes.FilterContentType{
 				dbTypes.FilterContentTypeAdvisories,
 				dbTypes.FilterContentTypeVulnerabilities,
 			},
-		}, string(rootID)) {
-			if err != nil {
-				return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with RootID: %s", rootID)
-			}
-			base.Advisories = d.Advisories
-			base.Vulnerabilities = d.Vulnerabilities
-			detected[rootID] = base
+		})
+		if err != nil {
+			return detectTypes.DetectResult{}, errors.Wrapf(err, "get vulnerability data with root id: %s", rootID)
 		}
+		base.Advisories = d.Advisories
+		base.Vulnerabilities = d.Vulnerabilities
+		detected[rootID] = base
 	}
 
 	var sourceIDs []sourceTypes.SourceID
@@ -289,11 +288,11 @@ func detect(dbc *session.Session, sr scanTypes.ScanResult, concurrency int) (det
 
 	datasources := make([]datasourceTypes.DataSource, 0, len(sourceIDs))
 	for _, sourceID := range sourceIDs {
-		s, err := dbc.Storage().GetDataSource(sourceID)
+		ds, err := s.Storage().GetDataSource(sourceID)
 		if err != nil {
 			return detectTypes.DetectResult{}, errors.Wrapf(err, "get datasource with %s", sourceID)
 		}
-		datasources = append(datasources, s)
+		datasources = append(datasources, ds)
 	}
 
 	return detectTypes.DetectResult{
