@@ -159,17 +159,10 @@ func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.Ro
 			}
 
 			for _, a := range as {
-				ss := make([]segmentTypes.Segment, 0, len(a.Segments))
-				for _, s := range a.Segments {
-					if f.ExcludesEcosystem(s.Ecosystem) {
-						continue
-					}
-					ss = append(ss, s)
-				}
-				if len(ss) == 0 {
+				a.Segments = f.applyToSegments(a.Segments)
+				if len(a.Segments) == 0 {
 					continue
 				}
-				a.Segments = ss
 
 				if _, found := filtered[sid]; !found {
 					filtered[sid] = make(map[dataTypes.RootID][]advisoryTypes.Advisory)
@@ -199,17 +192,10 @@ func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTyp
 			}
 
 			for _, v := range vs {
-				ss := make([]segmentTypes.Segment, 0, len(v.Segments))
-				for _, s := range v.Segments {
-					if f.ExcludesEcosystem(s.Ecosystem) {
-						continue
-					}
-					ss = append(ss, s)
-				}
-				if len(ss) == 0 {
+				v.Segments = f.applyToSegments(v.Segments)
+				if len(v.Segments) == 0 {
 					continue
 				}
-				v.Segments = ss
 
 				if _, found := filtered[sid]; !found {
 					filtered[sid] = make(map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
@@ -239,21 +225,6 @@ func (f Filter) ApplyToDetections(dsm map[sourceTypes.SourceID][]conditionTypes.
 	return filtered
 }
 
-func (f Filter) ScreenEcosystems(es []ecosystemTypes.Ecosystem) []ecosystemTypes.Ecosystem {
-	if len(f.Ecosystems) == 0 {
-		return es
-	}
-
-	filtered := make([]ecosystemTypes.Ecosystem, 0, len(es))
-	for _, e := range es {
-		if !f.ExcludesEcosystem(e) {
-			filtered = append(filtered, e)
-		}
-	}
-
-	return filtered
-}
-
 func (f Filter) ExcludesRootID(rid dataTypes.RootID) bool {
 	if len(f.RootIDs) == 0 {
 		return false
@@ -273,4 +244,19 @@ func (f Filter) ExcludesDataSource(sid sourceTypes.SourceID) bool {
 		return false
 	}
 	return !slices.Contains(f.DataSources, sid)
+}
+
+func (f Filter) applyToSegments(ss []segmentTypes.Segment) []segmentTypes.Segment {
+	if len(f.Ecosystems) == 0 {
+		return ss
+	}
+
+	filtered := make([]segmentTypes.Segment, 0, len(ss))
+	for _, s := range ss {
+		if !f.ExcludesEcosystem(s.Ecosystem) {
+			filtered = append(filtered, s)
+		}
+	}
+
+	return filtered
 }
