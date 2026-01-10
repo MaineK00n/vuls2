@@ -16,13 +16,13 @@ import (
 	necSourcePackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/source"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
-func Detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
+func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
 	ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
@@ -67,7 +67,7 @@ func Detect(dbc db.DB, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.
 		}
 	}
 
-	dm, err := util.Detect(dbc, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+	dm, err := util.Detect(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
 		var (
 			qs    []vcTypes.Query
 			idxes []int

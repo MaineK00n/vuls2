@@ -1,0 +1,1261 @@
+package boltdb_test
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"maps"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"go.etcd.io/bbolt"
+	berrors "go.etcd.io/bbolt/errors"
+
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
+	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
+	vcPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package"
+	vcBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package/binary"
+	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
+	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	repositoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource/repository"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
+	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
+	"github.com/MaineK00n/vuls2/pkg/db/session/internal/test"
+	"github.com/MaineK00n/vuls2/pkg/db/session/internal/util"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
+	"github.com/MaineK00n/vuls2/pkg/version"
+)
+
+func TestConnection_Open(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.Open() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			defer c.Close()
+
+			if c.Conn() == nil {
+				t.Errorf("DB Connection is nil")
+			}
+		})
+	}
+}
+
+func TestConnection_Close(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+
+			if err := c.Close(); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.Close() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if _, err := c.Conn().Begin(false); !errors.Is(err, berrors.ErrDatabaseNotOpen) {
+				t.Errorf("DB Connection is not closed")
+			}
+		})
+	}
+}
+
+func TestConnection_GetMetadata(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		want    *dbTypes.Metadata
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			want: &dbTypes.Metadata{
+				SchemaVersion: boltdb.SchemaVersion,
+				CreatedBy:     version.String(),
+				LastModified:  time.Now(),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetMetadata()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetMetadata() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got, cmpopts.EquateApproxTime(3*time.Second)); diff != "" {
+				t.Errorf("Connection.GetMetadata(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_PutMetadata(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		metadata dbTypes.Metadata
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				metadata: dbTypes.Metadata{
+					SchemaVersion: boltdb.SchemaVersion,
+					CreatedBy:     "vuls (devel)",
+					LastModified:  time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.PutMetadata(tt.args.metadata); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.PutMetadata() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			got, err := c.GetMetadata()
+			if err != nil {
+				t.Fatalf("get metadata. error = %v", err)
+			}
+			if diff := cmp.Diff(tt.args.metadata, *got); diff != "" {
+				t.Errorf("Connection.GetMetadata(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_Put(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		root string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    map[string][]byte
+		wantErr bool
+	}{
+		{
+			name: "happy",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				root: "testdata/fixtures/alma-small/alma-errata",
+			},
+			want: map[string][]byte{
+				"metadata":              nil,
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":         nil,
+				"vulnerability -> root": nil,
+				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> ALSA-2019:3708":     []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"ALSA-2019:3708"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2019-2510": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2510"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-2537": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2537"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"alma:8":                                      nil,
+				"alma:8 -> detection":                         nil,
+				"alma:8 -> detection -> ALSA-2019:3708":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"mariadb-devel:10.3::Judy","architectures":["i686"]}}}}]}}]}`),
+				"alma:8 -> index":                             nil,
+				"alma:8 -> index -> mariadb-devel:10.3::Judy": []byte(`["ALSA-2019:3708"]`),
+				"datasource":                                  nil,
+				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.Initialize(); err != nil {
+				t.Fatalf("initialize db. error = %v", err)
+			}
+
+			if err := c.Put(tt.args.root); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.Put() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			got, err := walkDB(c.Conn())
+			if err != nil {
+				t.Fatalf("walk db. error = %v", err)
+			}
+
+			if err := compare(tt.want, got); err != nil {
+				t.Errorf("Connection.Put() unexpected db state: %v", err)
+			}
+		})
+	}
+}
+
+func TestConnection_GetRoot(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id dataTypes.RootID
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    dbTypes.VulnerabilityData
+		wantErr bool
+	}{
+		{
+			name:    "not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				id: "ROOT-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				id: "ALSA-2019:3708",
+			},
+			want: dbTypes.VulnerabilityData{
+				ID: "ALSA-2019:3708",
+				Advisories: []dbTypes.VulnerabilityDataAdvisory{
+					{
+						ID: "ALSA-2019:3708",
+					},
+				},
+				Vulnerabilities: []dbTypes.VulnerabilityDataVulnerability{
+					{
+						ID: "CVE-2019-2510",
+					},
+					{
+						ID: "CVE-2019-2537",
+					},
+				},
+				Detections: []dbTypes.VulnerabilityDataDetection{
+					{
+						Ecosystem: "alma:8",
+					},
+				},
+				DataSources: []datasourceTypes.DataSource{
+					{
+						ID: "alma-errata",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetRoot(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetRoot() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetRoot(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetAdvisory(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id advisoryContentTypes.AdvisoryID
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		fixture string
+		args    args
+		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
+		wantErr bool
+	}{
+		{
+			name: "not found",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			fixture: "testdata/fixtures/alma-small",
+			args: args{
+				id: "ADV-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name: "happy",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			fixture: "testdata/fixtures/alma-small",
+			args: args{
+				id: "ALSA-2019:3708",
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"alma-errata": {
+					"ALSA-2019:3708": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "ALSA-2019:3708",
+							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetAdvisory(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetAdvisory() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetAdvisory(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetVulnerability(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id vulnerabilityContentTypes.VulnerabilityID
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
+		wantErr bool
+	}{
+		{
+			name:    "not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				id: "VULN-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{
+					Path: filepath.Join(t.TempDir(), "vuls.db"),
+				},
+			},
+			args: args{
+				id: "CVE-2019-2510",
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"alma-errata": {
+					"ALSA-2019:3708": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "CVE-2019-2510",
+							},
+							Segments: []segmentTypes.Segment{
+								{
+									Ecosystem: ecosystemTypes.Ecosystem("alma:8"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetVulnerability(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetVulnerability() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetVulnerability(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetEcosystems(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		want    []ecosystemTypes.Ecosystem
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			want: []ecosystemTypes.Ecosystem{"alma:8"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetEcosystems()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetEcosystems() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetEcosystems(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetIndexes(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		ecosystem ecosystemTypes.Ecosystem
+		queries   []string
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    map[dataTypes.RootID][]string
+		wantErr bool
+	}{
+		{
+			name:    "ecosystem not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "ECOSYSTEM-NOT-EXISTS",
+				queries:   []string{"mariadb-devel:10.3::Judy"},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "query not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "alma:8",
+				queries:   []string{"PACKAGE-NOT-EXISTS"},
+			},
+			want: map[dataTypes.RootID][]string{},
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "alma:8",
+				queries:   []string{"mariadb-devel:10.3::Judy"},
+			},
+			want: map[dataTypes.RootID][]string{
+				"ALSA-2019:3708": {"mariadb-devel:10.3::Judy"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetIndexes(tt.args.ecosystem, tt.args.queries...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetIndexes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetIndexes(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetDetection(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		ecosystem ecosystemTypes.Ecosystem
+		rootID    dataTypes.RootID
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID][]conditionTypes.Condition
+		wantErr bool
+	}{
+		{
+			name:    "ecosystem not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "ECOSYSTEM-NOT-EXISTS",
+				rootID:    "ALSA-2019:3708",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "rootID not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "alma:8",
+				rootID:    "ROOT-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "alma:8",
+				rootID:    "ALSA-2019:3708",
+			},
+			want: map[sourceTypes.SourceID][]conditionTypes.Condition{
+				"alma-errata": {
+					{
+						Criteria: criteriaTypes.Criteria{
+							Operator: criteriaTypes.CriteriaOperatorTypeOR,
+							Criterions: []criterionTypes.Criterion{
+								{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Vulnerable: true,
+										Package: vcPackageTypes.Package{
+											Type: vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{
+												Name:          "mariadb-devel:10.3::Judy",
+												Architectures: []string{"i686"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetDetection(tt.args.ecosystem, tt.args.rootID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetDetection() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetDetection(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetDataSources(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		want    []datasourceTypes.DataSource
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			want: []datasourceTypes.DataSource{
+				{
+					ID:   "alma-errata",
+					Name: func() *string { s := "AlmaLinux Errata"; return &s }(),
+					Raw: []repositoryTypes.Repository{
+						{
+							URL:    "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata",
+							Commit: "23144d94cd39ad0d4499ab3684749b4f8e5fb092",
+							Date:   func() *time.Time { d := time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC); return &d }(),
+						},
+					},
+					Extracted: &repositoryTypes.Repository{
+						URL: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetDataSources()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetDataSources() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetDataSources(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetDataSource(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		id sourceTypes.SourceID
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    datasourceTypes.DataSource
+		wantErr bool
+	}{
+		{
+			name:    "not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				id: "SOURCE-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				id: "alma-errata",
+			},
+			want: datasourceTypes.DataSource{
+				ID:   "alma-errata",
+				Name: func() *string { s := "AlmaLinux Errata"; return &s }(),
+				Raw: []repositoryTypes.Repository{
+					{
+						URL:    "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata",
+						Commit: "23144d94cd39ad0d4499ab3684749b4f8e5fb092",
+						Date:   func() *time.Time { d := time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC); return &d }(),
+					},
+				},
+				Extracted: &repositoryTypes.Repository{
+					URL: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetDataSource(tt.args.id)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetDataSource() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetDataSource(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_DeleteAll(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.DeleteAll(); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.DeleteAll() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if err := c.Conn().View(func(tx *bbolt.Tx) error {
+				var bs []string
+				if err := tx.ForEach(func(name []byte, _ *bbolt.Bucket) error {
+					bs = append(bs, string(name))
+					return nil
+				}); err != nil {
+					return err
+				}
+				if len(bs) > 0 {
+					return fmt.Errorf("buckets still exist: %s", bs)
+				}
+				return nil
+			}); err != nil {
+				t.Errorf("Connection.DeleteAll() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestConnection_Initialize(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    map[string][]byte
+		wantErr bool
+	}{
+		{
+			name: "happy",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			want: map[string][]byte{
+				"metadata":                       nil,
+				"vulnerability":                  nil,
+				"vulnerability -> root":          nil,
+				"vulnerability -> advisory":      nil,
+				"vulnerability -> vulnerability": nil,
+				"datasource":                     nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			if err := c.Initialize(); (err != nil) != tt.wantErr {
+				t.Errorf("Connection.Initialize() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			got, err := walkDB(c.Conn())
+			if err != nil {
+				t.Fatalf("walk db. error = %v", err)
+			}
+
+			if err := compare(tt.want, got); err != nil {
+				t.Errorf("Connection.Initialize() unexpected db state: %v", err)
+			}
+		})
+	}
+}
+
+func walkDB(db *bbolt.DB) (map[string][]byte, error) {
+	m := make(map[string][]byte)
+	if err := db.View(func(tx *bbolt.Tx) error {
+		var fn func(path string, b *bbolt.Bucket) error
+		fn = func(path string, b *bbolt.Bucket) error {
+			if err := b.ForEach(func(k, v []byte) error {
+				m[fmt.Sprintf("%s -> %s", path, k)] = v
+
+				if sub := b.Bucket(k); sub != nil {
+					if err := fn(fmt.Sprintf("%s -> %s", path, k), sub); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			}); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		return tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			m[string(name)] = nil
+			if err := fn(string(name), b); err != nil {
+				return err
+			}
+			return nil
+		})
+	}); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func compare(want, got map[string][]byte) error {
+	var es []error
+
+	for k, gotbs := range got {
+		wantbs, ok := want[k]
+		if !ok {
+			es = append(es, fmt.Errorf("%q is unexpected", k))
+			continue
+		}
+
+		switch {
+		case k == "metadata -> db":
+			var w, g dbTypes.Metadata
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g, cmpopts.EquateApproxTime(3*time.Second)); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.HasPrefix(k, "vulnerability -> root -> "):
+			var w, g boltdb.VulnerabilityRoot
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.HasPrefix(k, "vulnerability -> advisory -> "):
+			var w, g map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.HasPrefix(k, "vulnerability -> vulnerability -> "):
+			var w, g map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.Contains(k, "-> detection ->"):
+			var w, g map[sourceTypes.SourceID][]conditionTypes.Condition
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.Contains(k, "-> index ->"):
+			var w, g []string
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		case strings.HasPrefix(k, "datasource -> "):
+			var w, g datasourceTypes.DataSource
+			if err := util.Unmarshal(wantbs, &w); err != nil {
+				return fmt.Errorf("want unmarshal %q: %w", k, err)
+			}
+			if err := util.Unmarshal(gotbs, &g); err != nil {
+				es = append(es, fmt.Errorf("got unmarshal %q: %w", k, err))
+				continue
+			}
+
+			if diff := cmp.Diff(w, g); diff != "" {
+				es = append(es, fmt.Errorf("value for %q is unexpected. (-expected +got):\n%s", k, diff))
+			}
+		default:
+			if !bytes.Equal(wantbs, gotbs) {
+				es = append(es, fmt.Errorf("value for %q is unexpected. expected: %q, got: %q", k, string(wantbs), string(gotbs)))
+			}
+		}
+
+		delete(want, k)
+	}
+	if len(want) > 0 {
+		return fmt.Errorf("%v is not found", slices.Collect(maps.Keys(want)))
+	}
+
+	return errors.Join(es...)
+}

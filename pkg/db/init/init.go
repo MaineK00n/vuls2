@@ -9,16 +9,16 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
-	db "github.com/MaineK00n/vuls2/pkg/db/common"
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	"github.com/MaineK00n/vuls2/pkg/db/session"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
 type options struct {
-	dbtype string
-	dbpath string
-	dbopts db.DBOptions
+	dbtype      string
+	dbpath      string
+	storageopts session.StorageOptions
 
 	debug bool
 }
@@ -47,14 +47,14 @@ func WithDBPath(dbpath string) Option {
 	return dbpathOption(dbpath)
 }
 
-type dboptsOption db.DBOptions
+type storageoptsOption session.StorageOptions
 
-func (o dboptsOption) apply(opts *options) {
-	opts.dbopts = db.DBOptions(o)
+func (o storageoptsOption) apply(opts *options) {
+	opts.storageopts = session.StorageOptions(o)
 }
 
-func WithDBOptions(dbopts db.DBOptions) Option {
-	return dboptsOption(dbopts)
+func WithStorageOptions(storageopts session.StorageOptions) Option {
+	return storageoptsOption(storageopts)
 }
 
 type debugOption bool
@@ -69,10 +69,10 @@ func WithDebug(debug bool) Option {
 
 func Init(opts ...Option) error {
 	options := &options{
-		dbtype: "boltdb",
-		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		dbopts: db.DBOptions{BoltDB: bolt.DefaultOptions},
-		debug:  false,
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -82,33 +82,39 @@ func Init(opts ...Option) error {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 	}
 
-	dbc, err := (&db.Config{
+	dbc, err := (&session.Config{
 		Type:    options.dbtype,
 		Path:    options.dbpath,
 		Debug:   options.debug,
-		Options: options.dbopts,
+		Options: options.storageopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
 	}
-	if err := dbc.Open(); err != nil {
-		return errors.Wrap(err, "open db")
+
+	if err := dbc.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Close()
+	defer dbc.Storage().Close()
+
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
 
 	slog.Info("Delete All Data")
-	if err := dbc.DeleteAll(); err != nil {
+	if err := dbc.Storage().DeleteAll(); err != nil {
 		return errors.Wrap(err, "delete all")
 	}
 
 	slog.Info("Initialize DB")
-	if err := dbc.Initialize(); err != nil {
+	if err := dbc.Storage().Initialize(); err != nil {
 		return errors.Wrap(err, "initialize")
 	}
 
 	slog.Info("Put Metadata")
-	if err := dbc.PutMetadata(dbTypes.Metadata{
-		SchemaVersion: db.SchemaVersion,
+	if err := dbc.Storage().PutMetadata(dbTypes.Metadata{
+		SchemaVersion: sv,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now().UTC(),
 	}); err != nil {

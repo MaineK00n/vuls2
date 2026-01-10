@@ -5,7 +5,7 @@ import (
 	"encoding/csv"
 	"strings"
 
-	dbTypes "github.com/MaineK00n/vuls2/pkg/db/common/types"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
 
 // -- contentSlice Value
