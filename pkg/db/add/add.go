@@ -74,7 +74,7 @@ func Add(root string, opts ...Option) error {
 		o.apply(options)
 	}
 
-	dbc, err := (&session.Config{
+	s, err := (&session.Config{
 		Type:    options.dbtype,
 		Path:    options.dbpath,
 		Debug:   options.debug,
@@ -84,13 +84,13 @@ func Add(root string, opts ...Option) error {
 		return errors.Wrap(err, "new db connection")
 	}
 
-	if err := dbc.Storage().Open(); err != nil {
+	if err := s.Storage().Open(); err != nil {
 		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Storage().Close()
+	defer s.Storage().Close()
 
 	slog.Info("Get Metadata")
-	meta, err := dbc.Storage().GetMetadata()
+	meta, err := s.Storage().GetMetadata()
 	if err != nil || meta == nil {
 		return errors.Wrap(err, "get metadata")
 	}
@@ -103,7 +103,7 @@ func Add(root string, opts ...Option) error {
 	}
 
 	slog.Info("Put Data")
-	if err := dbc.Storage().Put(root); err != nil {
+	if err := s.Storage().Put(root); err != nil {
 		return errors.Wrapf(err, "put %s", root)
 	}
 

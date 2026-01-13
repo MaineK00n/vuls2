@@ -297,19 +297,19 @@ func TestConnection_GetEcosystems(t *testing.T) {
 	}
 }
 
-func TestConnection_GetIndexes(t *testing.T) {
+func TestConnection_GetIndex(t *testing.T) {
 	type fields struct {
 		Config *rueidis.ClientOption
 	}
 	type args struct {
 		ecosystem ecosystemTypes.Ecosystem
-		queries   []string
+		query     string
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    map[dataTypes.RootID][]string
+		want    []dataTypes.RootID
 		wantErr bool
 	}{}
 	for _, tt := range tests {
@@ -322,13 +322,13 @@ func TestConnection_GetIndexes(t *testing.T) {
 			}
 			defer c.Close()
 
-			got, err := c.GetIndexes(tt.args.ecosystem, tt.args.queries...)
+			got, err := c.GetIndex(tt.args.ecosystem, tt.args.query)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Connection.GetIndexes() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Connection.GetIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Connection.GetIndexes() = %v, want %v", got, tt.want)
+				t.Errorf("Connection.GetIndex() = %v, want %v", got, tt.want)
 			}
 		})
 	}

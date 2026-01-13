@@ -82,7 +82,7 @@ func Init(opts ...Option) error {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 	}
 
-	dbc, err := (&session.Config{
+	s, err := (&session.Config{
 		Type:    options.dbtype,
 		Path:    options.dbpath,
 		Debug:   options.debug,
@@ -92,10 +92,10 @@ func Init(opts ...Option) error {
 		return errors.Wrap(err, "new db connection")
 	}
 
-	if err := dbc.Storage().Open(); err != nil {
+	if err := s.Storage().Open(); err != nil {
 		return errors.Wrap(err, "open db connection")
 	}
-	defer dbc.Storage().Close()
+	defer s.Storage().Close()
 
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -103,17 +103,17 @@ func Init(opts ...Option) error {
 	}
 
 	slog.Info("Delete All Data")
-	if err := dbc.Storage().DeleteAll(); err != nil {
+	if err := s.Storage().DeleteAll(); err != nil {
 		return errors.Wrap(err, "delete all")
 	}
 
 	slog.Info("Initialize DB")
-	if err := dbc.Storage().Initialize(); err != nil {
+	if err := s.Storage().Initialize(); err != nil {
 		return errors.Wrap(err, "initialize")
 	}
 
 	slog.Info("Put Metadata")
-	if err := dbc.Storage().PutMetadata(dbTypes.Metadata{
+	if err := s.Storage().PutMetadata(dbTypes.Metadata{
 		SchemaVersion: sv,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now().UTC(),

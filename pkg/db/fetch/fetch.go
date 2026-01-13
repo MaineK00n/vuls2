@@ -195,7 +195,7 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 
 func (o *options) finish(dbpath, digest string) error {
 	if err := func() error {
-		dbc, err := (&session.Config{
+		s, err := (&session.Config{
 			Type:    "boltdb",
 			Path:    dbpath,
 			Debug:   o.debug,
@@ -205,12 +205,12 @@ func (o *options) finish(dbpath, digest string) error {
 			return errors.Wrap(err, "new db connection")
 		}
 
-		if err := dbc.Storage().Open(); err != nil {
+		if err := s.Storage().Open(); err != nil {
 			return errors.Wrap(err, "open db connection")
 		}
-		defer dbc.Storage().Close()
+		defer s.Storage().Close()
 
-		meta, err := dbc.Storage().GetMetadata()
+		meta, err := s.Storage().GetMetadata()
 		if err != nil || meta == nil {
 			return errors.Wrap(err, "get metadata")
 		}
@@ -228,7 +228,7 @@ func (o *options) finish(dbpath, digest string) error {
 			return &t
 		}()
 
-		if err := dbc.Storage().PutMetadata(*meta); err != nil {
+		if err := s.Storage().PutMetadata(*meta); err != nil {
 			return errors.Wrap(err, "put metadata")
 		}
 

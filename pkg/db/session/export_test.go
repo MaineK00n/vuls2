@@ -10,18 +10,18 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/cache"
 )
 
-func (c *Session) SetStorage(storage Storage) {
-	c.storage = storage
+func (s *Session) SetStorage(storage Storage) {
+	s.storage = storage
 }
 
-func (c *Session) SetCache(cache *cache.Cache) {
-	c.cache = cache
+func (s *Session) SetCache(cache *cache.Cache) {
+	s.cache = cache
 }
 
-func (c Session) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
-	return c.getAdvisory(id)
+func (s Session) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
+	return s.getAdvisory(id)
 }
 
-func (c Session) GetVulnerability(id vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error) {
-	return c.getVulnerability(id)
+func (s Session) GetVulnerability(id vulnerabilityContentTypes.VulnerabilityID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability, error) {
+	return s.getVulnerability(id)
 }

@@ -107,7 +107,7 @@ func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetIndexes(ecosystem ecosystemTypes.Ecosystem, queries ...string) (map[dataTypes.RootID][]string, error) {
+func (c *Connection) GetIndex(ecosystem ecosystemTypes.Ecosystem, query string) ([]dataTypes.RootID, error) {
 	return nil, errors.New("not implemented yet")
 }
 

@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"encoding/json/v2"
-	"fmt"
 	"iter"
 	"maps"
 	"os"
@@ -109,10 +108,10 @@ func TestSession_DB(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var c session.Session
-			c.SetStorage(tt.fields.dbConn)
+			var s session.Session
+			s.SetStorage(tt.fields.dbConn)
 
-			if got := c.Storage(); !reflect.DeepEqual(got, tt.want) {
+			if got := s.Storage(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Conn.DB() = %v, want %v", got, tt.want)
 			}
 		})
@@ -146,10 +145,10 @@ func TestSession_Cache(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var c session.Session
-			c.SetCache(tt.fields.cache)
+			var s session.Session
+			s.SetCache(tt.fields.cache)
 
-			if got := c.Cache(); !reflect.DeepEqual(got, tt.want) {
+			if got := s.Cache(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Conn.Cache() = %v, want %v", got, tt.want)
 			}
 		})
@@ -223,18 +222,18 @@ func TestSchemaVersion(t *testing.T) {
 	}
 }
 
-func TestSession_GetVulnerabilityData(t *testing.T) {
+func TestSession_GetVulnerabilityDataByRootID(t *testing.T) {
 	type args struct {
-		searchType dbTypes.SearchType
-		filter     dbTypes.Filter
-		queries    []string
+		id     dataTypes.RootID
+		filter dbTypes.Filter
 	}
 	tests := []struct {
 		name    string
 		fixture string
 		config  session.Config
 		args    args
-		want    iter.Seq2[string, error]
+		want    string
+		wantErr error
 	}{
 		{
 			name:    "non-existent id",
@@ -246,17 +245,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "ROOT-NOT-EXISTS",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"ROOT-NOT-EXISTS"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("", errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundRoot, "vulnerability -> root -> %s not found", "ROOT-NOT-EXISTS"), "get vulnerability data by root id: %s", "ROOT-NOT-EXISTS")) {
-					return
-				}
-			},
+			wantErr: errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundRoot, "%q not found", "vulnerability -> root -> ROOT-NOT-EXISTS"), "get root"),
 		},
 		{
 			name:    "happy",
@@ -268,17 +262,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/happy.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/happy.json",
 		},
 		{
 			name:    "no advisories",
@@ -290,7 +279,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeVulnerabilities,
@@ -298,13 +287,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-advisories.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-advisories.json",
 		},
 		{
 			name:    "no vulnerabilities",
@@ -316,7 +300,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -324,13 +308,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-vulnerabilities.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-vulnerabilities.json",
 		},
 		{
 			name:    "no detections",
@@ -342,7 +321,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -350,13 +329,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-detections.json",
 		},
 		{
 			name:    "no datasources",
@@ -368,7 +342,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -376,13 +350,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-datasources.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/no-datasources.json",
 		},
 		{
 			name:    "only detections",
@@ -394,19 +363,14 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/only-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/only-detections.json",
 		},
 		{
 			name:    "datasource filter",
@@ -418,18 +382,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents:    dbTypes.AllFilterContentTypes(),
 					DataSources: []sourceTypes.SourceID{"redhat-vex"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/datasource-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/datasource-filter.json",
 		},
 		{
 			name:    "ecosystem filter",
@@ -441,18 +400,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents:   dbTypes.AllFilterContentTypes(),
 					Ecosystems: []ecosystemTypes.Ecosystem{"ubuntu:18.04"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/ecosystem-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/ecosystem-filter.json",
 		},
 		{
 			name:    "root id filter",
@@ -464,19 +418,84 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchRoot,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 					RootIDs:  []dataTypes.RootID{"CVE-2019-2510", "ALSA-2019:3708"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/root-id-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-root/CVE-2019-2510/root-id-filter.json",
 		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			if tt.config.WithCache {
+				defer s.Cache().Close()
+			}
+
+			got, err := s.GetVulnerabilityDataByRootID(tt.args.id, tt.args.filter)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetVulnerabilityDataByRootID() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetVulnerabilityDataByRootID() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetVulnerabilityDataByRootID() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.VulnerabilityData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := cmp.Diff(want, got,
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetVulnerabilityDataByRootID() data mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestSession_GetVulnerabilityDataByAdvisoryID(t *testing.T) {
+	type args struct {
+		id     advisoryContentTypes.AdvisoryID
+		filter dbTypes.Filter
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    string
+		wantErr error
+	}{
 		{
 			name:    "non-existent id",
 			fixture: "testdata/fixtures/get-vulnerability-data",
@@ -487,17 +506,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "ADV-NOT-EXISTS",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"ADV-NOT-EXISTS"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("", errors.Wrapf(errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundAdvisory, "vulnerability -> advisory -> %s not found", "ADV-NOT-EXISTS"), "get advisory from db"), "get vulnerability data by advisory id: %s", "ADV-NOT-EXISTS")) {
-					return
-				}
-			},
+			wantErr: errors.Wrap(errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundAdvisory, "%q not found", "vulnerability -> advisory -> ADV-NOT-EXISTS"), "get advisory from db"), "get advisory"),
 		},
 		{
 			name:    "happy",
@@ -509,17 +523,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/happy.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/happy.json",
 		},
 		{
 			name:    "no advisories",
@@ -531,7 +540,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeVulnerabilities,
@@ -539,13 +548,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-advisories.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-advisories.json",
 		},
 		{
 			name:    "no vulnerabilities",
@@ -557,7 +561,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -565,13 +569,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-vulnerabilities.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-vulnerabilities.json",
 		},
 		{
 			name:    "no detections",
@@ -583,7 +582,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -591,13 +590,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-detections.json",
 		},
 		{
 			name:    "no datasources",
@@ -609,7 +603,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -617,13 +611,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-datasources.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/no-datasources.json",
 		},
 		{
 			name:    "only detections",
@@ -635,19 +624,14 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/only-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/only-detections.json",
 		},
 		{
 			name:    "datasource filter",
@@ -659,18 +643,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents:    dbTypes.AllFilterContentTypes(),
 					DataSources: []sourceTypes.SourceID{"redhat-vex"},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/datasource-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/datasource-filter.json",
 		},
 		{
 			name:    "ecosystem filter",
@@ -682,18 +661,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents:   dbTypes.AllFilterContentTypes(),
 					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/ecosystem-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/ecosystem-filter.json",
 		},
 		{
 			name:    "root id filter",
@@ -705,19 +679,84 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchAdvisory,
+				id: "RHSA-2019:2511",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 					RootIDs:  []dataTypes.RootID{"CVE-2019-2510"},
 				},
-				queries: []string{"RHSA-2019:2511"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/root-id-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-advisory/RHSA-2019%3A2511/root-id-filter.json",
 		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			if tt.config.WithCache {
+				defer s.Cache().Close()
+			}
+
+			got, err := s.GetVulnerabilityDataByAdvisoryID(tt.args.id, tt.args.filter)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetVulnerabilityDataByAdvisoryID() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetVulnerabilityDataByAdvisoryID() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetVulnerabilityDataByAdvisoryID() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.VulnerabilityData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := cmp.Diff(want, got,
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetVulnerabilityDataByAdvisoryID() data mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestSession_GetVulnerabilityDataByVulnerabilityID(t *testing.T) {
+	type args struct {
+		id     vulnerabilityContentTypes.VulnerabilityID
+		filter dbTypes.Filter
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    string
+		wantErr error
+	}{
 		{
 			name:    "non-existent id",
 			fixture: "testdata/fixtures/get-vulnerability-data",
@@ -728,17 +767,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "VULN-NOT-EXISTS",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"VULN-NOT-EXISTS"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("", errors.Wrapf(errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundVulnerability, "vulnerability -> vulnerability -> %s not found", "VULN-NOT-EXISTS"), "get vulnerability from db"), "get vulnerability data by vulnerability id: %s", "VULN-NOT-EXISTS")) {
-					return
-				}
-			},
+			wantErr: errors.Wrap(errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundVulnerability, "%q not found", "vulnerability -> vulnerability -> VULN-NOT-EXISTS"), "get vulnerability from db"), "get vulnerability"),
 		},
 		{
 			name:    "happy",
@@ -750,17 +784,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/happy.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/happy.json",
 		},
 		{
 			name:    "no advisories",
@@ -772,7 +801,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeVulnerabilities,
@@ -780,13 +809,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-advisories.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-advisories.json",
 		},
 		{
 			name:    "no vulnerabilities",
@@ -798,7 +822,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -806,13 +830,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-vulnerabilities.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-vulnerabilities.json",
 		},
 		{
 			name:    "no detections",
@@ -824,7 +843,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -832,13 +851,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-detections.json",
 		},
 		{
 			name:    "no datasources",
@@ -850,7 +864,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -858,13 +872,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-datasources.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/no-datasources.json",
 		},
 		{
 			name:    "only detections",
@@ -876,19 +885,14 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/only-detections.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/only-detections.json",
 		},
 		{
 			name:    "datasource filter",
@@ -900,18 +904,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents:    dbTypes.AllFilterContentTypes(),
 					DataSources: []sourceTypes.SourceID{"alma-errata"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/datasource-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/datasource-filter.json",
 		},
 		{
 			name:    "ecosystem filter",
@@ -923,18 +922,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents:   dbTypes.AllFilterContentTypes(),
 					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "alma:8"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/ecosystem-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/ecosystem-filter.json",
 		},
 		{
 			name:    "root id filter",
@@ -946,21 +940,86 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchVulnerability,
+				id: "CVE-2019-2510",
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 					RootIDs:  []dataTypes.RootID{"ALSA-2019:3708"},
 				},
-				queries: []string{"CVE-2019-2510"},
 			},
-			want: func(yield func(string, error) bool) {
-				if !yield("testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/root-id-filter.json", nil) {
-					return
-				}
-			},
+			want: "testdata/golden/get-vulnerability-data/search-vulnerability/CVE-2019-2510/root-id-filter.json",
 		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			if tt.config.WithCache {
+				defer s.Cache().Close()
+			}
+
+			got, err := s.GetVulnerabilityDataByVulnerabilityID(tt.args.id, tt.args.filter)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetVulnerabilityDataByVulnerabilityID() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetVulnerabilityDataByVulnerabilityID() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetVulnerabilityDataByVulnerabilityID() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.VulnerabilityData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := cmp.Diff(want, got,
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetVulnerabilityDataByVulnerabilityID() data mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestSession_GetVulnerabilityDataByPackage(t *testing.T) {
+	type args struct {
+		ecosystem ecosystemTypes.Ecosystem
+		packages  []string
+		filter    dbTypes.Filter
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    iter.Seq2[string, error]
+	}{
 		{
-			name:    "non-existent id (no results)",
+			name:    "non-existent ecosystem",
 			fixture: "testdata/fixtures/get-vulnerability-data",
 			config: session.Config{
 				Type:      "boltdb",
@@ -969,13 +1028,39 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "ECOSYSTEM-NOT-EXISTS",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"redhat:8", "PKG-NOT-EXISTS"},
 			},
-			want: func(yield func(string, error) bool) {},
+			want: func(yield func(string, error) bool) {
+				if !yield("", errors.Wrap(errors.Wrapf(dbTypes.ErrNotFoundEcosystem, "%q not found", "ECOSYSTEM-NOT-EXISTS"), "get index")) {
+					return
+				}
+			},
+		},
+		{
+			name:    "non-existent package",
+			fixture: "testdata/fixtures/get-vulnerability-data",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				ecosystem: "redhat:8",
+				packages:  []string{"PKG-NOT-EXISTS"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("", errors.Wrap(errors.Wrapf(dbTypes.ErrNotFoundIndex, "%q not found", "redhat:8 -> index -> PKG-NOT-EXISTS"), "get index")) {
+					return
+				}
+			},
 		},
 		{
 			name:    "happy",
@@ -987,11 +1072,11 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/happy.json", nil) {
@@ -1012,7 +1097,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeVulnerabilities,
@@ -1020,7 +1106,6 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/no-advisories.json", nil) {
@@ -1041,7 +1126,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -1049,7 +1135,6 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/no-vulnerabilities.json", nil) {
@@ -1070,7 +1155,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -1078,7 +1164,6 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDataSources,
 					},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/no-detections.json", nil) {
@@ -1099,7 +1184,8 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeAdvisories,
@@ -1107,7 +1193,6 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/no-datasources.json", nil) {
@@ -1128,13 +1213,13 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: []dbTypes.FilterContentType{
 						dbTypes.FilterContentTypeDetections,
 					},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/only-detections.json", nil) {
@@ -1155,12 +1240,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents:    dbTypes.AllFilterContentTypes(),
 					DataSources: []sourceTypes.SourceID{"redhat-vex"},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/datasource-filter.json", nil) {
@@ -1181,12 +1266,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents:   dbTypes.AllFilterContentTypes(),
 					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8", "ubuntu:18.04"},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/ecosystem-filter.json", nil) {
@@ -1207,12 +1292,12 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 				WithCache: true,
 			},
 			args: args{
-				searchType: dbTypes.SearchPackage,
+				ecosystem: "redhat:8",
+				packages:  []string{"mysql:8.0::mecab"},
 				filter: dbTypes.Filter{
 					Contents: dbTypes.AllFilterContentTypes(),
 					RootIDs:  []dataTypes.RootID{"ALSA-2019:3708", "CVE-2019-2510"},
 				},
-				queries: []string{"redhat:8", "mysql:8.0::mecab"},
 			},
 			want: func(yield func(string, error) bool) {
 				if !yield("testdata/golden/get-vulnerability-data/search-package/redhat%3A8/mysql%3A8.0%3A%3Amecab/CVE-2019-2510/root-id-filter.json", nil) {
@@ -1222,30 +1307,28 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s %s", tt.args.searchType, tt.name), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
 			}
 
-			c, err := tt.config.New()
+			s, err := tt.config.New()
 			if err != nil {
-				t.Fatalf("new db connection. error = %v", err)
+				t.Fatalf("new session. error = %v", err)
 			}
 
-			if err := c.Storage().Open(); err != nil {
+			if err := s.Storage().Open(); err != nil {
 				t.Fatalf("open db connection. error = %v", err)
 			}
-			defer c.Storage().Close()
+			defer s.Storage().Close()
 
 			if tt.config.WithCache {
-				defer c.Cache().Close()
+				defer s.Cache().Close()
 			}
-
-			got := c.GetVulnerabilityData(tt.args.searchType, tt.args.filter, tt.args.queries...)
 
 			wnext, wstop := iter.Pull2(tt.want)
 			defer wstop()
-			gnext, gstop := iter.Pull2(sorted(got))
+			gnext, gstop := iter.Pull2(sorted(s.GetVulnerabilityDataByPackage(tt.args.ecosystem, tt.args.packages, tt.args.filter)))
 			defer gstop()
 
 			for {
@@ -1254,19 +1337,19 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 
 				if !wantOk || !gotOk {
 					if wantOk != gotOk {
-						t.Errorf("Conn.GetVulnerabilityData() length mismatch: want hasNext=%v, got hasNext=%v", wantOk, gotOk)
+						t.Errorf("Session.GetVulnerabilityDataByPackage() length mismatch: want hasNext=%v, got hasNext=%v", wantOk, gotOk)
 					}
 					break
 				}
 
 				switch {
 				case wantErr == nil && gotErr != nil:
-					t.Errorf("Conn.GetVulnerabilityData() unexpected error: %v", gotErr)
+					t.Errorf("Session.GetVulnerabilityDataByPackage() unexpected error: %v", gotErr)
 				case wantErr != nil && gotErr == nil:
-					t.Errorf("Conn.GetVulnerabilityData() expected error has not occurred")
+					t.Errorf("Session.GetVulnerabilityDataByPackage() expected error has not occurred")
 				case wantErr != nil && gotErr != nil:
 					if wantErr.Error() != gotErr.Error() {
-						t.Errorf("Conn.GetVulnerabilityData() error mismatch: want %v, got %v", wantErr, gotErr)
+						t.Errorf("Session.GetVulnerabilityDataByPackage() error mismatch: want %v, got %v", wantErr, gotErr)
 					}
 				default:
 					f, err := os.Open(wantpath)
@@ -1287,7 +1370,7 @@ func TestSession_GetVulnerabilityData(t *testing.T) {
 						cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
 						cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
 					); diff != "" {
-						t.Errorf("Conn.GetVulnerabilityData() data mismatch (-want +got):\n%s", diff)
+						t.Errorf("Session.GetVulnerabilityDataByPackage() data mismatch (-want +got):\n%s", diff)
 					}
 				}
 			}
@@ -1440,25 +1523,25 @@ func TestSession_GetAdvisory(t *testing.T) {
 				t.Fatalf("populate db. error = %v", err)
 			}
 
-			c, err := tt.config.New()
+			s, err := tt.config.New()
 			if err != nil {
-				t.Fatalf("new db connection. error = %v", err)
+				t.Fatalf("new session. error = %v", err)
 			}
 
-			if err := c.Storage().Open(); err != nil {
+			if err := s.Storage().Open(); err != nil {
 				t.Fatalf("open db connection. error = %v", err)
 			}
-			defer c.Storage().Close()
+			defer s.Storage().Close()
 
 			if tt.config.WithCache {
-				defer c.Cache().Close()
+				defer s.Cache().Close()
 
 				for k, v := range tt.cache {
-					c.Cache().StoreAdvisory(k, v)
+					s.Cache().StoreAdvisory(k, v)
 				}
 			}
 
-			got, err := c.GetAdvisory(tt.args.id)
+			got, err := s.GetAdvisory(tt.args.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Conn.GetAdvisory() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1468,7 +1551,7 @@ func TestSession_GetAdvisory(t *testing.T) {
 			}
 
 			if tt.config.WithCache {
-				m, ok := c.Cache().LoadAdvisory(tt.args.id)
+				m, ok := s.Cache().LoadAdvisory(tt.args.id)
 				if !ok {
 					t.Errorf("Conn.GetAdvisory() no cache set")
 				}
@@ -1608,25 +1691,25 @@ func TestSession_GetVulnerability(t *testing.T) {
 				t.Fatalf("populate db. error = %v", err)
 			}
 
-			c, err := tt.config.New()
+			s, err := tt.config.New()
 			if err != nil {
-				t.Fatalf("new db connection. error = %v", err)
+				t.Fatalf("new session. error = %v", err)
 			}
 
-			if err := c.Storage().Open(); err != nil {
+			if err := s.Storage().Open(); err != nil {
 				t.Fatalf("open db connection. error = %v", err)
 			}
-			defer c.Storage().Close()
+			defer s.Storage().Close()
 
 			if tt.config.WithCache {
-				defer c.Cache().Close()
+				defer s.Cache().Close()
 
 				for k, v := range tt.cache {
-					c.Cache().StoreVulnerability(k, v)
+					s.Cache().StoreVulnerability(k, v)
 				}
 			}
 
-			got, err := c.GetVulnerability(tt.args.id)
+			got, err := s.GetVulnerability(tt.args.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Conn.GetVulnerability() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1636,7 +1719,7 @@ func TestSession_GetVulnerability(t *testing.T) {
 			}
 
 			if tt.config.WithCache {
-				m, ok := c.Cache().LoadVulnerability(tt.args.id)
+				m, ok := s.Cache().LoadVulnerability(tt.args.id)
 				if !ok {
 					t.Errorf("Conn.GetVulnerability() no cache set")
 				}

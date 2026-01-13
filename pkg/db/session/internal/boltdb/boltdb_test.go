@@ -652,20 +652,20 @@ func TestConnection_GetEcosystems(t *testing.T) {
 	}
 }
 
-func TestConnection_GetIndexes(t *testing.T) {
+func TestConnection_GetIndex(t *testing.T) {
 	type fields struct {
 		Config *boltdb.Config
 	}
 	type args struct {
 		ecosystem ecosystemTypes.Ecosystem
-		queries   []string
+		query     string
 	}
 	tests := []struct {
 		name    string
 		fixture string
 		fields  fields
 		args    args
-		want    map[dataTypes.RootID][]string
+		want    []dataTypes.RootID
 		wantErr bool
 	}{
 		{
@@ -676,7 +676,7 @@ func TestConnection_GetIndexes(t *testing.T) {
 			},
 			args: args{
 				ecosystem: "ECOSYSTEM-NOT-EXISTS",
-				queries:   []string{"mariadb-devel:10.3::Judy"},
+				query:     "mariadb-devel:10.3::Judy",
 			},
 			wantErr: true,
 		},
@@ -688,9 +688,9 @@ func TestConnection_GetIndexes(t *testing.T) {
 			},
 			args: args{
 				ecosystem: "alma:8",
-				queries:   []string{"PACKAGE-NOT-EXISTS"},
+				query:     "PACKAGE-NOT-EXISTS",
 			},
-			want: map[dataTypes.RootID][]string{},
+			wantErr: true,
 		},
 		{
 			name:    "happy",
@@ -700,11 +700,9 @@ func TestConnection_GetIndexes(t *testing.T) {
 			},
 			args: args{
 				ecosystem: "alma:8",
-				queries:   []string{"mariadb-devel:10.3::Judy"},
+				query:     "mariadb-devel:10.3::Judy",
 			},
-			want: map[dataTypes.RootID][]string{
-				"ALSA-2019:3708": {"mariadb-devel:10.3::Judy"},
-			},
+			want: []dataTypes.RootID{"ALSA-2019:3708"},
 		},
 	}
 	for _, tt := range tests {
@@ -727,13 +725,13 @@ func TestConnection_GetIndexes(t *testing.T) {
 			}
 			defer c.Close()
 
-			got, err := c.GetIndexes(tt.args.ecosystem, tt.args.queries...)
+			got, err := c.GetIndex(tt.args.ecosystem, tt.args.query)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Connection.GetIndexes() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Connection.GetIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Connection.GetIndexes(). (-expected +got):\n%s", diff)
+				t.Errorf("Connection.GetIndex(). (-expected +got):\n%s", diff)
 			}
 		})
 	}
