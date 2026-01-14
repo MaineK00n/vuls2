@@ -15,7 +15,7 @@ require (
 	github.com/redis/rueidis v1.0.70
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.9
+	github.com/spf13/pflag v1.0.10
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/sync v0.19.0
 	gorm.io/driver/mysql v1.6.0
