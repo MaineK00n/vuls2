@@ -2,6 +2,7 @@ package session
 
 import (
 	"iter"
+	"maps"
 	"slices"
 
 	"github.com/pkg/errors"
@@ -122,7 +123,7 @@ func SchemaVersion(t string) (uint, error) {
 	}
 }
 
-func (s Session) GetVulnerabilityDataByRootID(id dataTypes.RootID, filter dbTypes.Filter) (dbTypes.VulnerabilityData, error) {
+func (s Session) GetVulnerabilityData(id dataTypes.RootID, filter dbTypes.Filter) (dbTypes.VulnerabilityData, error) {
 	root := dbTypes.VulnerabilityData{ID: string(id)}
 
 	if filter.ExcludesRootID(id) {
@@ -220,90 +221,65 @@ func (s Session) GetVulnerabilityDataByAdvisoryID(id advisoryContentTypes.Adviso
 		return root, nil
 	}
 
-	root.Advisories = []dbTypes.VulnerabilityDataAdvisory{
-		{
-			ID:       id,
-			Contents: am,
-		},
+	if slices.Contains(filter.Contents, dbTypes.FilterContentTypeAdvisories) {
+		root.Advisories = []dbTypes.VulnerabilityDataAdvisory{
+			{
+				ID:       id,
+				Contents: am,
+			},
+		}
 	}
 
-	dm := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-	for _, mm := range am {
-		for rootID := range mm {
-			r, err := s.Storage().GetRoot(rootID)
-			if err != nil {
-				return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get root")
-			}
-
-			r = filter.ApplyShallowly(r)
-
-			for _, v := range r.Vulnerabilities {
-				if !slices.ContainsFunc(root.Vulnerabilities, func(e dbTypes.VulnerabilityDataVulnerability) bool {
-					return e.ID == v.ID
-				}) {
-					vm, err := s.getVulnerability(v.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get vulnerability")
+	for rootID := range func() iter.Seq[dataTypes.RootID] {
+		return func(yield func(dataTypes.RootID) bool) {
+			for _, m := range am {
+				for rootID := range m {
+					if !yield(rootID) {
+						return
 					}
-
-					vm = filter.ApplyToVulnerabilities(vm)
-					if len(vm) == 0 {
-						continue
-					}
-
-					root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
-						ID:       v.ID,
-						Contents: vm,
-					})
-				}
-			}
-
-			for _, d := range r.Detections {
-				if filter.ExcludesEcosystem(d.Ecosystem) {
-					continue
-				}
-
-				m, err := s.Storage().GetDetection(d.Ecosystem, rootID)
-				if err != nil {
-					return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
-				}
-
-				m = filter.ApplyToDetections(m)
-				if len(m) == 0 {
-					continue
-				}
-
-				if _, ok := dm[d.Ecosystem]; !ok {
-					dm[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-				}
-				dm[d.Ecosystem][rootID] = m
-			}
-
-			for _, d := range r.DataSources {
-				if filter.ExcludesDataSource(d.ID) {
-					continue
-				}
-
-				if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
-					return e.ID == d.ID
-				}) {
-					ds, err := s.Storage().GetDataSource(d.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get datasource")
-					}
-					root.DataSources = append(root.DataSources, ds)
 				}
 			}
 		}
-	}
-	for e, m := range dm {
-		root.Detections = append(root.Detections, dbTypes.VulnerabilityDataDetection{
-			Ecosystem: e,
-			Contents:  m,
+	}() {
+		d, err := s.GetVulnerabilityData(rootID, dbTypes.Filter{
+			Contents:    slices.DeleteFunc(filter.Contents, func(e dbTypes.FilterContentType) bool { return e == dbTypes.FilterContentTypeAdvisories }),
+			DataSources: filter.DataSources,
+			Ecosystems:  filter.Ecosystems,
+			RootIDs:     filter.RootIDs,
 		})
+		if err != nil {
+			return dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get vulnerability data by root id: %s", rootID)
+		}
+
+		for _, v := range d.Vulnerabilities {
+			if !slices.ContainsFunc(root.Vulnerabilities, func(e dbTypes.VulnerabilityDataVulnerability) bool {
+				return e.ID == v.ID
+			}) {
+				root.Vulnerabilities = append(root.Vulnerabilities, v)
+			}
+		}
+
+		for _, dd := range d.Detections {
+			switch i := slices.IndexFunc(root.Detections, func(e dbTypes.VulnerabilityDataDetection) bool { return e.Ecosystem == dd.Ecosystem }); i {
+			case -1:
+				root.Detections = append(root.Detections, dd)
+			default:
+				rd := root.Detections[i]
+				maps.Copy(rd.Contents, dd.Contents)
+				root.Detections[i] = rd
+			}
+		}
+
+		for _, ds := range d.DataSources {
+			if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
+				return e.ID == ds.ID
+			}) {
+				root.DataSources = append(root.DataSources, ds)
+			}
+		}
 	}
 
-	return filter.ApplyShallowly(root), nil
+	return root, nil
 }
 
 func (s Session) GetVulnerabilityDataByVulnerabilityID(id vulnerabilityContentTypes.VulnerabilityID, filter dbTypes.Filter) (dbTypes.VulnerabilityData, error) {
@@ -319,90 +295,65 @@ func (s Session) GetVulnerabilityDataByVulnerabilityID(id vulnerabilityContentTy
 		return root, nil
 	}
 
-	root.Vulnerabilities = []dbTypes.VulnerabilityDataVulnerability{
-		{
-			ID:       id,
-			Contents: vm,
-		},
+	if slices.Contains(filter.Contents, dbTypes.FilterContentTypeVulnerabilities) {
+		root.Vulnerabilities = []dbTypes.VulnerabilityDataVulnerability{
+			{
+				ID:       id,
+				Contents: vm,
+			},
+		}
 	}
 
-	dm := make(map[ecosystemTypes.Ecosystem]map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-	for _, mm := range vm {
-		for rootID := range mm {
-			r, err := s.Storage().GetRoot(rootID)
-			if err != nil {
-				return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get root")
-			}
-
-			r = filter.ApplyShallowly(r)
-
-			for _, a := range r.Advisories {
-				if !slices.ContainsFunc(root.Advisories, func(e dbTypes.VulnerabilityDataAdvisory) bool {
-					return e.ID == a.ID
-				}) {
-					am, err := s.getAdvisory(a.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get advisory")
+	for rootID := range func() iter.Seq[dataTypes.RootID] {
+		return func(yield func(dataTypes.RootID) bool) {
+			for _, m := range vm {
+				for rootID := range m {
+					if !yield(rootID) {
+						return
 					}
-
-					am = filter.ApplyToAdvisories(am)
-					if len(am) == 0 {
-						continue
-					}
-
-					root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
-						ID:       a.ID,
-						Contents: am,
-					})
-				}
-			}
-
-			for _, d := range r.Detections {
-				if filter.ExcludesEcosystem(d.Ecosystem) {
-					continue
-				}
-
-				m, err := s.Storage().GetDetection(d.Ecosystem, rootID)
-				if err != nil {
-					return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
-				}
-
-				m = filter.ApplyToDetections(m)
-				if len(m) == 0 {
-					continue
-				}
-
-				if _, ok := dm[d.Ecosystem]; !ok {
-					dm[d.Ecosystem] = make(map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition)
-				}
-				dm[d.Ecosystem][rootID] = m
-			}
-
-			for _, d := range r.DataSources {
-				if filter.ExcludesDataSource(d.ID) {
-					continue
-				}
-
-				if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
-					return e.ID == d.ID
-				}) {
-					ds, err := s.Storage().GetDataSource(d.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get datasource")
-					}
-					root.DataSources = append(root.DataSources, ds)
 				}
 			}
 		}
-	}
-	for e, m := range dm {
-		root.Detections = append(root.Detections, dbTypes.VulnerabilityDataDetection{
-			Ecosystem: e,
-			Contents:  m,
+	}() {
+		d, err := s.GetVulnerabilityData(rootID, dbTypes.Filter{
+			Contents:    slices.DeleteFunc(filter.Contents, func(e dbTypes.FilterContentType) bool { return e == dbTypes.FilterContentTypeVulnerabilities }),
+			DataSources: filter.DataSources,
+			Ecosystems:  filter.Ecosystems,
+			RootIDs:     filter.RootIDs,
 		})
+		if err != nil {
+			return dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get vulnerability data by root id: %s", rootID)
+		}
+
+		for _, a := range d.Advisories {
+			if !slices.ContainsFunc(root.Advisories, func(e dbTypes.VulnerabilityDataAdvisory) bool {
+				return e.ID == a.ID
+			}) {
+				root.Advisories = append(root.Advisories, a)
+			}
+		}
+
+		for _, dd := range d.Detections {
+			switch i := slices.IndexFunc(root.Detections, func(e dbTypes.VulnerabilityDataDetection) bool { return e.Ecosystem == dd.Ecosystem }); i {
+			case -1:
+				root.Detections = append(root.Detections, dd)
+			default:
+				rd := root.Detections[i]
+				maps.Copy(rd.Contents, dd.Contents)
+				root.Detections[i] = rd
+			}
+		}
+
+		for _, ds := range d.DataSources {
+			if !slices.ContainsFunc(root.DataSources, func(e datasourceTypes.DataSource) bool {
+				return e.ID == ds.ID
+			}) {
+				root.DataSources = append(root.DataSources, ds)
+			}
+		}
 	}
 
-	return filter.ApplyShallowly(root), nil
+	return root, nil
 }
 
 func (s Session) GetVulnerabilityDataByPackage(ecosystem ecosystemTypes.Ecosystem, packages []string, filter dbTypes.Filter) iter.Seq2[dbTypes.VulnerabilityData, error] {
@@ -429,92 +380,26 @@ func (s Session) GetVulnerabilityDataByPackage(ecosystem ecosystemTypes.Ecosyste
 		}
 
 		for rootID := range im {
-			d, err := func() (dbTypes.VulnerabilityData, error) {
-				root := dbTypes.VulnerabilityData{ID: string(rootID)}
-				r, err := s.Storage().GetRoot(rootID)
-				if err != nil {
-					return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get root")
-				}
-
-				r = filter.ApplyShallowly(r)
-
-				for _, d := range r.Detections {
-					if d.Ecosystem != ecosystem {
-						continue
-					}
-
-					dm, err := s.Storage().GetDetection(d.Ecosystem, rootID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get detection")
-					}
-
-					dm = filter.ApplyToDetections(dm)
-					if len(dm) == 0 {
-						continue
-					}
-
-					root.Detections = []dbTypes.VulnerabilityDataDetection{
-						{
-							Ecosystem: d.Ecosystem,
-							Contents:  map[dataTypes.RootID]map[sourceTypes.SourceID][]conditionTypes.Condition{rootID: dm},
-						},
-					}
-				}
-
-				for _, a := range r.Advisories {
-					m, err := s.getAdvisory(a.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get advisory")
-					}
-
-					m = filter.ApplyToAdvisories(m)
-					if len(m) == 0 {
-						continue
-					}
-
-					root.Advisories = append(root.Advisories, dbTypes.VulnerabilityDataAdvisory{
-						ID:       a.ID,
-						Contents: m,
-					})
-				}
-
-				for _, v := range r.Vulnerabilities {
-					m, err := s.getVulnerability(v.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get vulnerability")
-					}
-
-					m = filter.ApplyToVulnerabilities(m)
-					if len(m) == 0 {
-						continue
-					}
-
-					root.Vulnerabilities = append(root.Vulnerabilities, dbTypes.VulnerabilityDataVulnerability{
-						ID:       v.ID,
-						Contents: m,
-					})
-				}
-
-				for _, d := range r.DataSources {
-					if filter.ExcludesDataSource(d.ID) {
-						continue
-					}
-
-					ds, err := s.Storage().GetDataSource(d.ID)
-					if err != nil {
-						return dbTypes.VulnerabilityData{}, errors.Wrap(err, "get datasource")
-					}
-					root.DataSources = append(root.DataSources, ds)
-				}
-
-				return root, nil
-			}()
+			d, err := s.GetVulnerabilityData(rootID, filter)
 			if err != nil {
 				if !yield(dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get vulnerability data by root id: %s", rootID)) {
 					return
 				}
 				return
 			}
+
+			d.Detections = func() []dbTypes.VulnerabilityDataDetection {
+				var ds []dbTypes.VulnerabilityDataDetection
+				for _, dd := range d.Detections {
+					if dd.Ecosystem == ecosystem {
+						ds = append(ds, dbTypes.VulnerabilityDataDetection{
+							Ecosystem: dd.Ecosystem,
+							Contents:  dd.Contents,
+						})
+					}
+				}
+				return ds
+			}()
 
 			if !yield(d, nil) {
 				return

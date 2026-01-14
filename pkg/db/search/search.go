@@ -296,7 +296,7 @@ func SearchRoot(queries []dataTypes.RootID, opts ...Option) error {
 
 	slog.Info("Get Vulnerability Data", "root id", queries)
 	for _, query := range queries {
-		d, err := s.GetVulnerabilityDataByRootID(query, options.filter)
+		d, err := s.GetVulnerabilityData(query, options.filter)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundRoot) {
 				slog.Warn(err.Error())

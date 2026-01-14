@@ -247,7 +247,7 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 	}
 
 	for rootID, base := range detected {
-		d, err := s.GetVulnerabilityDataByRootID(rootID, dbTypes.Filter{
+		d, err := s.GetVulnerabilityData(rootID, dbTypes.Filter{
 			Contents: []dbTypes.FilterContentType{
 				dbTypes.FilterContentTypeAdvisories,
 				dbTypes.FilterContentTypeVulnerabilities,
