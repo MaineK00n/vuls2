@@ -447,7 +447,7 @@ func TestSession_GetVulnerabilityDataByRootID(t *testing.T) {
 				defer s.Cache().Close()
 			}
 
-			got, err := s.GetVulnerabilityDataByRootID(tt.args.id, tt.args.filter)
+			got, err := s.GetVulnerabilityData(tt.args.id, tt.args.filter)
 			switch {
 			case tt.wantErr == nil && err != nil:
 				t.Errorf("Session.GetVulnerabilityDataByRootID() unexpected error: %v", err)
