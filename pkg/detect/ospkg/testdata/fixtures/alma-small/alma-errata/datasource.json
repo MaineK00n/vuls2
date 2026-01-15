@@ -1,0 +1,14 @@
+{
+	"id": "alma-errata",
+	"name": "AlmaLinux Errata",
+	"raw": [
+		{
+			"url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata",
+			"commit": "23144d94cd39ad0d4499ab3684749b4f8e5fb092",
+			"date": "2025-11-14T13:23:03Z"
+		}
+	],
+	"extracted": {
+		"url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"
+	}
+}
