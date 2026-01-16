@@ -29,7 +29,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 	for _, q := range queries {
 		rs, err := s.GetIndex(ecosystem, q)
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundEcosystem) || errors.Is(err, dbTypes.ErrNotFoundIndex) {
+			if errors.Is(err, dbTypes.ErrNotFoundIndex) {
 				continue
 			}
 
