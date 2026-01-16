@@ -14,6 +14,7 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
+	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
@@ -28,6 +29,10 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 	for _, q := range queries {
 		rs, err := s.GetIndex(ecosystem, q)
 		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundIndex) {
+				continue
+			}
+
 			return nil, errors.Wrap(err, "get index")
 		}
 		for _, r := range rs {
