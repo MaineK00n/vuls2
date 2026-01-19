@@ -8,7 +8,7 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 	necriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
 	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
-	versoncriterion "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
+	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	vcAffectedTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected"
 	vcAffectedRangeTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected/range"
 	vcFixStatusTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/fixstatus"
@@ -106,7 +106,7 @@ func TestWalkCriteria(t *testing.T) {
 					Criterions: []criterionTypes.Criterion{
 						{
 							Type: criterionTypes.CriterionTypeVersion,
-							Version: &versoncriterion.Criterion{
+							Version: &vcTypes.Criterion{
 								Vulnerable: true,
 								FixStatus: &vcFixStatusTypes.FixStatus{
 									Class: vcFixStatusTypes.ClassUnfixed,
@@ -121,7 +121,7 @@ func TestWalkCriteria(t *testing.T) {
 						},
 						{
 							Type: criterionTypes.CriterionTypeVersion,
-							Version: &versoncriterion.Criterion{
+							Version: &vcTypes.Criterion{
 								Vulnerable: true,
 								FixStatus: &vcFixStatusTypes.FixStatus{
 									Class: vcFixStatusTypes.ClassUnfixed,
@@ -153,7 +153,7 @@ func TestWalkCriteria(t *testing.T) {
 									Criterions: []criterionTypes.Criterion{
 										{
 											Type: criterionTypes.CriterionTypeVersion,
-											Version: &versoncriterion.Criterion{
+											Version: &vcTypes.Criterion{
 												Vulnerable: true,
 												FixStatus: &vcFixStatusTypes.FixStatus{
 													Class: vcFixStatusTypes.ClassFixed,
@@ -190,7 +190,7 @@ func TestWalkCriteria(t *testing.T) {
 					Criterions: []criterionTypes.Criterion{
 						{
 							Type: criterionTypes.CriterionTypeVersion,
-							Version: &versoncriterion.Criterion{
+							Version: &vcTypes.Criterion{
 								Vulnerable: false,
 								Package: vcPackageTypes.Package{
 									Type: vcPackageTypes.PackageTypeBinary,
