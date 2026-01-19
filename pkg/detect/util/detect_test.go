@@ -257,6 +257,18 @@ func Test_replaceIndexes(t *testing.T) {
 							Version: &vcTypes.Criterion{
 								Package: vcPackageTypes.Package{
 									Type:   vcPackageTypes.PackageTypeBinary,
+									Binary: &vcBinaryPackageTypes.Package{Name: "pkg0"},
+								},
+							},
+						},
+						Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+					},
+					{
+						Criterion: criterionTypes.Criterion{
+							Type: criterionTypes.CriterionTypeVersion,
+							Version: &vcTypes.Criterion{
+								Package: vcPackageTypes.Package{
+									Type:   vcPackageTypes.PackageTypeBinary,
 									Binary: &vcBinaryPackageTypes.Package{Name: "pkg1"},
 								},
 							},
@@ -396,6 +408,42 @@ func Test_replaceIndexes(t *testing.T) {
 											Version: &vcTypes.Criterion{
 												Package: vcPackageTypes.Package{
 													Type:   vcPackageTypes.PackageTypeBinary,
+													Binary: &vcBinaryPackageTypes.Package{Name: "pkg3"},
+												},
+											},
+										},
+										Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+									},
+								},
+							},
+						},
+						Criterions: []criterionTypes.FilteredCriterion{
+							{
+								Criterion: criterionTypes.Criterion{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Package: vcPackageTypes.Package{
+											Type:   vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{Name: "pkg2"},
+										},
+									},
+								},
+								Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+							},
+						},
+					},
+					{
+						Operator: criteriaTypes.CriteriaOperatorTypeAND,
+						Criterias: []criteriaTypes.FilteredCriteria{
+							{
+								Operator: criteriaTypes.CriteriaOperatorTypeOR,
+								Criterions: []criterionTypes.FilteredCriterion{
+									{
+										Criterion: criterionTypes.Criterion{
+											Type: criterionTypes.CriterionTypeVersion,
+											Version: &vcTypes.Criterion{
+												Package: vcPackageTypes.Package{
+													Type:   vcPackageTypes.PackageTypeBinary,
 													Binary: &vcBinaryPackageTypes.Package{Name: "pkg1"},
 												},
 											},
@@ -405,7 +453,20 @@ func Test_replaceIndexes(t *testing.T) {
 								},
 							},
 						},
-						Criterions: nil,
+						Criterions: []criterionTypes.FilteredCriterion{
+							{
+								Criterion: criterionTypes.Criterion{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Package: vcPackageTypes.Package{
+											Type:   vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{Name: "pkg2"},
+										},
+									},
+								},
+								Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+							},
+						},
 					},
 					{
 						Operator: criteriaTypes.CriteriaOperatorTypeAND,
@@ -527,8 +588,37 @@ func Test_replaceIndexes(t *testing.T) {
 				Operator: criteriaTypes.CriteriaOperatorTypeAND,
 				Criterias: []criteriaTypes.FilteredCriteria{
 					{
-						Operator:  criteriaTypes.CriteriaOperatorTypeOR,
-						Criterias: nil,
+						Operator: criteriaTypes.CriteriaOperatorTypeOR,
+						Criterias: []criteriaTypes.FilteredCriteria{
+							{
+								Operator: criteriaTypes.CriteriaOperatorTypeAND,
+								Criterions: []criterionTypes.FilteredCriterion{
+									{
+										Criterion: criterionTypes.Criterion{
+											Type: criterionTypes.CriterionTypeVersion,
+											Version: &vcTypes.Criterion{
+												Vulnerable: true,
+												FixStatus: &vcFixStatusTypes.FixStatus{
+													Class: vcFixStatusTypes.ClassFixed,
+												},
+												Package: vcPackageTypes.Package{
+													Type: vcPackageTypes.PackageTypeBinary,
+													Binary: &vcBinaryPackageTypes.Package{
+														Name: "kpatch-patch-3_10_0-1062_1_1",
+													},
+												},
+												Affected: &vcAffectedTypes.Affected{
+													Type:  vcAffectedRangeTypes.RangeTypeRPM,
+													Range: []vcAffectedRangeTypes.Range{{LessThan: "0:1-1.el7"}},
+													Fixed: []string{"0:1-1.el7"},
+												},
+											},
+										},
+										Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+									},
+								},
+							},
+						},
 						Criterions: []criterionTypes.FilteredCriterion{
 							{
 								Criterion: criterionTypes.Criterion{

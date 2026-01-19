@@ -124,6 +124,148 @@ func TestDetect(t *testing.T) {
 											},
 											Accepts: criterionTypes.AcceptQueries{Version: []int{1}},
 										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "kernel-debug",
+															Architectures: []string{
+																"aarch64",
+																"ppc64le",
+																"s390x",
+																"x86_64",
+															},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type: vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{
+															{LessThan: "0:4.18.0-513.11.1.el8_9"},
+														},
+														Fixed: []string{"0:4.18.0-513.11.1.el8_9"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "kernel-devel",
+															Architectures: []string{
+																"aarch64",
+																"ppc64le",
+																"s390x",
+																"x86_64",
+															},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type: vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{
+															{LessThan: "0:4.18.0-513.11.1.el8_9"},
+														},
+														Fixed: []string{"0:4.18.0-513.11.1.el8_9"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "kernel-doc",
+															Architectures: []string{
+																"noarch",
+															},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type: vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{
+															{LessThan: "0:4.18.0-513.11.1.el8_9"},
+														},
+														Fixed: []string{"0:4.18.0-513.11.1.el8_9"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "kernel-modules",
+															Architectures: []string{
+																"aarch64",
+																"ppc64le",
+																"s390x",
+																"x86_64",
+															},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type: vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{
+															{LessThan: "0:4.18.0-513.11.1.el8_9"},
+														},
+														Fixed: []string{"0:4.18.0-513.11.1.el8_9"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "perf",
+															Architectures: []string{
+																"aarch64",
+																"ppc64le",
+																"s390x",
+																"x86_64",
+															},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type: vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{
+															{LessThan: "0:4.18.0-513.11.1.el8_9"},
+														},
+														Fixed: []string{"0:4.18.0-513.11.1.el8_9"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
 									},
 								},
 							},

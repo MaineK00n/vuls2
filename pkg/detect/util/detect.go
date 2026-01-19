@@ -124,22 +124,10 @@ func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteria
 		if err != nil {
 			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "replace indexes")
 		}
-		if len(rca.Criterias) == 0 && len(rca.Criterions) == 0 {
-			continue
-		}
 		replaced.Criterias = append(replaced.Criterias, rca)
 	}
 
-	var cns []criterionTypes.FilteredCriterion
 	for _, cn := range fca.Criterions {
-		isAffected, err := cn.Affected()
-		if err != nil {
-			return criteriaTypes.FilteredCriteria{}, errors.Wrap(err, "criterion affected")
-		}
-		if !isAffected {
-			continue
-		}
-
 		switch cn.Criterion.Type {
 		case criterionTypes.CriterionTypeVersion:
 			is := make([]int, 0, len(cn.Accepts.Version))
@@ -147,14 +135,13 @@ func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteria
 				is = append(is, indexes[a])
 			}
 			cn.Accepts.Version = is
-			cns = append(cns, cn)
+			replaced.Criterions = append(replaced.Criterions, cn)
 		case criterionTypes.CriterionTypeNoneExist:
-			cns = append(cns, cn)
+			replaced.Criterions = append(replaced.Criterions, cn)
 		default:
 			return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist}, cn.Criterion.Type)
 		}
 	}
-	replaced.Criterions = cns
 
 	return replaced, nil
 }
