@@ -253,8 +253,14 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 func rename(family ecosystemTypes.Ecosystem, name string) string {
 	switch family {
 	case ecosystemTypes.EcosystemTypeDebian:
+		if !strings.HasPrefix(name, "linux-") {
+			return name
+		}
 		return strings.NewReplacer("linux-signed", "linux", "linux-latest", "linux", "-amd64", "", "-arm64", "", "-i386", "").Replace(name)
 	case ecosystemTypes.EcosystemTypeUbuntu:
+		if !strings.HasPrefix(name, "linux-") {
+			return name
+		}
 		return strings.NewReplacer("linux-signed", "linux", "linux-meta", "linux").Replace(name)
 	default:
 		return name
