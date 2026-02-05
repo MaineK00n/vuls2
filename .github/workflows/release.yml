@@ -9,13 +9,12 @@ on:
     tags:
       - "v*"
 
-env:
-  GOEXPERIMENT: jsonv2
-
 jobs:
   binary:
     name: Release Binary
     runs-on: ubuntu-latest
+    env:
+      GOEXPERIMENT: jsonv2
     steps:
       - name: Set Tag
         run: |
