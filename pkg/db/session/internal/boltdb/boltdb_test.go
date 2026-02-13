@@ -865,12 +865,12 @@ func TestConnection_GetDataSources(t *testing.T) {
 			want: []datasourceTypes.DataSource{
 				{
 					ID:   "alma-errata",
-					Name: func() *string { s := "AlmaLinux Errata"; return &s }(),
+					Name: new("AlmaLinux Errata"),
 					Raw: []repositoryTypes.Repository{
 						{
 							URL:    "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata",
 							Commit: "23144d94cd39ad0d4499ab3684749b4f8e5fb092",
-							Date:   func() *time.Time { d := time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC); return &d }(),
+							Date:   new(time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC)),
 						},
 					},
 					Extracted: &repositoryTypes.Repository{
@@ -949,12 +949,12 @@ func TestConnection_GetDataSource(t *testing.T) {
 			},
 			want: datasourceTypes.DataSource{
 				ID:   "alma-errata",
-				Name: func() *string { s := "AlmaLinux Errata"; return &s }(),
+				Name: new("AlmaLinux Errata"),
 				Raw: []repositoryTypes.Repository{
 					{
 						URL:    "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata",
 						Commit: "23144d94cd39ad0d4499ab3684749b4f8e5fb092",
-						Date:   func() *time.Time { d := time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC); return &d }(),
+						Date:   new(time.Date(2025, time.November, 14, 13, 23, 03, 0, time.UTC)),
 					},
 				},
 				Extracted: &repositoryTypes.Repository{

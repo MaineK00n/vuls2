@@ -13,14 +13,14 @@ type ScanResult struct {
 	Family      ecosystemTypes.Ecosystem `json:"family,omitempty"`
 	Release     string                   `json:"release,omitempty"`
 
-	Kernel     Kernel      `json:"kernel,omitempty"`
+	Kernel     Kernel      `json:"kernel,omitzero"`
 	OSPackages []OSPackage `json:"os_packages,omitempty"`
 	CPE        []string    `json:"cpe,omitempty"`
 
-	Optional  map[string]interface{} `json:"optional,omitempty"`
-	Config    interface{}            `json:"config,omitempty"`
-	ScannedAt time.Time              `json:"scanned_at,omitempty"`
-	ScannedBy string                 `json:"scanned_by,omitempty"`
+	Optional  map[string]any `json:"optional,omitempty"`
+	Config    any            `json:"config,omitempty"`
+	ScannedAt time.Time      `json:"scanned_at,omitzero"`
+	ScannedBy string         `json:"scanned_by,omitempty"`
 }
 
 type Kernel struct {

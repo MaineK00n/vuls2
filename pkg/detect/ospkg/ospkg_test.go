@@ -402,22 +402,16 @@ func Test_convertVCQueryPackage(t *testing.T) {
 			args: args{
 				family: ecosystemTypes.EcosystemTypeFedora,
 				p: scanTypes.OSPackage{
-					Name: "community-mysql",
-					Epoch: func() *int {
-						e := 0
-						return &e
-					}(),
+					Name:            "community-mysql",
+					Epoch:           new(0),
 					Version:         "8.0.31",
 					Release:         "1.module_f35+15642+4eed9dbd",
 					Arch:            "x86_64",
 					ModularityLabel: "mysql:8.0:3520221024193033:f27b74a8",
 					SrcName:         "community-mysql",
-					SrcEpoch: func() *int {
-						e := 0
-						return &e
-					}(),
-					SrcVersion: "8.0.31",
-					SrcRelease: "1.module_f35+15642+4eed9dbd",
+					SrcEpoch:        new(0),
+					SrcVersion:      "8.0.31",
+					SrcRelease:      "1.module_f35+15642+4eed9dbd",
 				},
 			},
 			want: vcTypes.Query{

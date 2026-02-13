@@ -223,10 +223,7 @@ func (o *options) finish(dbpath, digest string) error {
 		}
 
 		meta.Digest = &digest
-		meta.Downloaded = func() *time.Time {
-			t := time.Now().UTC()
-			return &t
-		}()
+		meta.Downloaded = new(time.Now().UTC())
 
 		if err := s.Storage().PutMetadata(*meta); err != nil {
 			return errors.Wrap(err, "put metadata")
