@@ -658,6 +658,62 @@ func Test_replaceIndexes(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "repositories propagated",
+			args: args{
+				fca: criteriaTypes.FilteredCriteria{
+					Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+					Repositories: []string{"repo-a", "repo-b"},
+					Criterias: []criteriaTypes.FilteredCriteria{
+						{
+							Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+							Repositories: []string{"repo-a"},
+							Excluded:     true,
+							Criterions: []criterionTypes.FilteredCriterion{
+								{
+									Criterion: criterionTypes.Criterion{
+										Type: criterionTypes.CriterionTypeVersion,
+										Version: &vcTypes.Criterion{
+											Package: vcPackageTypes.Package{
+												Type:   vcPackageTypes.PackageTypeBinary,
+												Binary: &vcBinaryPackageTypes.Package{Name: "pkg0"},
+											},
+										},
+									},
+									Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+								},
+							},
+						},
+					},
+				},
+				indexes: []int{5},
+			},
+			want: criteriaTypes.FilteredCriteria{
+				Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+				Repositories: []string{"repo-a", "repo-b"},
+				Criterias: []criteriaTypes.FilteredCriteria{
+					{
+						Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+						Repositories: []string{"repo-a"},
+						Excluded:     true,
+						Criterions: []criterionTypes.FilteredCriterion{
+							{
+								Criterion: criterionTypes.Criterion{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Package: vcPackageTypes.Package{
+											Type:   vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{Name: "pkg0"},
+										},
+									},
+								},
+								Accepts: criterionTypes.AcceptQueries{Version: []int{5}},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
