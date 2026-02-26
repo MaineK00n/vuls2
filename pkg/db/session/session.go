@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	pebbledb "github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 	"github.com/redis/rueidis"
 	bolt "go.etcd.io/bbolt"
@@ -21,6 +22,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/cache"
+	pebble "github.com/MaineK00n/vuls2/pkg/db/session/internal/pebble"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/rdb"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/redis"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
@@ -57,6 +59,7 @@ type Config struct {
 
 type StorageOptions struct {
 	BoltDB *bolt.Options
+	Pebble *pebbledb.Options
 	Redis  *rueidis.ClientOption
 	RDB    []gorm.Option
 }
@@ -71,6 +74,8 @@ func (c Config) New() (*Session, error) {
 		switch c.Type {
 		case "boltdb":
 			return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path, Options: c.Options.BoltDB}}, nil
+		case "pebble":
+			return &pebble.Connection{Config: &pebble.Config{Path: c.Path, Options: c.Options.Pebble}}, nil
 		case "redis":
 			conf := c.Options.Redis
 			if conf == nil {
@@ -114,6 +119,8 @@ func SchemaVersion(t string) (uint, error) {
 	switch t {
 	case "boltdb":
 		return boltdb.SchemaVersion, nil
+	case "pebble":
+		return pebble.SchemaVersion, nil
 	case "redis":
 		return redis.SchemaVersion, nil
 	case "sqlite3", "mysql", "postgres":
