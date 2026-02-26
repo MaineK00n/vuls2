@@ -79,7 +79,7 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
@@ -128,7 +128,7 @@ func newAdvisoryCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
@@ -177,7 +177,7 @@ func newVulnerabilityCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
@@ -222,7 +222,7 @@ func newPackageCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 
@@ -263,7 +263,7 @@ func newMetadataCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
@@ -297,7 +297,7 @@ func newDataSourcesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
@@ -331,7 +331,7 @@ func newEcosystemsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")

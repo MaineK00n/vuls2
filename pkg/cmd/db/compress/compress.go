@@ -56,7 +56,7 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, pebble, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().BoolVarP(&options.boltdbNoSync, "boltdb-nosync", "", options.boltdbNoSync, "boltdb nosync")

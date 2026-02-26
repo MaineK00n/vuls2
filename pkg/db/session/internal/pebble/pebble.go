@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -59,7 +60,15 @@ func (c *Connection) Open() error {
 		return errors.New("connection config is not set")
 	}
 
-	db, err := pebble.Open(c.Config.Path, c.Config.Options)
+	opts := c.Config.Options
+	if opts == nil {
+		opts = &pebble.Options{}
+	} else {
+		opts = opts.Clone()
+	}
+	opts.Merger = VulsMerger
+
+	db, err := pebble.Open(c.Config.Path, opts)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -110,9 +119,26 @@ func (c *Connection) PutMetadata(metadata dbTypes.Metadata) error {
 	return nil
 }
 
+// maxBatchSize is the threshold at which a batch is committed and a new one is
+// created to limit WAL file size and memory usage.
+const maxBatchSize = 256 << 20 // 256MB
+
 func (c *Connection) Put(root string) error {
-	batch := c.conn.NewIndexedBatch()
-	defer batch.Close()
+	batch := c.conn.NewBatch()
+
+	commitIfNeeded := func() error {
+		if batch.Len() < maxBatchSize {
+			return nil
+		}
+		if err := batch.Commit(pebble.NoSync); err != nil {
+			return errors.Wrap(err, "commit batch")
+		}
+		if err := batch.Close(); err != nil {
+			return errors.Wrap(err, "close batch")
+		}
+		batch = c.conn.NewBatch()
+		return nil
+	}
 
 	if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -134,113 +160,102 @@ func (c *Connection) Put(root string) error {
 			return errors.Wrapf(err, "unmarshal %s", path)
 		}
 
-		if err := c.putDetection(batch, data); err != nil {
+		if err := putDetection(batch, data); err != nil {
 			return errors.Wrap(err, "put detection")
 		}
 
-		if err := c.putAdvisory(batch, data); err != nil {
+		if err := putAdvisory(batch, data); err != nil {
 			return errors.Wrap(err, "put advisory")
 		}
 
-		if err := c.putVulnerability(batch, data); err != nil {
+		if err := putVulnerability(batch, data); err != nil {
 			return errors.Wrap(err, "put vulnerability")
 		}
 
-		if err := c.putRoot(batch, data); err != nil {
+		if err := putRoot(batch, data); err != nil {
 			return errors.Wrap(err, "put root")
+		}
+
+		if err := commitIfNeeded(); err != nil {
+			return err
 		}
 
 		return nil
 	}); err != nil {
+		batch.Close()
 		return errors.Wrapf(err, "walk %s", root)
 	}
 
 	f, err := os.Open(filepath.Join(root, "datasource.json"))
 	if err != nil {
+		batch.Close()
 		return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
 	}
 	defer f.Close()
 
 	var ds datasourceTypes.DataSource
 	if err := json.UnmarshalRead(f, &ds); err != nil {
+		batch.Close()
 		return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
 	}
 
-	if err := c.putDataSource(batch, ds); err != nil {
-		return errors.Wrap(err, "put data source")
+	bs, err := util.Marshal(ds)
+	if err != nil {
+		batch.Close()
+		return errors.Wrap(err, "marshal datasource")
+	}
+	if err := batch.Set(makeKey("datasource", string(ds.ID)), bs, nil); err != nil {
+		batch.Close()
+		return errors.Wrap(err, "put datasource")
 	}
 
-	bs, err := util.Marshal(dbTypes.Metadata{
+	metaBS, err := util.Marshal(dbTypes.Metadata{
 		SchemaVersion: SchemaVersion,
 		CreatedBy:     version.String(),
 		LastModified:  time.Now().UTC(),
 	})
 	if err != nil {
+		batch.Close()
 		return errors.Wrap(err, "marshal metadata")
 	}
 
-	if err := batch.Set(makeKey("metadata", "db"), bs, nil); err != nil {
+	if err := batch.Set(makeKey("metadata", "db"), metaBS, nil); err != nil {
+		batch.Close()
 		return errors.Wrap(err, "put metadata")
 	}
 
 	if err := batch.Commit(pebble.Sync); err != nil {
+		batch.Close()
 		return errors.Wrap(err, "commit batch")
+	}
+	if err := batch.Close(); err != nil {
+		return errors.Wrap(err, "close batch")
+	}
+
+	// Compact all data to resolve pending merge operands.
+	slog.Info("Compacting database")
+	if err := c.conn.Compact([]byte("\x00"), []byte("\xff"), true); err != nil {
+		return errors.Wrap(err, "compact")
 	}
 
 	return nil
 }
 
-func (c *Connection) getFromDB(key []byte) ([]byte, error) {
-	bs, closer, err := c.conn.Get(key)
-	if err != nil {
-		if errors.Is(err, pebble.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, errors.WithStack(err)
-	}
-	defer closer.Close()
-
-	result := make([]byte, len(bs))
-	copy(result, bs)
-	return result, nil
-}
-
-func getFromBatch(c *Connection, batch *pebble.Batch, key []byte) ([]byte, error) {
-	bs, closer, err := batch.Get(key)
-	if err != nil {
-		if errors.Is(err, pebble.ErrNotFound) {
-			return c.getFromDB(key)
-		}
-		return nil, errors.WithStack(err)
-	}
-	defer closer.Close()
-
-	result := make([]byte, len(bs))
-	copy(result, bs)
-	return result, nil
-}
-
-func (c *Connection) putDetection(batch *pebble.Batch, data dataTypes.Data) error {
+// putDetection writes detection data using Merge.
+func putDetection(batch *pebble.Batch, data dataTypes.Data) error {
 	for _, d := range data.Detections {
 		detectionKey := makeKey(string(d.Ecosystem), "detection", string(data.ID))
 
-		m := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
-		if bs, err := getFromBatch(c, batch, detectionKey); err != nil {
-			return errors.WithStack(err)
-		} else if len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
-				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
-			}
+		// Marshal a partial map with just this source's conditions.
+		m := map[sourceTypes.SourceID][]conditionTypes.Condition{
+			data.DataSource.ID: d.Conditions,
 		}
-		m[data.DataSource.ID] = d.Conditions
-
 		bs, err := util.Marshal(m)
 		if err != nil {
-			return errors.Wrap(err, "marshal conditions map")
+			return errors.Wrap(err, "marshal detection")
 		}
-
-		if err := batch.Set(detectionKey, bs, nil); err != nil {
-			return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+		if err := batch.Merge(detectionKey, bs, nil); err != nil {
+			return errors.Wrapf(err, "merge %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
 		}
 
 		var pkgs []string
@@ -256,25 +271,13 @@ func (c *Connection) putDetection(batch *pebble.Batch, data dataTypes.Data) erro
 		for _, p := range slices.Compact(pkgs) {
 			indexKey := makeKey(string(d.Ecosystem), "index", p)
 
-			var rootIDs []dataTypes.RootID
-			if bs, err := getFromBatch(c, batch, indexKey); err != nil {
-				return errors.WithStack(err)
-			} else if len(bs) > 0 {
-				if err := util.Unmarshal(bs, &rootIDs); err != nil {
-					return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
-				}
-			}
-			if !slices.Contains(rootIDs, data.ID) {
-				rootIDs = append(rootIDs, data.ID)
-			}
-
-			bs, err := util.Marshal(rootIDs)
+			// Marshal a single-element slice; merger will deduplicate.
+			idBS, err := util.Marshal([]dataTypes.RootID{data.ID})
 			if err != nil {
-				return errors.Wrap(err, "marshal root IDs")
+				return errors.Wrap(err, "marshal root ID")
 			}
-
-			if err := batch.Set(indexKey, bs, nil); err != nil {
-				return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
+			if err := batch.Merge(indexKey, idBS, nil); err != nil {
+				return errors.Wrapf(err, "merge %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
 			}
 		}
 	}
@@ -282,67 +285,54 @@ func (c *Connection) putDetection(batch *pebble.Batch, data dataTypes.Data) erro
 	return nil
 }
 
-func (c *Connection) putAdvisory(batch *pebble.Batch, data dataTypes.Data) error {
+// putAdvisory writes advisory data using Merge.
+func putAdvisory(batch *pebble.Batch, data dataTypes.Data) error {
 	for _, a := range data.Advisories {
 		key := makeKey("vulnerability", "advisory", string(a.Content.ID))
 
-		m := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
-		if bs, err := getFromBatch(c, batch, key); err != nil {
-			return errors.WithStack(err)
-		} else if len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
-				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> advisory -> %s", a.Content.ID))
-			}
+		// Marshal a partial map with just this source/root/advisory.
+		m := map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+			data.DataSource.ID: {
+				data.ID: {a},
+			},
 		}
-		if m[data.DataSource.ID] == nil {
-			m[data.DataSource.ID] = make(map[dataTypes.RootID][]advisoryTypes.Advisory)
-		}
-		m[data.DataSource.ID][data.ID] = append(m[data.DataSource.ID][data.ID], a)
-
 		bs, err := util.Marshal(m)
 		if err != nil {
-			return errors.Wrap(err, "marshal advisory map")
+			return errors.Wrap(err, "marshal advisory")
 		}
-
-		if err := batch.Set(key, bs, nil); err != nil {
-			return errors.Wrapf(err, "put %q", fmt.Sprintf("vulnerability -> advisory -> %s", a.Content.ID))
+		if err := batch.Merge(key, bs, nil); err != nil {
+			return errors.Wrapf(err, "merge %q", fmt.Sprintf("vulnerability -> advisory -> %s", a.Content.ID))
 		}
 	}
 
 	return nil
 }
 
-func (c *Connection) putVulnerability(batch *pebble.Batch, data dataTypes.Data) error {
+// putVulnerability writes vulnerability data using Merge.
+func putVulnerability(batch *pebble.Batch, data dataTypes.Data) error {
 	for _, v := range data.Vulnerabilities {
 		key := makeKey("vulnerability", "vulnerability", string(v.Content.ID))
 
-		m := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
-		if bs, err := getFromBatch(c, batch, key); err != nil {
-			return errors.WithStack(err)
-		} else if len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
-				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> vulnerability -> %s", v.Content.ID))
-			}
+		// Marshal a partial map with just this source/root/vulnerability.
+		m := map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+			data.DataSource.ID: {
+				data.ID: {v},
+			},
 		}
-		if m[data.DataSource.ID] == nil {
-			m[data.DataSource.ID] = make(map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
-		}
-		m[data.DataSource.ID][data.ID] = append(m[data.DataSource.ID][data.ID], v)
-
 		bs, err := util.Marshal(m)
 		if err != nil {
-			return errors.Wrap(err, "marshal vulnerability map")
+			return errors.Wrap(err, "marshal vulnerability")
 		}
-
-		if err := batch.Set(key, bs, nil); err != nil {
-			return errors.Wrapf(err, "put %q", fmt.Sprintf("vulnerability -> vulnerability -> %s", v.Content.ID))
+		if err := batch.Merge(key, bs, nil); err != nil {
+			return errors.Wrapf(err, "merge %q", fmt.Sprintf("vulnerability -> vulnerability -> %s", v.Content.ID))
 		}
 	}
 
 	return nil
 }
 
-func (c *Connection) putRoot(batch *pebble.Batch, data dataTypes.Data) error {
+// putRoot writes root data using Merge.
+func putRoot(batch *pebble.Batch, data dataTypes.Data) error {
 	root := vulnerabilityRoot{
 		ID: data.ID,
 		Advisories: func() []advisoryContentTypes.AdvisoryID {
@@ -370,65 +360,12 @@ func (c *Connection) putRoot(batch *pebble.Batch, data dataTypes.Data) error {
 	}
 
 	key := makeKey("vulnerability", "root", string(root.ID))
-
-	if bs, err := getFromBatch(c, batch, key); err != nil {
-		return errors.WithStack(err)
-	} else if len(bs) > 0 {
-		var r vulnerabilityRoot
-		if err := util.Unmarshal(bs, &r); err != nil {
-			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> root -> %s", r.ID))
-		}
-
-		for _, a := range r.Advisories {
-			if !slices.Contains(root.Advisories, a) {
-				root.Advisories = append(root.Advisories, a)
-			}
-		}
-		for _, v := range r.Vulnerabilities {
-			if !slices.Contains(root.Vulnerabilities, v) {
-				root.Vulnerabilities = append(root.Vulnerabilities, v)
-			}
-		}
-		for _, e := range r.Ecosystems {
-			if !slices.Contains(root.Ecosystems, e) {
-				root.Ecosystems = append(root.Ecosystems, e)
-			}
-		}
-		for _, d := range r.DataSources {
-			if !slices.Contains(root.DataSources, d) {
-				root.DataSources = append(root.DataSources, d)
-			}
-		}
-	}
-
 	bs, err := util.Marshal(root)
 	if err != nil {
 		return errors.Wrap(err, "marshal root")
 	}
-
-	if err := batch.Set(key, bs, nil); err != nil {
-		return errors.Wrapf(err, "put %q", fmt.Sprintf("vulnerability -> root -> %s", root.ID))
-	}
-
-	return nil
-}
-
-func (c *Connection) putDataSource(batch *pebble.Batch, datasource datasourceTypes.DataSource) error {
-	key := makeKey("datasource", string(datasource.ID))
-
-	if existing, err := getFromBatch(c, batch, key); err != nil {
-		return errors.WithStack(err)
-	} else if existing != nil {
-		return errors.Errorf("%q already exists", fmt.Sprintf("datasource -> %s", datasource.ID))
-	}
-
-	bs, err := util.Marshal(datasource)
-	if err != nil {
-		return errors.Wrap(err, "marshal datasource")
-	}
-
-	if err := batch.Set(key, bs, nil); err != nil {
-		return errors.Wrapf(err, "put %q", fmt.Sprintf("datasource -> %q", datasource.ID))
+	if err := batch.Merge(key, bs, nil); err != nil {
+		return errors.Wrapf(err, "merge %q", fmt.Sprintf("vulnerability -> root -> %s", root.ID))
 	}
 
 	return nil
