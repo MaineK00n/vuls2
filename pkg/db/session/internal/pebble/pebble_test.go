@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/pebble"
 	pebbledb "github.com/cockroachdb/pebble"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -1228,6 +1227,3 @@ func compare(want, got map[string][]byte) error {
 
 	return errors.Join(es...)
 }
-
-// Verify that unused imports are silenced.
-var _ = pebble.ErrNotFound
