@@ -117,7 +117,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 }
 
 func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {
-	replaced := criteriaTypes.FilteredCriteria{Operator: fca.Operator}
+	replaced := criteriaTypes.FilteredCriteria{Operator: fca.Operator, Repositories: fca.Repositories}
 
 	for _, ca := range fca.Criterias {
 		rca, err := replaceIndexes(ca, indexes)
