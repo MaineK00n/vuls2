@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	SchemaVersion = 0
+	SchemaVersion = 1
 )
 
 // boltdb: metadata:db -> dbTypes.Metadata
@@ -90,7 +90,7 @@ func (c *Connection) GetMetadata() (*dbTypes.Metadata, error) {
 			return errors.Wrapf(dbTypes.ErrNotFoundMetadata, "%q not found", "metadata -> db")
 		}
 
-		if err := util.Unmarshal(bs, &v); err != nil {
+		if err := util.UnmarshalPB(bs, &v); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", "metadata -> db")
 		}
 
@@ -116,7 +116,7 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 		return errors.Errorf("%q is not exists", "metadata")
 	}
 
-	bs, err := util.Marshal(metadata)
+	bs, err := util.MarshalPB(metadata)
 	if err != nil {
 		return errors.Wrap(err, "marshal metadata")
 	}
@@ -227,13 +227,13 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 
 		m := make(map[sourceTypes.SourceID][]conditionTypes.Condition)
 		if bs := edb.Get([]byte(data.ID)); len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
+			if err := util.UnmarshalPB(bs, &m); err != nil {
 				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
 			}
 		}
 		m[data.DataSource.ID] = d.Conditions
 
-		bs, err := util.Marshal(m)
+		bs, err := util.MarshalPB(m)
 		if err != nil {
 			return errors.Wrap(err, "marshal conditions map")
 		}
@@ -260,7 +260,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 		for _, p := range slices.Compact(pkgs) {
 			var rootIDs []dataTypes.RootID
 			if bs := eib.Get([]byte(p)); len(bs) > 0 {
-				if err := util.Unmarshal(bs, &rootIDs); err != nil {
+				if err := util.UnmarshalPB(bs, &rootIDs); err != nil {
 					return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
 				}
 			}
@@ -268,7 +268,7 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 				rootIDs = append(rootIDs, data.ID)
 			}
 
-			bs, err := util.Marshal(rootIDs)
+			bs, err := util.MarshalPB(rootIDs)
 			if err != nil {
 				return errors.Wrap(err, "marshal root IDs")
 			}
@@ -296,7 +296,7 @@ func putAdvisory(tx *bolt.Tx, data dataTypes.Data) error {
 	for _, a := range data.Advisories {
 		m := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory)
 		if bs := vab.Get([]byte(a.Content.ID)); len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
+			if err := util.UnmarshalPB(bs, &m); err != nil {
 				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> advisory -> %s", a.Content.ID))
 			}
 		}
@@ -305,7 +305,7 @@ func putAdvisory(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 		m[data.DataSource.ID][data.ID] = append(m[data.DataSource.ID][data.ID], a)
 
-		bs, err := util.Marshal(m)
+		bs, err := util.MarshalPB(m)
 		if err != nil {
 			return errors.Wrap(err, "marshal advisory map")
 		}
@@ -332,7 +332,7 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data) error {
 	for _, v := range data.Vulnerabilities {
 		m := make(map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability)
 		if bs := vvb.Get([]byte(v.Content.ID)); len(bs) > 0 {
-			if err := util.Unmarshal(bs, &m); err != nil {
+			if err := util.UnmarshalPB(bs, &m); err != nil {
 				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> vulnerability -> %s", v.Content.ID))
 			}
 		}
@@ -341,7 +341,7 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 		m[data.DataSource.ID][data.ID] = append(m[data.DataSource.ID][data.ID], v)
 
-		bs, err := util.Marshal(m)
+		bs, err := util.MarshalPB(m)
 		if err != nil {
 			return errors.Wrap(err, "marshal vulnerability map")
 		}
@@ -392,9 +392,16 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	}
 
 	if bs := vrb.Get([]byte(root.ID)); len(bs) > 0 {
-		var r vulnerabilityRoot
-		if err := util.Unmarshal(bs, &r); err != nil {
-			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> root -> %s", r.ID))
+		var rd util.VulnerabilityRootData
+		if err := util.UnmarshalPB(bs, &rd); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> root -> %s", root.ID))
+		}
+		r := vulnerabilityRoot{
+			ID:              rd.ID,
+			Advisories:      rd.Advisories,
+			Vulnerabilities: rd.Vulnerabilities,
+			Ecosystems:      rd.Ecosystems,
+			DataSources:     rd.DataSources,
 		}
 
 		for _, a := range r.Advisories {
@@ -419,7 +426,13 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 	}
 
-	bs, err := util.Marshal(root)
+	bs, err := util.MarshalPB(util.VulnerabilityRootData{
+		ID:              root.ID,
+		Advisories:      root.Advisories,
+		Vulnerabilities: root.Vulnerabilities,
+		Ecosystems:      root.Ecosystems,
+		DataSources:     root.DataSources,
+	})
 	if err != nil {
 		return errors.Wrap(err, "marshal root")
 	}
@@ -441,7 +454,7 @@ func putDataSource(tx *bolt.Tx, datasource datasourceTypes.DataSource) error {
 		return errors.Errorf("%q already exists", fmt.Sprintf("datasource -> %s", datasource.ID))
 	}
 
-	bs, err := util.Marshal(datasource)
+	bs, err := util.MarshalPB(datasource)
 	if err != nil {
 		return errors.Wrap(err, "marshal datasource")
 	}
@@ -471,9 +484,16 @@ func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, er
 			return errors.Wrapf(dbTypes.ErrNotFoundRoot, "%q not found", fmt.Sprintf("vulnerability -> root -> %s", id))
 		}
 
-		var r vulnerabilityRoot
-		if err := util.Unmarshal(bs, &r); err != nil {
+		var rd util.VulnerabilityRootData
+		if err := util.UnmarshalPB(bs, &rd); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> root -> %s", id))
+		}
+		r := vulnerabilityRoot{
+			ID:              rd.ID,
+			Advisories:      rd.Advisories,
+			Vulnerabilities: rd.Vulnerabilities,
+			Ecosystems:      rd.Ecosystems,
+			DataSources:     rd.DataSources,
 		}
 
 		d = dbTypes.VulnerabilityData{
@@ -533,7 +553,7 @@ func (c *Connection) GetAdvisory(id advisoryContentTypes.AdvisoryID) (map[source
 			return errors.Wrapf(dbTypes.ErrNotFoundAdvisory, "%q not found", fmt.Sprintf("vulnerability -> advisory -> %s", id))
 		}
 
-		if err := util.Unmarshal(bs, &m); err != nil {
+		if err := util.UnmarshalPB(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> advisory -> %s", id))
 		}
 
@@ -562,7 +582,7 @@ func (c *Connection) GetVulnerability(id vulnerabilityContentTypes.Vulnerability
 			return errors.Wrapf(dbTypes.ErrNotFoundVulnerability, "%q not found", fmt.Sprintf("vulnerability -> vulnerability -> %s", id))
 		}
 
-		if err := util.Unmarshal(bs, &m); err != nil {
+		if err := util.UnmarshalPB(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("vulnerability -> vulnerability -> %s", id))
 		}
 
@@ -608,7 +628,7 @@ func (c *Connection) GetIndex(ecosystem ecosystemTypes.Ecosystem, query string) 
 			return errors.Wrapf(dbTypes.ErrNotFoundIndex, "%q not found", fmt.Sprintf("%s -> index -> %s", ecosystem, query))
 		}
 
-		if err := util.Unmarshal(bs, &rootIDs); err != nil {
+		if err := util.UnmarshalPB(bs, &rootIDs); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", ecosystem, query))
 		}
 
@@ -637,7 +657,7 @@ func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dat
 			return errors.Wrapf(dbTypes.ErrNotFoundDetection, "%q not found", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
 		}
 
-		if err := util.Unmarshal(bs, &m); err != nil {
+		if err := util.UnmarshalPB(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
 		}
 
@@ -658,7 +678,7 @@ func (c *Connection) GetDataSources() ([]datasourceTypes.DataSource, error) {
 
 		return sb.ForEach(func(k, v []byte) error {
 			var d datasourceTypes.DataSource
-			if err := util.Unmarshal(v, &d); err != nil {
+			if err := util.UnmarshalPB(v, &d); err != nil {
 				return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("datasource -> %s", k))
 			}
 			ds = append(ds, d)
@@ -683,7 +703,7 @@ func (c *Connection) GetDataSource(id sourceTypes.SourceID) (datasourceTypes.Dat
 			return errors.Wrapf(dbTypes.ErrNotFoundDataSource, "%q not found", fmt.Sprintf("datasource -> %s", id))
 		}
 
-		if err := util.Unmarshal(bs, &v); err != nil {
+		if err := util.UnmarshalPB(bs, &v); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("datasource -> %s", id))
 		}
 

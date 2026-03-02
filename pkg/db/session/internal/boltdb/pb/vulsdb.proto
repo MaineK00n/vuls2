@@ -1,0 +1,391 @@
+syntax = "proto3";
+
+package vulsdb;
+
+option go_package = "github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb/pb";
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================
+// Top-level bucket value types
+// ============================================================
+
+// metadata:db
+message Metadata {
+  uint32                    schema_version = 1;
+  string                    created_by     = 2;
+  google.protobuf.Timestamp last_modified  = 3;
+  optional string           digest         = 4;
+  optional google.protobuf.Timestamp downloaded = 5;
+}
+
+// vulnerability:root:<Root ID>
+message VulnerabilityRoot {
+  string          id              = 1;
+  repeated string advisories      = 2;
+  repeated string vulnerabilities = 3;
+  repeated string ecosystems      = 4;
+  repeated string data_sources    = 5;
+}
+
+// vulnerability:advisory:<Advisory ID>
+// Go type: map[SourceID]map[RootID][]Advisory
+message AdvisoryMap {
+  map<string, RootAdvisoryMap> entries = 1; // key = SourceID
+}
+
+message RootAdvisoryMap {
+  map<string, AdvisoryList> entries = 1; // key = RootID
+}
+
+message AdvisoryList {
+  repeated Advisory items = 1;
+}
+
+// vulnerability:vulnerability:<CVE ID>
+// Go type: map[SourceID]map[RootID][]Vulnerability
+message VulnerabilityMap {
+  map<string, RootVulnerabilityMap> entries = 1; // key = SourceID
+}
+
+message RootVulnerabilityMap {
+  map<string, VulnerabilityList> entries = 1; // key = RootID
+}
+
+message VulnerabilityList {
+  repeated Vulnerability items = 1;
+}
+
+// <ecosystem>:detection:<Root ID>
+// Go type: map[SourceID][]Condition
+message DetectionConditionMap {
+  map<string, ConditionList> entries = 1; // key = SourceID
+}
+
+message ConditionList {
+  repeated Condition items = 1;
+}
+
+// <ecosystem>:index:<package>
+message RootIDList {
+  repeated string ids = 1;
+}
+
+// datasource:<Source ID>
+message DataSource {
+  string              id        = 1;
+  optional string     name      = 2;
+  repeated Repository raw       = 3;
+  optional Repository extracted = 4;
+}
+
+message Repository {
+  string                             url    = 1;
+  string                             commit = 2;
+  optional google.protobuf.Timestamp date   = 3;
+}
+
+// ============================================================
+// Advisory / Vulnerability
+// ============================================================
+
+message Advisory {
+  AdvisoryContent  content  = 1;
+  repeated Segment segments = 2;
+}
+
+message AdvisoryContent {
+  string              id          = 1;
+  string              title       = 2;
+  string              description = 3;
+  repeated Severity   severity    = 4;
+  repeated CWE        cwe         = 5;
+  repeated Reference  references  = 6;
+  optional google.protobuf.Timestamp published = 7;
+  optional google.protobuf.Timestamp modified  = 8;
+  bytes               optional_json = 9; // map[string]any serialized as JSON
+}
+
+message Vulnerability {
+  VulnerabilityContent content  = 1;
+  repeated Segment     segments = 2;
+}
+
+message VulnerabilityContent {
+  string               id          = 1;
+  string               title       = 2;
+  string               description = 3;
+  repeated Severity    severity    = 4;
+  repeated CWE         cwe         = 5;
+  repeated Exploit     exploit     = 6;
+  repeated Metasploit  metasploit  = 7;
+  optional EPSS        epss        = 8;
+  repeated Snort       snort       = 9;
+  optional KEV         kev         = 10;
+  repeated Reference   references  = 11;
+  optional google.protobuf.Timestamp published = 12;
+  optional google.protobuf.Timestamp modified  = 13;
+  bytes                optional_json = 14; // map[string]any serialized as JSON
+}
+
+// ============================================================
+// Segment
+// ============================================================
+
+message Segment {
+  string ecosystem = 1;
+  string tag       = 2;
+}
+
+// ============================================================
+// Detection
+// ============================================================
+
+message Condition {
+  Criteria criteria = 1;
+  string   tag      = 2;
+}
+
+enum CriteriaOperator {
+  CRITERIA_OPERATOR_UNSPECIFIED = 0;
+  CRITERIA_OPERATOR_OR          = 1;
+  CRITERIA_OPERATOR_AND         = 2;
+}
+
+message Criteria {
+  CriteriaOperator  operator   = 1;
+  repeated Criteria  criterias  = 2;
+  repeated Criterion criterions = 3;
+}
+
+enum CriterionType {
+  CRITERION_TYPE_UNSPECIFIED = 0;
+  CRITERION_TYPE_VERSION     = 1;
+  CRITERION_TYPE_NONE_EXIST  = 2;
+  CRITERION_TYPE_UNKNOWN     = 3;
+}
+
+message Criterion {
+  CriterionType        type       = 1;
+  VersionCriterion     version    = 2;
+  NoneExistCriterion   none_exist = 3;
+}
+
+// ============================================================
+// Version Criterion
+// ============================================================
+
+message VersionCriterion {
+  bool             vulnerable  = 1;
+  optional FixStatus fix_status = 2;
+  Package          package     = 3;
+  optional Affected affected   = 4;
+}
+
+message FixStatus {
+  string class  = 1; // "unfixed", "fixed", "unknown"
+  string vendor = 2;
+}
+
+enum PackageType {
+  PACKAGE_TYPE_UNSPECIFIED = 0;
+  PACKAGE_TYPE_BINARY      = 1;
+  PACKAGE_TYPE_SOURCE      = 2;
+  PACKAGE_TYPE_CPE         = 3;
+  PACKAGE_TYPE_LANGUAGE    = 4;
+  PACKAGE_TYPE_UNKNOWN     = 5;
+}
+
+message Package {
+  PackageType      type     = 1;
+  BinaryPackage    binary   = 2;
+  SourcePackage    source   = 3;
+  string           cpe      = 4; // CPE string when type=CPE
+  LanguagePackage  language = 5;
+}
+
+message BinaryPackage {
+  string          name          = 1;
+  repeated string architectures = 2;
+  repeated string repositories  = 3;
+}
+
+message SourcePackage {
+  string          name         = 1;
+  repeated string repositories = 2;
+}
+
+message LanguagePackage {
+  string          name          = 1;
+  repeated string architectures = 2;
+  repeated string functions     = 3;
+}
+
+message Affected {
+  RangeType       type  = 1;
+  repeated Range  range = 2;
+  repeated string fixed = 3;
+}
+
+enum RangeType {
+  RANGE_TYPE_UNSPECIFIED     = 0;
+  RANGE_TYPE_VERSION         = 1;
+  RANGE_TYPE_SEMVER          = 2;
+  RANGE_TYPE_APK             = 3;
+  RANGE_TYPE_RPM             = 4;
+  RANGE_TYPE_RPM_VERSION_ONLY = 5;
+  RANGE_TYPE_DPKG            = 6;
+  RANGE_TYPE_PACMAN          = 7;
+  RANGE_TYPE_FREEBSD_PKG     = 8;
+  RANGE_TYPE_NPM             = 9;
+  RANGE_TYPE_RUBYGEMS        = 10;
+  RANGE_TYPE_PYPI            = 11;
+  RANGE_TYPE_MAVEN           = 12;
+  RANGE_TYPE_UNKNOWN         = 13;
+}
+
+message Range {
+  string eq = 1;
+  string lt = 2;
+  string le = 3;
+  string gt = 4;
+  string ge = 5;
+}
+
+// ============================================================
+// None-Exist Criterion
+// ============================================================
+
+enum NoneExistPackageType {
+  NONE_EXIST_PACKAGE_TYPE_UNSPECIFIED = 0;
+  NONE_EXIST_PACKAGE_TYPE_BINARY     = 1;
+  NONE_EXIST_PACKAGE_TYPE_SOURCE     = 2;
+  NONE_EXIST_PACKAGE_TYPE_UNKNOWN    = 3;
+}
+
+message NoneExistCriterion {
+  NoneExistPackageType type   = 1;
+  BinaryPackage        binary = 2;
+  SourcePackage        source = 3;
+}
+
+// ============================================================
+// Severity / CVSS
+// ============================================================
+
+enum SeverityType {
+  SEVERITY_TYPE_UNSPECIFIED = 0;
+  SEVERITY_TYPE_VENDOR      = 1;
+  SEVERITY_TYPE_CVSS_V2     = 2;
+  SEVERITY_TYPE_CVSS_V30    = 3;
+  SEVERITY_TYPE_CVSS_V31    = 4;
+  SEVERITY_TYPE_CVSS_V40    = 5;
+}
+
+message Severity {
+  SeverityType    type     = 1;
+  string          source   = 2;
+  optional string vendor   = 3;
+  CVSSv2          cvss_v2  = 4;
+  CVSSv30         cvss_v30 = 5;
+  CVSSv31         cvss_v31 = 6;
+  CVSSv40         cvss_v40 = 7;
+}
+
+message CVSSv2 {
+  string vector                      = 1;
+  double base_score                  = 2;
+  string nvd_base_severity           = 3;
+  double temporal_score              = 4;
+  string nvd_temporal_severity       = 5;
+  double environmental_score         = 6;
+  string nvd_environmental_severity  = 7;
+}
+
+message CVSSv30 {
+  string vector                 = 1;
+  double base_score             = 2;
+  string base_severity          = 3;
+  double temporal_score         = 4;
+  string temporal_severity      = 5;
+  double environmental_score    = 6;
+  string environmental_severity = 7;
+}
+
+message CVSSv31 {
+  string vector                 = 1;
+  double base_score             = 2;
+  string base_severity          = 3;
+  double temporal_score         = 4;
+  string temporal_severity      = 5;
+  double environmental_score    = 6;
+  string environmental_severity = 7;
+}
+
+message CVSSv40 {
+  string vector   = 1;
+  double score    = 2;
+  string severity = 3;
+}
+
+// ============================================================
+// Shared types
+// ============================================================
+
+message CWE {
+  string          source = 1;
+  repeated string cwe    = 2;
+}
+
+message Reference {
+  string source = 1;
+  string url    = 2;
+}
+
+message Exploit {
+  string                             source      = 1;
+  string                             id          = 2;
+  string                             description = 3;
+  optional google.protobuf.Timestamp published   = 4;
+  optional google.protobuf.Timestamp modified    = 5;
+  string                             link        = 6;
+}
+
+message Metasploit {
+  string             type        = 1;
+  string             name        = 2;
+  string             full_name   = 3;
+  string             description = 4;
+  int32              rank        = 5;
+  optional google.protobuf.Timestamp published = 6;
+  optional google.protobuf.Timestamp modified  = 7;
+  repeated Reference references  = 8;
+}
+
+message EPSS {
+  string                    model       = 1;
+  google.protobuf.Timestamp score_date  = 2;
+  double                    epss        = 3;
+  optional double           percentile  = 4;
+}
+
+message Snort {} // empty placeholder
+
+message KEV {
+  string                    vendor_project                 = 1;
+  string                    product                        = 2;
+  string                    required_action                = 3;
+  string                    known_ransomware_campaign_use  = 4;
+  string                    notes                          = 5;
+  google.protobuf.Timestamp date_added                     = 6;
+  google.protobuf.Timestamp due_date                       = 7;
+}
+
+// ============================================================
+// Source (used inside Data for data_source)
+// ============================================================
+
+message Source {
+  string          id   = 1;
+  repeated string raws = 2;
+}

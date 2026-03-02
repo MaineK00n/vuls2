@@ -18,6 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/sync v0.19.0
+	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
