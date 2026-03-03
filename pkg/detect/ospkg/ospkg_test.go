@@ -289,7 +289,6 @@ func TestDetect(t *testing.T) {
 				sr: scanTypes.ScanResult{
 					Family:  ecosystemTypes.EcosystemTypeRedHat,
 					Release: "9",
-
 					Kernel: scanTypes.Kernel{Release: "5.14.0-70.13.1.el9_0.x86_64"},
 					OSPackages: []scanTypes.OSPackage{
 						{
