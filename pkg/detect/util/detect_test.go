@@ -508,6 +508,88 @@ func Test_replaceIndexes(t *testing.T) {
 			},
 		},
 		{
+			name: "repositories preserved",
+			args: args{
+				fca: criteriaTypes.FilteredCriteria{
+					Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+					Repositories: []string{"rhel-9-for-x86_64-baseos-rpms", "rhel-9-for-x86_64-appstream-rpms"},
+					Criterias: []criteriaTypes.FilteredCriteria{
+						{
+							Operator:     criteriaTypes.CriteriaOperatorTypeAND,
+							Repositories: []string{"rhel-9-for-x86_64-baseos-rpms"},
+							Criterions: []criterionTypes.FilteredCriterion{
+								{
+									Criterion: criterionTypes.Criterion{
+										Type: criterionTypes.CriterionTypeVersion,
+										Version: &vcTypes.Criterion{
+											Package: vcPackageTypes.Package{
+												Type:   vcPackageTypes.PackageTypeBinary,
+												Binary: &vcBinaryPackageTypes.Package{Name: "pkg0"},
+											},
+										},
+									},
+									Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+								},
+							},
+						},
+					},
+					Criterions: []criterionTypes.FilteredCriterion{
+						{
+							Criterion: criterionTypes.Criterion{
+								Type: criterionTypes.CriterionTypeVersion,
+								Version: &vcTypes.Criterion{
+									Package: vcPackageTypes.Package{
+										Type:   vcPackageTypes.PackageTypeBinary,
+										Binary: &vcBinaryPackageTypes.Package{Name: "pkg1"},
+									},
+								},
+							},
+							Accepts: criterionTypes.AcceptQueries{Version: []int{1}},
+						},
+					},
+				},
+				indexes: []int{10, 20},
+			},
+			want: criteriaTypes.FilteredCriteria{
+				Operator:     criteriaTypes.CriteriaOperatorTypeOR,
+				Repositories: []string{"rhel-9-for-x86_64-baseos-rpms", "rhel-9-for-x86_64-appstream-rpms"},
+				Criterias: []criteriaTypes.FilteredCriteria{
+					{
+						Operator:     criteriaTypes.CriteriaOperatorTypeAND,
+						Repositories: []string{"rhel-9-for-x86_64-baseos-rpms"},
+						Criterions: []criterionTypes.FilteredCriterion{
+							{
+								Criterion: criterionTypes.Criterion{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Package: vcPackageTypes.Package{
+											Type:   vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{Name: "pkg0"},
+										},
+									},
+								},
+								Accepts: criterionTypes.AcceptQueries{Version: []int{10}},
+							},
+						},
+					},
+				},
+				Criterions: []criterionTypes.FilteredCriterion{
+					{
+						Criterion: criterionTypes.Criterion{
+							Type: criterionTypes.CriterionTypeVersion,
+							Version: &vcTypes.Criterion{
+								Package: vcPackageTypes.Package{
+									Type:   vcPackageTypes.PackageTypeBinary,
+									Binary: &vcBinaryPackageTypes.Package{Name: "pkg1"},
+								},
+							},
+						},
+						Accepts: criterionTypes.AcceptQueries{Version: []int{20}},
+					},
+				},
+			},
+		},
+		{
 			name: "none-exist",
 			args: args{
 				fca: criteriaTypes.FilteredCriteria{

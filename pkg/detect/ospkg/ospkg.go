@@ -45,24 +45,21 @@ func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[da
 			vcm[converted.Source.Name] = append(vcm[converted.Source.Name], i)
 		}
 
-		if converted.Binary != nil && !slices.Contains(necq.Binaries, necBinaryPackageTypes.Query{
-			Name:       converted.Binary.Name,
-			Arch:       converted.Binary.Arch,
-			Repository: converted.Binary.Repository,
+		if converted.Binary != nil && !slices.ContainsFunc(necq.Binaries, func(q necBinaryPackageTypes.Query) bool {
+			return q.Name == converted.Binary.Name && q.Arch == converted.Binary.Arch && slices.Equal(q.Repositories, converted.Binary.Repositories)
 		}) {
 			necq.Binaries = append(necq.Binaries, necBinaryPackageTypes.Query{
-				Name:       converted.Binary.Name,
-				Arch:       converted.Binary.Arch,
-				Repository: converted.Binary.Repository,
+				Name:         converted.Binary.Name,
+				Arch:         converted.Binary.Arch,
+				Repositories: converted.Binary.Repositories,
 			})
 		}
-		if converted.Source != nil && !slices.Contains(necq.Sources, necSourcePackageTypes.Query{
-			Name:       converted.Source.Name,
-			Repository: converted.Source.Repository,
+		if converted.Source != nil && !slices.ContainsFunc(necq.Sources, func(q necSourcePackageTypes.Query) bool {
+			return q.Name == converted.Source.Name && slices.Equal(q.Repositories, converted.Source.Repositories)
 		}) {
 			necq.Sources = append(necq.Sources, necSourcePackageTypes.Query{
-				Name:       converted.Source.Name,
-				Repository: converted.Source.Repository,
+				Name:         converted.Source.Name,
+				Repositories: converted.Source.Repositories,
 			})
 		}
 	}
@@ -116,7 +113,7 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 
 		var sb strings.Builder
 		if epoch != nil {
-			if _, err := sb.WriteString(fmt.Sprintf("%d:", *epoch)); err != nil {
+			if _, err := fmt.Fprintf(&sb, "%d:", *epoch); err != nil {
 				return "", errors.Wrap(err, "append epoch")
 			}
 		}
@@ -124,7 +121,7 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 			return "", errors.Wrap(err, "append version")
 		}
 		if release != "" {
-			if _, err := sb.WriteString(fmt.Sprintf("-%s", release)); err != nil {
+			if _, err := fmt.Fprintf(&sb, "-%s", release); err != nil {
 				return "", errors.Wrap(err, "append release")
 			}
 		}
@@ -216,11 +213,16 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 
 	return vcTypes.Query{
 		Binary: &vcTypes.QueryBinary{
-			Family:     family,
-			Name:       bn,
-			Version:    bv,
-			Arch:       p.Arch,
-			Repository: p.Repository,
+			Family:  family,
+			Name:    bn,
+			Version: bv,
+			Arch:    p.Arch,
+			Repositories: func() []string {
+				if p.Repository != "" {
+					return []string{p.Repository}
+				}
+				return nil
+			}(),
 		},
 		Source: func() *vcTypes.QuerySource {
 			switch family {
@@ -230,20 +232,30 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 					return nil
 				}
 				return &vcTypes.QuerySource{
-					Family:     family,
-					Name:       sn,
-					Version:    sv,
-					Repository: p.Repository,
+					Family:  family,
+					Name:    sn,
+					Version: sv,
+					Repositories: func() []string {
+						if p.Repository != "" {
+							return []string{p.Repository}
+						}
+						return nil
+					}(),
 				}
 			default:
 				if sn == "" || sv == "" {
 					return nil
 				}
 				return &vcTypes.QuerySource{
-					Family:     family,
-					Name:       sn,
-					Version:    sv,
-					Repository: p.Repository,
+					Family:  family,
+					Name:    sn,
+					Version: sv,
+					Repositories: func() []string {
+						if p.Repository != "" {
+							return []string{p.Repository}
+						}
+						return nil
+					}(),
 				}
 			}
 		}(),
