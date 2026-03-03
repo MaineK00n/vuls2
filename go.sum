@@ -1,5 +1,5 @@
-filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
-filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+filippo.io/edwards25519 v1.1.1 h1:YpjwWWlNmGIDyXOn8zLzqiD+9TyIlPhGFG96P39uBpw=
+filippo.io/edwards25519 v1.1.1/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/MaineK00n/vuls-data-update v0.0.0-20260303093643-b8a08531c5a9 h1:+5LYhGv8ezwz/FhFxKa422CzTlQdaESd3Ea8UPjHe44=
 github.com/MaineK00n/vuls-data-update v0.0.0-20260303093643-b8a08531c5a9/go.mod h1:MFFXVxikF8A9eoUO8ubtTED70swP2/wn47owYcA/9M0=
