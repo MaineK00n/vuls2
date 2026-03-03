@@ -1,0 +1,14 @@
+{
+    "id": "redhat-ovalv2",
+    "name": "Red Hat OVAL v2",
+    "raw": [
+        {
+            "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-redhat-ovalv2",
+            "commit": "0000000000000000000000000000000000000000",
+            "date": "2025-01-01T00:00:00Z"
+        }
+    ],
+    "extracted": {
+        "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-ovalv2"
+    }
+}

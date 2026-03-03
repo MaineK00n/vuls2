@@ -12,12 +12,15 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	necTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
+	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	vcAffectedTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected"
 	vcAffectedRangeTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected/range"
 	vcFixStatusTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/fixstatus"
 	vcPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package"
 	vcBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package/binary"
+	segmentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -274,6 +277,154 @@ func TestDetect(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:    "redhat kernel with matching repository",
+			fixture: "testdata/fixtures/redhat-kpatch-small",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeRedHat,
+					Release: "9",
+
+					Kernel: scanTypes.Kernel{Release: "5.14.0-70.13.1.el9_0.x86_64"},
+					OSPackages: []scanTypes.OSPackage{
+						{
+							Name:       "kernel",
+							Epoch:      new(0),
+							Version:    "5.14.0",
+							Release:    "70.13.1.el9_0",
+							Arch:       "x86_64",
+							SrcName:    "kernel",
+							SrcEpoch:   new(0),
+							SrcVersion: "5.14.0",
+							SrcRelease: "70.13.1.el9_0",
+							Repository: "rhel-9-for-x86_64-baseos-rpms",
+						},
+					},
+				},
+				concurrency: 1,
+			},
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"RHSA-2022:5214": {
+					Ecosystem: ecosystemTypes.Ecosystem(fmt.Sprintf("%s:9", ecosystemTypes.EcosystemTypeRedHat)),
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						sourceTypes.RedHatOVALv2: {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator:     criteriaTypes.CriteriaOperatorTypeAND,
+									Repositories: []string{"rhel-9-for-ppc64le-baseos-rpms", "rhel-9-for-x86_64-baseos-rpms"},
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeOR,
+											Criterias: []criteriaTypes.FilteredCriteria{
+												{
+													Operator: criteriaTypes.CriteriaOperatorTypeAND,
+													Criterions: []criterionTypes.FilteredCriterion{
+														{
+															Criterion: criterionTypes.Criterion{
+																Type: criterionTypes.CriterionTypeVersion,
+																Version: &vcTypes.Criterion{
+																	Vulnerable: true,
+																	FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+																	Package: vcPackageTypes.Package{
+																		Type: vcPackageTypes.PackageTypeBinary,
+																		Binary: &vcBinaryPackageTypes.Package{
+																			Name:          "kpatch-patch-5_14_0-70_13_1",
+																			Architectures: []string{"ppc64le", "x86_64"},
+																		},
+																	},
+																	Affected: &vcAffectedTypes.Affected{
+																		Type:  vcAffectedRangeTypes.RangeTypeRPM,
+																		Range: []vcAffectedRangeTypes.Range{{LessThan: "0:1-1.el9_0"}},
+																		Fixed: []string{"0:1-1.el9_0"},
+																	},
+																},
+															},
+															Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+														},
+													},
+												},
+											},
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeNoneExist,
+														NoneExist: &necTypes.Criterion{
+															Type:   necTypes.PackageTypeBinary,
+															Binary: &necBinaryPackageTypes.Package{Name: "kpatch-patch-5_14_0-70_13_1"},
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{NoneExist: true},
+												},
+											},
+										},
+									},
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name:          "kernel",
+															Architectures: []string{"ppc64le", "x86_64"},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{Equal: "0:5.14.0-70.13.1.el9_0"}},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("rhel-9-including-unpatched"),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:    "redhat kernel with non-matching repository",
+			fixture: "testdata/fixtures/redhat-kpatch-small",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeRedHat,
+					Release: "9",
+
+					Kernel: scanTypes.Kernel{Release: "5.14.0-70.13.1.el9_0.x86_64"},
+					OSPackages: []scanTypes.OSPackage{
+						{
+							Name:       "kernel",
+							Epoch:      new(0),
+							Version:    "5.14.0",
+							Release:    "70.13.1.el9_0",
+							Arch:       "x86_64",
+							SrcName:    "kernel",
+							SrcEpoch:   new(0),
+							SrcVersion: "5.14.0",
+							SrcRelease: "70.13.1.el9_0",
+							Repository: "some-non-matching-repo",
+						},
+					},
+				},
+				concurrency: 1,
+			},
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -501,6 +652,94 @@ func Test_convertVCQueryPackage(t *testing.T) {
 					Family:  ecosystemTypes.EcosystemTypeAlpine,
 					Name:    "ca-certificates",
 					Version: "20240226-r0",
+				},
+			},
+		},
+		{
+			name: "redhat with repository",
+			args: args{
+				family: ecosystemTypes.EcosystemTypeRedHat,
+				p: scanTypes.OSPackage{
+					Name:       "kernel",
+					Version:    "5.14.0",
+					Release:    "70.13.1.el9_0",
+					Arch:       "x86_64",
+					SrcName:    "kernel",
+					SrcVersion: "5.14.0",
+					SrcRelease: "70.13.1.el9_0",
+					Repository: "rhel-9-for-x86_64-baseos-rpms",
+				},
+			},
+			want: vcTypes.Query{
+				Binary: &vcTypes.QueryBinary{
+					Family:       ecosystemTypes.EcosystemTypeRedHat,
+					Name:         "kernel",
+					Version:      "5.14.0-70.13.1.el9_0",
+					Arch:         "x86_64",
+					Repositories: []string{"rhel-9-for-x86_64-baseos-rpms"},
+				},
+				Source: &vcTypes.QuerySource{
+					Family:       ecosystemTypes.EcosystemTypeRedHat,
+					Name:         "kernel",
+					Version:      "5.14.0-70.13.1.el9_0",
+					Repositories: []string{"rhel-9-for-x86_64-baseos-rpms"},
+				},
+			},
+		},
+		{
+			name: "redhat without repository",
+			args: args{
+				family: ecosystemTypes.EcosystemTypeRedHat,
+				p: scanTypes.OSPackage{
+					Name:       "kernel",
+					Version:    "5.14.0",
+					Release:    "70.13.1.el9_0",
+					Arch:       "x86_64",
+					SrcName:    "kernel",
+					SrcVersion: "5.14.0",
+					SrcRelease: "70.13.1.el9_0",
+				},
+			},
+			want: vcTypes.Query{
+				Binary: &vcTypes.QueryBinary{
+					Family:  ecosystemTypes.EcosystemTypeRedHat,
+					Name:    "kernel",
+					Version: "5.14.0-70.13.1.el9_0",
+					Arch:    "x86_64",
+				},
+				Source: &vcTypes.QuerySource{
+					Family:  ecosystemTypes.EcosystemTypeRedHat,
+					Name:    "kernel",
+					Version: "5.14.0-70.13.1.el9_0",
+				},
+			},
+		},
+		{
+			name: "debian with repository",
+			args: args{
+				family: ecosystemTypes.EcosystemTypeDebian,
+				p: scanTypes.OSPackage{
+					Name:       "apt",
+					Version:    "2.6.1",
+					Arch:       "amd64",
+					SrcName:    "apt",
+					SrcVersion: "2.6.1",
+					Repository: "Debian:bookworm/main",
+				},
+			},
+			want: vcTypes.Query{
+				Binary: &vcTypes.QueryBinary{
+					Family:       ecosystemTypes.EcosystemTypeDebian,
+					Name:         "apt",
+					Version:      "2.6.1",
+					Arch:         "amd64",
+					Repositories: []string{"Debian:bookworm/main"},
+				},
+				Source: &vcTypes.QuerySource{
+					Family:       ecosystemTypes.EcosystemTypeDebian,
+					Name:         "apt",
+					Version:      "2.6.1",
+					Repositories: []string{"Debian:bookworm/main"},
 				},
 			},
 		},

@@ -1,0 +1,139 @@
+{
+    "id": "RHSA-2022:5214",
+    "advisories": [
+        {
+            "content": {
+                "id": "RHSA-2022:5214",
+                "title": "Important: kpatch-patch security update",
+                "severity": [
+                    {
+                        "type": "vendor",
+                        "source": "access.redhat.com",
+                        "vendor": "Important"
+                    }
+                ],
+                "published": "2022-06-28T00:00:00Z"
+            },
+            "segments": [
+                {
+                    "ecosystem": "redhat:9"
+                }
+            ]
+        }
+    ],
+    "vulnerabilities": [
+        {
+            "content": {
+                "id": "CVE-2022-27666",
+                "references": [
+                    {
+                        "source": "access.redhat.com",
+                        "url": "https://access.redhat.com/security/cve/CVE-2022-27666"
+                    }
+                ]
+            }
+        }
+    ],
+    "detections": [
+        {
+            "ecosystem": "redhat:9",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "AND",
+                        "criterias": [
+                            {
+                                "operator": "OR",
+                                "criterias": [
+                                    {
+                                        "operator": "AND",
+                                        "criterions": [
+                                            {
+                                                "type": "version",
+                                                "version": {
+                                                    "vulnerable": true,
+                                                    "fix_status": {
+                                                        "class": "fixed"
+                                                    },
+                                                    "package": {
+                                                        "type": "binary",
+                                                        "binary": {
+                                                            "name": "kpatch-patch-5_14_0-70_13_1",
+                                                            "architectures": [
+                                                                "ppc64le",
+                                                                "x86_64"
+                                                            ]
+                                                        }
+                                                    },
+                                                    "affected": {
+                                                        "type": "rpm",
+                                                        "range": [
+                                                            {
+                                                                "lt": "0:1-1.el9_0"
+                                                            }
+                                                        ],
+                                                        "fixed": [
+                                                            "0:1-1.el9_0"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "criterions": [
+                                    {
+                                        "type": "none-exist",
+                                        "none_exist": {
+                                            "type": "binary",
+                                            "binary": {
+                                                "name": "kpatch-patch-5_14_0-70_13_1"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        "criterions": [
+                            {
+                                "type": "version",
+                                "version": {
+                                    "vulnerable": false,
+                                    "package": {
+                                        "type": "binary",
+                                        "binary": {
+                                            "name": "kernel",
+                                            "architectures": [
+                                                "ppc64le",
+                                                "x86_64"
+                                            ]
+                                        }
+                                    },
+                                    "affected": {
+                                        "type": "rpm",
+                                        "range": [
+                                            {
+                                                "eq": "0:5.14.0-70.13.1.el9_0"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "repositories": [
+                            "rhel-9-for-ppc64le-baseos-rpms",
+                            "rhel-9-for-x86_64-baseos-rpms"
+                        ]
+                    },
+                    "tag": "rhel-9-including-unpatched"
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "redhat-ovalv2",
+        "raws": [
+            "oval/v2/2022/RHSA-2022:5214/RHSA-2022:5214.json"
+        ]
+    }
+}
