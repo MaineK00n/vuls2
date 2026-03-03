@@ -113,7 +113,7 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 
 		var sb strings.Builder
 		if epoch != nil {
-			if _, err := sb.WriteString(fmt.Sprintf("%d:", *epoch)); err != nil {
+			if _, err := fmt.Fprintf(&sb, "%d:", *epoch); err != nil {
 				return "", errors.Wrap(err, "append epoch")
 			}
 		}
@@ -121,7 +121,7 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 			return "", errors.Wrap(err, "append version")
 		}
 		if release != "" {
-			if _, err := sb.WriteString(fmt.Sprintf("-%s", release)); err != nil {
+			if _, err := fmt.Fprintf(&sb, "-%s", release); err != nil {
 				return "", errors.Wrap(err, "append release")
 			}
 		}
