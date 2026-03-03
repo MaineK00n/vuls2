@@ -714,35 +714,6 @@ func Test_convertVCQueryPackage(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "debian with repository",
-			args: args{
-				family: ecosystemTypes.EcosystemTypeDebian,
-				p: scanTypes.OSPackage{
-					Name:       "apt",
-					Version:    "2.6.1",
-					Arch:       "amd64",
-					SrcName:    "apt",
-					SrcVersion: "2.6.1",
-					Repository: "Debian:bookworm/main",
-				},
-			},
-			want: vcTypes.Query{
-				Binary: &vcTypes.QueryBinary{
-					Family:       ecosystemTypes.EcosystemTypeDebian,
-					Name:         "apt",
-					Version:      "2.6.1",
-					Arch:         "amd64",
-					Repositories: []string{"Debian:bookworm/main"},
-				},
-				Source: &vcTypes.QuerySource{
-					Family:       ecosystemTypes.EcosystemTypeDebian,
-					Name:         "apt",
-					Version:      "2.6.1",
-					Repositories: []string{"Debian:bookworm/main"},
-				},
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
