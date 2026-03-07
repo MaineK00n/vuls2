@@ -168,7 +168,30 @@ func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackag
 			}
 
 			return sn, sv, nil
-		case ecosystemTypes.EcosystemTypeDebian, ecosystemTypes.EcosystemTypeUbuntu:
+		case ecosystemTypes.EcosystemTypeDebian:
+			if p.SrcName == "" || p.SrcVersion == "" {
+				return "", "", nil
+			}
+
+			n := p.SrcName
+			e, v, r := p.SrcEpoch, p.SrcVersion, p.SrcRelease
+			if isKernelPackage(family, p.SrcName) {
+				n = rename(family, p.SrcName)
+				e, v, r = p.Epoch, p.Version, p.Release
+			}
+
+			sn, err := pnfn(n, "")
+			if err != nil {
+				return "", "", errors.Wrap(err, "form source package name")
+			}
+
+			sv, err := pvfn(e, v, r)
+			if err != nil {
+				return "", "", errors.Wrap(err, "form source package version")
+			}
+
+			return sn, sv, nil
+		case ecosystemTypes.EcosystemTypeUbuntu:
 			if p.SrcName == "" || p.SrcVersion == "" {
 				return "", "", nil
 			}

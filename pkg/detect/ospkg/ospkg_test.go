@@ -597,7 +597,7 @@ func Test_convertVCQueryPackage(t *testing.T) {
 				Source: &vcTypes.QuerySource{
 					Family:  ecosystemTypes.EcosystemTypeDebian,
 					Name:    "linux",
-					Version: "6.1.76+1",
+					Version: "6.1.76-1",
 				},
 			},
 		},
