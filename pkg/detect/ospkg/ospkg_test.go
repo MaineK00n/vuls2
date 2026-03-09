@@ -597,7 +597,31 @@ func Test_convertVCQueryPackage(t *testing.T) {
 				Source: &vcTypes.QuerySource{
 					Family:  ecosystemTypes.EcosystemTypeDebian,
 					Name:    "linux",
-					Version: "6.1.76+1",
+					Version: "6.1.76-1",
+				},
+			},
+		},
+		{
+			name: "debian non-kernel binary + source",
+			args: args{
+				family: ecosystemTypes.EcosystemTypeDebian,
+				p: scanTypes.OSPackage{
+					Name:       "apt",
+					Version:    "2.6.1",
+					SrcName:    "apt",
+					SrcVersion: "2.6.0",
+				},
+			},
+			want: vcTypes.Query{
+				Binary: &vcTypes.QueryBinary{
+					Family:  ecosystemTypes.EcosystemTypeDebian,
+					Name:    "apt",
+					Version: "2.6.1",
+				},
+				Source: &vcTypes.QuerySource{
+					Family:  ecosystemTypes.EcosystemTypeDebian,
+					Name:    "apt",
+					Version: "2.6.0",
 				},
 			},
 		},
