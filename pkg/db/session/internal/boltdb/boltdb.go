@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	progressbar "github.com/schollz/progressbar/v3"
 	bolt "go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -128,88 +129,107 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 	return nil
 }
 
+const putBatchSize = 1000
+
 func (c *Connection) Put(root string) error {
-	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := func() error {
-			if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
+	pb := progressbar.Default(-1, "putting")
+	defer pb.Close()
 
-				if d.IsDir() || filepath.Ext(path) != ".json" {
-					return nil
-				}
+	tx, err := c.conn.Begin(true)
+	if err != nil {
+		return errors.Wrap(err, "begin tx")
+	}
+	defer tx.Rollback() //nolint:errcheck
 
-				f, err := os.Open(path)
-				if err != nil {
-					return errors.Wrapf(err, "open %s", path)
-				}
-				defer f.Close()
-
-				var data dataTypes.Data
-				if err := json.UnmarshalRead(f, &data); err != nil {
-					return errors.Wrapf(err, "unmarshal %s", path)
-				}
-
-				if err := putDetection(tx, data); err != nil {
-					return errors.Wrap(err, "put detection")
-				}
-
-				if err := putAdvisory(tx, data); err != nil {
-					return errors.Wrap(err, "put advisory")
-				}
-
-				if err := putVulnerability(tx, data); err != nil {
-					return errors.Wrap(err, "put vulnerability")
-				}
-
-				if err := putRoot(tx, data); err != nil {
-					return errors.Wrap(err, "put root")
-				}
-
-				return nil
-			}); err != nil {
-				return errors.Wrapf(err, "walk %s", root)
-			}
-
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "put vulnerability data")
+	count := 0
+	if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
 
-		if err := func() error {
-			f, err := os.Open(filepath.Join(root, "datasource.json"))
+		if d.IsDir() || filepath.Ext(path) != ".json" {
+			return nil
+		}
+
+		if err := putDataFile(tx, path); err != nil {
+			return errors.Wrapf(err, "put data file %s", path)
+		}
+
+		_ = pb.Add(1)
+
+		count++
+		if count%putBatchSize == 0 {
+			if err := tx.Commit(); err != nil {
+				return errors.Wrap(err, "commit tx")
+			}
+			tx, err = c.conn.Begin(true)
 			if err != nil {
-				return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
+				return errors.Wrap(err, "begin tx")
 			}
-			defer f.Close()
-
-			var ds datasourceTypes.DataSource
-			if err := json.UnmarshalRead(f, &ds); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
-			}
-
-			if err := putDataSource(tx, ds); err != nil {
-				return errors.Wrap(err, "put data source")
-			}
-
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "put data source")
-		}
-
-		if err := putMetadata(tx, dbTypes.Metadata{
-			SchemaVersion: SchemaVersion,
-			CreatedBy:     version.String(),
-			LastModified:  time.Now().UTC(),
-		}); err != nil {
-			return errors.Wrap(err, "put metadata")
 		}
 
 		return nil
 	}); err != nil {
-		return errors.WithStack(err)
+		return errors.Wrapf(err, "walk %s", root)
 	}
+
+	_ = pb.Finish()
+
+	// Put datasource and metadata in the current (last) transaction.
+	f, err := os.Open(filepath.Join(root, "datasource.json"))
+	if err != nil {
+		return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
+	}
+	defer f.Close()
+
+	var ds datasourceTypes.DataSource
+	if err := json.UnmarshalRead(f, &ds); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
+	}
+
+	if err := putDataSource(tx, ds); err != nil {
+		return errors.Wrap(err, "put data source")
+	}
+
+	if err := putMetadata(tx, dbTypes.Metadata{
+		SchemaVersion: SchemaVersion,
+		CreatedBy:     version.String(),
+		LastModified:  time.Now().UTC(),
+	}); err != nil {
+		return errors.Wrap(err, "put metadata")
+	}
+
+	return tx.Commit()
+}
+
+func putDataFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var data dataTypes.Data
+	if err := json.UnmarshalRead(f, &data); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+
+	if err := putDetection(tx, data); err != nil {
+		return errors.Wrap(err, "put detection")
+	}
+
+	if err := putAdvisory(tx, data); err != nil {
+		return errors.Wrap(err, "put advisory")
+	}
+
+	if err := putVulnerability(tx, data); err != nil {
+		return errors.Wrap(err, "put vulnerability")
+	}
+
+	if err := putRoot(tx, data); err != nil {
+		return errors.Wrap(err, "put root")
+	}
+
 	return nil
 }
 
