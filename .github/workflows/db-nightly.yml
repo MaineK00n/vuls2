@@ -67,7 +67,7 @@ jobs:
           rm -rf oras_${VERSION}_*.tar.gz oras-install/
 
       - name: Login to GitHub Packages Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
