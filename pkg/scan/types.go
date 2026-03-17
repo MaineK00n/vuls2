@@ -7,11 +7,11 @@ type scanResult struct {
 
 	RunningKernel kernel                `json:"runningKernel"`
 	Packages      map[string]binPackage `json:"packages"`
-	SrcPackages   map[string]srcPackage `json:",omitempty"`
+	SrcPackages   map[string]srcPackage `json:"SrcPackages,omitempty"`
 
 	Config struct {
 		Scan config `json:"scan"`
-	}
+	} `json:"config"`
 }
 
 type kernel struct {
