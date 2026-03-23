@@ -16,7 +16,8 @@ type options struct {
 	dbpath      string
 	storageopts session.StorageOptions
 
-	debug bool
+	noProgress bool
+	debug      bool
 }
 
 type Option interface {
@@ -63,22 +64,34 @@ func WithDebug(debug bool) Option {
 	return debugOption(debug)
 }
 
+type noProgressOption bool
+
+func (o noProgressOption) apply(opts *options) {
+	opts.noProgress = bool(o)
+}
+
+func WithNoProgress(noProgress bool) Option {
+	return noProgressOption(noProgress)
+}
+
 func Add(root string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
 		debug:       false,
+		noProgress:  false,
 	}
 	for _, o := range opts {
 		o.apply(options)
 	}
 
 	s, err := (&session.Config{
-		Type:    options.dbtype,
-		Path:    options.dbpath,
-		Debug:   options.debug,
-		Options: options.storageopts,
+		Type:       options.dbtype,
+		Path:       options.dbpath,
+		Debug:      options.debug,
+		NoProgress: options.noProgress,
+		Options:    options.storageopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")

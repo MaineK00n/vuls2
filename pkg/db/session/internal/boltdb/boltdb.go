@@ -46,7 +46,8 @@ const (
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
 type Config struct {
-	Path string
+	Path       string
+	NoProgress bool
 
 	Options *bolt.Options
 }
@@ -136,80 +137,86 @@ var putBatchSize = 1000
 // Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
 // contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
-	pb := progressbar.Default(-1, "putting")
+	pb := func() *progressbar.ProgressBar {
+		if c.Config.NoProgress {
+			return progressbar.DefaultSilent(-1)
+		}
+		return progressbar.Default(-1, "putting")
+	}()
 	defer pb.Close()
 
-	tx, err := c.conn.Begin(true)
-	if err != nil {
-		return errors.Wrap(err, "begin tx")
+	// Walk data files and flush a batch transaction every putBatchSize files.
+	var batch []string
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := c.conn.Update(func(tx *bolt.Tx) error {
+			for _, p := range batch {
+				if err := putDataFile(tx, p); err != nil {
+					return errors.Wrapf(err, "put data file %s", p)
+				}
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "put data batch")
+		}
+		_ = pb.Add(len(batch))
+		batch = batch[:0]
+		return nil
 	}
-	// Use a closure to always capture the current tx, which is reassigned on each batch commit.
-	// Rollback after a successful Commit is a safe no-op in bbolt (tx.db is already nil).
-	defer func() {
-		tx.Rollback() //nolint:errcheck
-	}()
 
-	count := 0
 	if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
 		if d.IsDir() || filepath.Ext(path) != ".json" {
 			return nil
 		}
-
-		if err := putDataFile(tx, path); err != nil {
-			return errors.Wrapf(err, "put data file %s", path)
+		batch = append(batch, path)
+		if len(batch) >= putBatchSize {
+			return flush()
 		}
-
-		_ = pb.Add(1)
-
-		count++
-		if count%putBatchSize == 0 {
-			if err := tx.Commit(); err != nil {
-				return errors.Wrap(err, "commit tx")
-			}
-			tx, err = c.conn.Begin(true)
-			if err != nil {
-				return errors.Wrap(err, "begin tx")
-			}
-		}
-
 		return nil
 	}); err != nil {
 		return errors.Wrapf(err, "walk %s", root)
 	}
+	if err := flush(); err != nil {
+		return err
+	}
+
+	// Write datasource and metadata in a final transaction.
+	// Metadata acts as a completion marker.
+	if err := c.conn.Update(func(tx *bolt.Tx) error {
+		f, err := os.Open(filepath.Join(root, "datasource.json"))
+		if err != nil {
+			return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
+		}
+		defer f.Close()
+
+		var ds datasourceTypes.DataSource
+		if err := json.UnmarshalRead(f, &ds); err != nil {
+			return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
+		}
+
+		if err := putDataSource(tx, ds); err != nil {
+			return errors.Wrap(err, "put data source")
+		}
+
+		if err := putMetadata(tx, dbTypes.Metadata{
+			SchemaVersion: SchemaVersion,
+			CreatedBy:     version.String(),
+			LastModified:  time.Now().UTC(),
+		}); err != nil {
+			return errors.Wrap(err, "put metadata")
+		}
+
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "put datasource and metadata")
+	}
 
 	_ = pb.Finish()
-
-	// Put datasource and metadata in the current (last) transaction.
-	f, err := os.Open(filepath.Join(root, "datasource.json"))
-	if err != nil {
-		return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
-	}
-	defer f.Close()
-
-	var ds datasourceTypes.DataSource
-	if err := json.UnmarshalRead(f, &ds); err != nil {
-		return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
-	}
-
-	if err := putDataSource(tx, ds); err != nil {
-		return errors.Wrap(err, "put data source")
-	}
-
-	if err := putMetadata(tx, dbTypes.Metadata{
-		SchemaVersion: SchemaVersion,
-		CreatedBy:     version.String(),
-		LastModified:  time.Now().UTC(),
-	}); err != nil {
-		return errors.Wrap(err, "put metadata")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "commit tx")
-	}
 
 	return nil
 }
