@@ -130,8 +130,8 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 
 var putBatchSize = 1000
 
-// Put walks the extracted data directory under root and stores all entries into the database.
-// Writes are batched into transactions of putBatchSize entries for memory efficiency.
+// Put walks the extracted data directory under root and stores all files into the database.
+// Writes are batched into transactions of up to putBatchSize data files for memory efficiency.
 // Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
 // contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
