@@ -64,7 +64,7 @@ func TestConnection_Open(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -109,7 +109,7 @@ func TestConnection_Close(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -163,7 +163,7 @@ func TestConnection_GetMetadata(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -224,7 +224,7 @@ func TestConnection_PutMetadata(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -444,7 +444,7 @@ func TestConnection_GetRoot(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -533,7 +533,7 @@ func TestConnection_GetAdvisory(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -622,7 +622,7 @@ func TestConnection_GetVulnerability(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -674,7 +674,7 @@ func TestConnection_GetEcosystems(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -759,7 +759,7 @@ func TestConnection_GetIndex(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -867,7 +867,7 @@ func TestConnection_GetDetection(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -934,7 +934,7 @@ func TestConnection_GetDataSources(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -1017,7 +1017,7 @@ func TestConnection_GetDataSource(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
@@ -1067,7 +1067,7 @@ func TestConnection_DeleteAll(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					BoltDB:     tt.fields.Config.Options,
+					BoltDB: tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
 				t.Fatalf("populate db. error = %v", err)
