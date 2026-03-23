@@ -261,11 +261,12 @@ func TestConnection_Put(t *testing.T) {
 		root string
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    map[string][]byte
-		wantErr bool
+		name         string
+		putBatchSize int
+		fields       fields
+		args         args
+		want         map[string][]byte
+		wantErr      bool
 	}{
 		{
 			name: "happy",
@@ -295,10 +296,54 @@ func TestConnection_Put(t *testing.T) {
 				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
 			},
 		},
+		{
+			name:         "batch commit",
+			putBatchSize: 2,
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				root: "testdata/fixtures/alma-batch/alma-errata",
+			},
+			want: map[string][]byte{
+				"metadata":              nil,
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":         nil,
+				"vulnerability -> root": nil,
+				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:4001":         []byte(`{"id":"ALSA-2019:4001","advisories":["ALSA-2019:4001"],"vulnerabilities":["CVE-2019-1001"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:4002":         []byte(`{"id":"ALSA-2019:4002","advisories":["ALSA-2019:4002"],"vulnerabilities":["CVE-2019-1002"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> ALSA-2019:3708":     []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"ALSA-2019:3708"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:4001":     []byte(`{"alma-errata":{"ALSA-2019:4001":[{"content":{"id":"ALSA-2019:4001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:4002":     []byte(`{"alma-errata":{"ALSA-2019:4002":[{"content":{"id":"ALSA-2019:4002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2019-2510": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2510"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-2537": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2537"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-1001": []byte(`{"alma-errata":{"ALSA-2019:4001":[{"content":{"id":"CVE-2019-1001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-1002": []byte(`{"alma-errata":{"ALSA-2019:4002":[{"content":{"id":"CVE-2019-1002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"alma:8":                                      nil,
+				"alma:8 -> detection":                         nil,
+				"alma:8 -> detection -> ALSA-2019:3708":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"mariadb-devel:10.3::Judy","architectures":["i686"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:4001":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"libfoo","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:4002":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"libbar","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> index":                             nil,
+				"alma:8 -> index -> mariadb-devel:10.3::Judy": []byte(`["ALSA-2019:3708"]`),
+				"alma:8 -> index -> libfoo":                   []byte(`["ALSA-2019:4001"]`),
+				"alma:8 -> index -> libbar":                   []byte(`["ALSA-2019:4002"]`),
+				"datasource":                                  nil,
+				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.putBatchSize > 0 {
+				restore := boltdb.SetPutBatchSize(tt.putBatchSize)
+				defer restore()
+			}
+
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}

@@ -129,8 +129,12 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 	return nil
 }
 
-const putBatchSize = 1000
+var putBatchSize = 1000
 
+// Put walks the extracted data directory under root and stores all entries into the database.
+// Writes are batched into transactions of putBatchSize entries for memory efficiency.
+// Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
+// contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
 	pb := progressbar.Default(-1, "putting")
 	defer pb.Close()
@@ -139,7 +143,11 @@ func (c *Connection) Put(root string) error {
 	if err != nil {
 		return errors.Wrap(err, "begin tx")
 	}
-	defer tx.Rollback() //nolint:errcheck
+	// Use a closure to always capture the current tx, which is reassigned on each batch commit.
+	// Rollback after a successful Commit is a safe no-op in bbolt (tx.db is already nil).
+	defer func() {
+		tx.Rollback() //nolint:errcheck
+	}()
 
 	count := 0
 	if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
