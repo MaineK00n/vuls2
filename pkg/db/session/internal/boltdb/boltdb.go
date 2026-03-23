@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	progressbar "github.com/schollz/progressbar/v3"
 	bolt "go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -46,8 +45,7 @@ const (
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
 type Config struct {
-	Path       string
-	NoProgress bool
+	Path string
 
 	Options *bolt.Options
 }
@@ -137,14 +135,6 @@ var putBatchSize = 1000
 // Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
 // contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
-	pb := func() *progressbar.ProgressBar {
-		if c.Config.NoProgress {
-			return progressbar.DefaultSilent(-1)
-		}
-		return progressbar.Default(-1, "putting")
-	}()
-	defer pb.Close()
-
 	// Walk data files and flush a batch transaction every putBatchSize files.
 	var batch []string
 	flush := func() error {
@@ -161,7 +151,6 @@ func (c *Connection) Put(root string) error {
 		}); err != nil {
 			return errors.Wrap(err, "put data batch")
 		}
-		_ = pb.Add(len(batch))
 		batch = batch[:0]
 		return nil
 	}
@@ -217,8 +206,6 @@ func (c *Connection) Put(root string) error {
 	}); err != nil {
 		return errors.Wrap(err, "put datasource and metadata")
 	}
-
-	_ = pb.Finish()
 
 	return nil
 }

@@ -54,7 +54,7 @@ func TestConnection_Open(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 		},
 	}
@@ -64,7 +64,6 @@ func TestConnection_Open(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -100,7 +99,7 @@ func TestConnection_Close(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 		},
 	}
@@ -110,7 +109,6 @@ func TestConnection_Close(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -150,7 +148,7 @@ func TestConnection_GetMetadata(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			want: &dbTypes.Metadata{
 				SchemaVersion: boltdb.SchemaVersion,
@@ -165,7 +163,6 @@ func TestConnection_GetMetadata(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -210,7 +207,7 @@ func TestConnection_PutMetadata(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				metadata: dbTypes.Metadata{
@@ -227,7 +224,6 @@ func TestConnection_PutMetadata(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -275,7 +271,7 @@ func TestConnection_Put(t *testing.T) {
 		{
 			name: "happy",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				root: "testdata/fixtures/alma-small/alma-errata",
@@ -304,7 +300,7 @@ func TestConnection_Put(t *testing.T) {
 			name:         "batch commit",
 			putBatchSize: 2,
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				root: "testdata/fixtures/alma-batch/alma-errata",
@@ -398,7 +394,7 @@ func TestConnection_GetRoot(t *testing.T) {
 			name:    "not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				id: "ROOT-NOT-EXISTS",
@@ -409,7 +405,7 @@ func TestConnection_GetRoot(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				id: "ALSA-2019:3708",
@@ -448,7 +444,6 @@ func TestConnection_GetRoot(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -538,7 +533,6 @@ func TestConnection_GetAdvisory(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -628,7 +622,6 @@ func TestConnection_GetVulnerability(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -670,7 +663,7 @@ func TestConnection_GetEcosystems(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			want: []ecosystemTypes.Ecosystem{"alma:8"},
 		},
@@ -681,7 +674,6 @@ func TestConnection_GetEcosystems(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -728,7 +720,7 @@ func TestConnection_GetIndex(t *testing.T) {
 			name:    "ecosystem not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "ECOSYSTEM-NOT-EXISTS",
@@ -740,7 +732,7 @@ func TestConnection_GetIndex(t *testing.T) {
 			name:    "query not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "alma:8",
@@ -752,7 +744,7 @@ func TestConnection_GetIndex(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "alma:8",
@@ -767,7 +759,6 @@ func TestConnection_GetIndex(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -814,7 +805,7 @@ func TestConnection_GetDetection(t *testing.T) {
 			name:    "ecosystem not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "ECOSYSTEM-NOT-EXISTS",
@@ -826,7 +817,7 @@ func TestConnection_GetDetection(t *testing.T) {
 			name:    "rootID not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "alma:8",
@@ -838,7 +829,7 @@ func TestConnection_GetDetection(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				ecosystem: "alma:8",
@@ -876,7 +867,6 @@ func TestConnection_GetDetection(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -918,7 +908,7 @@ func TestConnection_GetDataSources(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			want: []datasourceTypes.DataSource{
 				{
@@ -944,7 +934,6 @@ func TestConnection_GetDataSources(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -990,7 +979,7 @@ func TestConnection_GetDataSource(t *testing.T) {
 			name:    "not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				id: "SOURCE-NOT-EXISTS",
@@ -1001,7 +990,7 @@ func TestConnection_GetDataSource(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
 				id: "alma-errata",
@@ -1028,7 +1017,6 @@ func TestConnection_GetDataSource(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -1069,7 +1057,7 @@ func TestConnection_DeleteAll(t *testing.T) {
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 		},
 	}
@@ -1079,7 +1067,6 @@ func TestConnection_DeleteAll(t *testing.T) {
 				Type: "boltdb",
 				Path: tt.fields.Config.Path,
 				Options: session.StorageOptions{
-					NoProgress: true,
 					BoltDB:     tt.fields.Config.Options,
 				},
 			}, tt.fixture); err != nil {
@@ -1130,7 +1117,7 @@ func TestConnection_Initialize(t *testing.T) {
 		{
 			name: "happy",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), NoProgress: true},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			want: map[string][]byte{
 				"metadata":                       nil,

@@ -56,10 +56,9 @@ type Config struct {
 }
 
 type StorageOptions struct {
-	NoProgress bool
-	BoltDB     *bolt.Options
-	Redis      *rueidis.ClientOption
-	RDB        []gorm.Option
+	BoltDB *bolt.Options
+	Redis  *rueidis.ClientOption
+	RDB    []gorm.Option
 }
 
 type Session struct {
@@ -71,7 +70,7 @@ func (c Config) New() (*Session, error) {
 	s, err := func() (Storage, error) {
 		switch c.Type {
 		case "boltdb":
-			return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path, NoProgress: c.Options.NoProgress, Options: c.Options.BoltDB}}, nil
+			return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path, Options: c.Options.BoltDB}}, nil
 		case "redis":
 			conf := c.Options.Redis
 			if conf == nil {
