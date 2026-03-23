@@ -175,14 +175,16 @@ func (c *Connection) Put(root string) error {
 		}
 		batch = append(batch, path)
 		if len(batch) >= putBatchSize {
-			return flush()
+			if err := flush(); err != nil {
+				return errors.Wrap(err, "flush batch")
+			}
 		}
 		return nil
 	}); err != nil {
 		return errors.Wrapf(err, "walk %s", root)
 	}
 	if err := flush(); err != nil {
-		return err
+		return errors.Wrap(err, "flush remaining batch")
 	}
 
 	// Write datasource and metadata in a final transaction.

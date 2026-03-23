@@ -86,12 +86,12 @@ func Add(root string, opts ...Option) error {
 		o.apply(options)
 	}
 
+	options.storageopts.NoProgress = options.noProgress
 	s, err := (&session.Config{
-		Type:       options.dbtype,
-		Path:       options.dbpath,
-		Debug:      options.debug,
-		NoProgress: options.noProgress,
-		Options:    options.storageopts,
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
