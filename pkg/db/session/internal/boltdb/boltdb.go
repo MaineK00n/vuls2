@@ -45,7 +45,8 @@ const (
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
 type Config struct {
-	Path string
+	Path         string
+	PutBatchSize int
 
 	Options *bolt.Options
 }
@@ -128,14 +129,20 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 	return nil
 }
 
-var putBatchSize = 1000
+const defaultPutBatchSize = 1000
 
 // Put walks the extracted data directory under root and stores all files into the database.
-// Writes are batched into transactions of up to putBatchSize data files for memory efficiency.
+// Writes are batched into transactions of up to Config.PutBatchSize data files for memory efficiency.
+// If PutBatchSize is 0, the default (1000) is used.
 // Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
 // contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
-	// Walk data files and flush a batch transaction every putBatchSize files.
+	batchSize := c.Config.PutBatchSize
+	if batchSize <= 0 {
+		batchSize = defaultPutBatchSize
+	}
+
+	// Walk data files and flush a batch transaction every batchSize files.
 	var batch []string
 	flush := func() error {
 		if len(batch) == 0 {
@@ -163,7 +170,7 @@ func (c *Connection) Put(root string) error {
 			return nil
 		}
 		batch = append(batch, path)
-		if len(batch) >= putBatchSize {
+		if len(batch) >= batchSize {
 			if err := flush(); err != nil {
 				return errors.Wrap(err, "flush batch")
 			}

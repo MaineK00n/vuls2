@@ -261,12 +261,11 @@ func TestConnection_Put(t *testing.T) {
 		root string
 	}
 	tests := []struct {
-		name         string
-		putBatchSize int
-		fields       fields
-		args         args
-		want         map[string][]byte
-		wantErr      bool
+		name    string
+		fields  fields
+		args    args
+		want    map[string][]byte
+		wantErr bool
 	}{
 		{
 			name: "happy",
@@ -297,10 +296,9 @@ func TestConnection_Put(t *testing.T) {
 			},
 		},
 		{
-			name:         "batch commit",
-			putBatchSize: 2,
+			name: "batch commit",
 			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), PutBatchSize: 2},
 			},
 			args: args{
 				root: "testdata/fixtures/alma-batch/alma-errata",
@@ -339,14 +337,6 @@ func TestConnection_Put(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.putBatchSize > 0 {
-				restore, err := boltdb.SetPutBatchSize(tt.putBatchSize)
-				if err != nil {
-					t.Fatalf("set put batch size. error = %v", err)
-				}
-				defer restore()
-			}
-
 			c := &boltdb.Connection{
 				Config: tt.fields.Config,
 			}
