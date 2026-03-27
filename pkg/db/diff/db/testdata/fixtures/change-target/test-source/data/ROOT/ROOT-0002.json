@@ -1,0 +1,48 @@
+{
+	"id": "ROOT-0002",
+	"advisories": [],
+	"vulnerabilities": [],
+	"detections": [
+		{
+			"ecosystem": "test:change",
+			"conditions": [
+				{
+					"criteria": {
+						"criterions": [
+							{
+								"type": "version",
+								"version": {
+									"vulnerable": true,
+									"fix_status": {
+										"class": "fixed"
+									},
+									"package": {
+										"type": "binary",
+										"binary": {
+											"name": "pkg-a"
+										}
+									},
+									"affected": {
+										"type": "rpm",
+										"range": [
+											{
+												"lt": "1.0.0"
+											}
+										],
+										"fixed": [
+											"1.0.0"
+										]
+									}
+								}
+							}
+						]
+					}
+				}
+			]
+		}
+	],
+	"data_source": {
+		"id": "test-source",
+		"raws": []
+	}
+}

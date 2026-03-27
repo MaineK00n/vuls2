@@ -1,0 +1,10 @@
+{
+    "kb_id": "KB5001000",
+    "url": "https://support.microsoft.com/kb/5001000",
+    "products": [
+        "Windows 11"
+    ],
+    "data_source": {
+        "id": "microsoft-cvrf"
+    }
+}
