@@ -9,7 +9,8 @@ on:
     tags:
       - "v*"
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   binary:

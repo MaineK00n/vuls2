@@ -5,7 +5,9 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   build:
