@@ -16,6 +16,7 @@ jobs:
     name: build vuls.db
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     env:
       GOEXPERIMENT: jsonv2
