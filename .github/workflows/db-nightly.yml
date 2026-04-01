@@ -7,10 +7,17 @@ on:
       - completed
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build:
     name: build vuls.db
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     env:
       GOEXPERIMENT: jsonv2
     steps:
