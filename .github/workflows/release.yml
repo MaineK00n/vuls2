@@ -9,6 +9,8 @@ on:
     tags:
       - "v*"
 
+permissions: read-all
+
 jobs:
   binary:
     name: Release Binary

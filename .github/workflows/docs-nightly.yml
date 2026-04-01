@@ -6,6 +6,9 @@ on:
       - mkdocs.yml
     branches:
       - nightly
+
+permissions: read-all
+
 jobs:
   deploy:
     name: Deploy the nightly documentation

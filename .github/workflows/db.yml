@@ -5,10 +5,14 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
   build:
     name: build vuls.db
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     env:
       GOEXPERIMENT: jsonv2
     steps:
