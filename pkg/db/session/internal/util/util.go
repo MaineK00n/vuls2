@@ -59,8 +59,12 @@ func WalkCriteria(ca criteriaTypes.Criteria) ([]string, error) {
 				return nil, errors.Errorf("unexpected version criterion package type. expected: %q, actual: %q", []vcPackageType.PackageType{vcPackageType.PackageTypeBinary, vcPackageType.PackageTypeSource, vcPackageType.PackageTypeCPE, vcPackageType.PackageTypeLanguage}, cn.Version.Package.Type)
 			}
 		case criterionTypes.CriterionTypeNoneExist:
+		case criterionTypes.CriterionTypeKB:
+			if cn.KB != nil {
+				pkgs = append(pkgs, cn.KB.Product)
+			}
 		default:
-			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist}, cn.Type)
+			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB}, cn.Type)
 		}
 	}
 

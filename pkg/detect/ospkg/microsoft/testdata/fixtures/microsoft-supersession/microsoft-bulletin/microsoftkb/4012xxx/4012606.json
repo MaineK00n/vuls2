@@ -1,0 +1,21 @@
+{
+	"kb_id": "4012606",
+	"url": "https://support.microsoft.com/help/4012606",
+	"products": [
+		"Internet Explorer 11 on Windows 10 for x64-based Systems",
+		"Microsoft Edge on Windows 10 for x64-based Systems",
+		"Microsoft XML Core Services 3.0 on Windows 10 for x64-based Systems",
+		"Windows 10 for x64-based Systems"
+	],
+	"data_source": {
+		"id": "microsoft-bulletin",
+		"raws": [
+			"vuls-data-raw-microsoft-bulletin/17/MS17-010.json"
+		]
+	},
+	"superseded_by": [
+		{
+			"kb_id": "4013429"
+		}
+	]
+}

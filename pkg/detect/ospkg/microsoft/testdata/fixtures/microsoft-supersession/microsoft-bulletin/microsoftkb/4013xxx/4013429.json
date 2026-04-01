@@ -1,0 +1,13 @@
+{
+	"kb_id": "4013429",
+	"url": "https://support.microsoft.com/help/4013429",
+	"products": [
+		"Windows 10 for x64-based Systems"
+	],
+	"data_source": {
+		"id": "microsoft-bulletin",
+		"raws": [
+			"vuls-data-raw-microsoft-bulletin/17/MS17-010.json"
+		]
+	}
+}

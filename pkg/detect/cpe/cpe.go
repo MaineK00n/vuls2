@@ -20,6 +20,10 @@ import (
 )
 
 func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
+	if len(sr.CPE) == 0 {
+		return nil, nil
+	}
+
 	qm := make(map[string][]int)
 	for i, cpe := range sr.CPE {
 		wfn, err := naming.UnbindFS(cpe)

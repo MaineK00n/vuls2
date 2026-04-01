@@ -1,4 +1,4 @@
-package ospkg
+package base
 
 var (
 	ConvertVCQueryPackage = convertVCQueryPackage

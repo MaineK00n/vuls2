@@ -13,6 +13,7 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
 	necriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
 	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
@@ -736,6 +737,42 @@ func Test_replaceIndexes(t *testing.T) {
 							},
 						},
 						Accepts: criterionTypes.AcceptQueries{Version: []int{42}},
+					},
+				},
+			},
+		},
+		{
+			name: "kb criterions preserved",
+			args: args{
+				fca: criteriaTypes.FilteredCriteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.FilteredCriterion{
+						{
+							Criterion: criterionTypes.Criterion{
+								Type: criterionTypes.CriterionTypeKB,
+								KB: &kbcTypes.Criterion{
+									Product: "Windows 10 Version 1607 for x64-based Systems",
+									KBID:    "5001234",
+								},
+							},
+							Accepts: criterionTypes.AcceptQueries{KB: true},
+						},
+					},
+				},
+				indexes: []int{10},
+			},
+			want: criteriaTypes.FilteredCriteria{
+				Operator: criteriaTypes.CriteriaOperatorTypeOR,
+				Criterions: []criterionTypes.FilteredCriterion{
+					{
+						Criterion: criterionTypes.Criterion{
+							Type: criterionTypes.CriterionTypeKB,
+							KB: &kbcTypes.Criterion{
+								Product: "Windows 10 Version 1607 for x64-based Systems",
+								KBID:    "5001234",
+							},
+						},
+						Accepts: criterionTypes.AcceptQueries{KB: true},
 					},
 				},
 			},

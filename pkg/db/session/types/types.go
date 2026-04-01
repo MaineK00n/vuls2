@@ -26,6 +26,7 @@ var (
 	ErrNotFoundEcosystem     = errors.New("ecosystem not found")
 	ErrNotFoundIndex         = errors.New("index not found")
 	ErrNotFoundDetection     = errors.New("detection not found")
+	ErrNotFoundMicrosoftKB   = errors.New("microsoft kb not found")
 	ErrNotFoundDataSource    = errors.New("datasource not found")
 )
 

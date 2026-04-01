@@ -138,8 +138,10 @@ func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteria
 			replaced.Criterions = append(replaced.Criterions, cn)
 		case criterionTypes.CriterionTypeNoneExist:
 			replaced.Criterions = append(replaced.Criterions, cn)
+		case criterionTypes.CriterionTypeKB:
+			replaced.Criterions = append(replaced.Criterions, cn)
 		default:
-			return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist}, cn.Criterion.Type)
+			return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB}, cn.Criterion.Type)
 		}
 	}
 

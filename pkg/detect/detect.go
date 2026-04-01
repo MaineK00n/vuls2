@@ -216,34 +216,30 @@ func Detect(targets []string, opts ...Option) error {
 func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
 	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
-	if len(sr.OSPackages) > 0 {
-		m, err := ospkg.Detect(s.Storage(), sr, concurrency)
-		if err != nil {
-			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
+	m, err := ospkg.Detect(s.Storage(), sr, concurrency)
+	if err != nil {
+		return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
+	}
+	for rootID, d := range m {
+		base, ok := detected[rootID]
+		if !ok {
+			base = detectTypes.VulnerabilityData{ID: rootID}
 		}
-		for rootID, d := range m {
-			base, ok := detected[rootID]
-			if !ok {
-				base = detectTypes.VulnerabilityData{ID: rootID}
-			}
-			base.Detections = append(base.Detections, d)
-			detected[rootID] = base
-		}
+		base.Detections = append(base.Detections, d)
+		detected[rootID] = base
 	}
 
-	if len(sr.CPE) > 0 {
-		m, err := cpe.Detect(s.Storage(), sr, concurrency)
-		if err != nil {
-			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
+	m, err = cpe.Detect(s.Storage(), sr, concurrency)
+	if err != nil {
+		return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
+	}
+	for rootID, d := range m {
+		base, ok := detected[rootID]
+		if !ok {
+			base = detectTypes.VulnerabilityData{ID: rootID}
 		}
-		for rootID, d := range m {
-			base, ok := detected[rootID]
-			if !ok {
-				base = detectTypes.VulnerabilityData{ID: rootID}
-			}
-			base.Detections = append(base.Detections, d)
-			detected[rootID] = base
-		}
+		base.Detections = append(base.Detections, d)
+		detected[rootID] = base
 	}
 
 	for rootID, base := range detected {

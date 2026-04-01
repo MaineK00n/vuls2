@@ -132,9 +132,17 @@ func Scan(root string, opts ...Option) error {
 						RebootRequired: old.RunningKernel.RebootRequired,
 					},
 					OSPackages: func() []scanTypes.OSPackage {
-						ps := make([]scanTypes.OSPackage, 0, len(pkgs))
+						ps := make([]scanTypes.OSPackage, 0, len(pkgs)+1)
 						for _, p := range pkgs {
 							ps = append(ps, p)
+						}
+						// For Windows, include the OS release as a synthetic package so that
+						// kernel-version-based detection can report the correct release name.
+						if old.Family == "windows" && old.RunningKernel.Version != "" && old.Release != "" {
+							ps = append(ps, scanTypes.OSPackage{
+								Name:    old.Release,
+								Version: old.RunningKernel.Version,
+							})
 						}
 						return ps
 					}(),

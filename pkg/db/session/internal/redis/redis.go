@@ -12,6 +12,7 @@ import (
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
@@ -80,6 +81,10 @@ func (c *Connection) GetIndex(ecosystem ecosystemTypes.Ecosystem, query string) 
 }
 
 func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error) {
 	return nil, errors.New("not implemented yet")
 }
 

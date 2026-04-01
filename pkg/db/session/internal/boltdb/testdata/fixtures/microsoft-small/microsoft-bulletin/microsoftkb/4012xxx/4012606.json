@@ -1,0 +1,28 @@
+{
+  "kb_id": "4012606",
+  "url": "https://support.microsoft.com/help/4012606",
+  "products": [
+    "Internet Explorer 11 on Windows 10 for x64-based Systems",
+    "Microsoft Edge on Windows 10 for x64-based Systems",
+    "Microsoft XML Core Services 3.0 on Windows 10 for x64-based Systems",
+    "Windows 10 for x64-based Systems"
+  ],
+  "data_source": {
+    "id": "microsoft-bulletin",
+    "raws": [
+      "vuls-data-raw-microsoft-bulletin/17/MS17-006.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-007.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-008.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-009.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-010.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-011.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-012.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-013.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-016.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-017.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-018.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-021.json",
+      "vuls-data-raw-microsoft-bulletin/17/MS17-022.json"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "microsoft-cvrf",
+  "name": "Microsoft CVRF",
+  "raw": [
+    {
+      "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-cvrf",
+      "commit": "398798f3310f7beb113300ea3bf57a206feeb683",
+      "date": "2026-03-31T13:51:15Z"
+    }
+  ]
+}

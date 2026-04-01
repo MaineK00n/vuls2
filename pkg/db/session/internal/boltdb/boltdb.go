@@ -20,6 +20,7 @@ import (
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/util"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
@@ -41,6 +42,8 @@ const (
 // boltdb: <ecosystem>:index:<package> -> [<Root ID>]
 
 // boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
+
+// boltdb: microsoft:kb:<KB ID> -> microsoftkbTypes.KB
 
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
@@ -175,6 +178,49 @@ func (c *Connection) Put(root string) error {
 			return nil
 		}(); err != nil {
 			return errors.Wrap(err, "put vulnerability data")
+		}
+
+		if err := func() error {
+			microsoftkbDir := filepath.Join(root, "microsoftkb")
+			if _, err := os.Stat(microsoftkbDir); err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return errors.Wrapf(err, "stat %s", microsoftkbDir)
+			}
+
+			if err := filepath.WalkDir(microsoftkbDir, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+
+				if d.IsDir() || filepath.Ext(path) != ".json" {
+					return nil
+				}
+
+				f, err := os.Open(path)
+				if err != nil {
+					return errors.Wrapf(err, "open %s", path)
+				}
+				defer f.Close()
+
+				var kb microsoftkbTypes.KB
+				if err := json.UnmarshalRead(f, &kb); err != nil {
+					return errors.Wrapf(err, "unmarshal %s", path)
+				}
+
+				if err := putMicrosoftKB(tx, kb); err != nil {
+					return errors.Wrap(err, "put microsoft kb")
+				}
+
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "walk %s", microsoftkbDir)
+			}
+
+			return nil
+		}(); err != nil {
+			return errors.Wrap(err, "put microsoft kb data")
 		}
 
 		if err := func() error {
@@ -453,6 +499,37 @@ func putDataSource(tx *bolt.Tx, datasource datasourceTypes.DataSource) error {
 	return nil
 }
 
+func putMicrosoftKB(tx *bolt.Tx, kb microsoftkbTypes.KB) error {
+	eb, err := tx.CreateBucketIfNotExists([]byte(ecosystemTypes.EcosystemTypeMicrosoft))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", ecosystemTypes.EcosystemTypeMicrosoft)
+	}
+
+	ekb, err := eb.CreateBucketIfNotExists([]byte("kb"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
+	}
+
+	m := make(map[sourceTypes.SourceID]microsoftkbTypes.KB)
+	if bs := ekb.Get([]byte(kb.KBID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
+		}
+	}
+	m[kb.DataSource.ID] = kb
+
+	bs, err := util.Marshal(m)
+	if err != nil {
+		return errors.Wrap(err, "marshal microsoft kb")
+	}
+
+	if err := ekb.Put([]byte(kb.KBID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
+	}
+
+	return nil
+}
+
 func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, error) {
 	var d dbTypes.VulnerabilityData
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -639,6 +716,35 @@ func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dat
 
 		if err := util.Unmarshal(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> detection -> %s", ecosystem, rootID))
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
+func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error) {
+	var m map[sourceTypes.SourceID]microsoftkbTypes.KB
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		eb := tx.Bucket([]byte(ecosystemTypes.EcosystemTypeMicrosoft))
+		if eb == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundEcosystem, "%q not found", ecosystemTypes.EcosystemTypeMicrosoft)
+		}
+
+		ekb := eb.Bucket([]byte("kb"))
+		if ekb == nil {
+			return errors.Errorf("%q not found", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
+		}
+
+		bs := ekb.Get([]byte(kbid))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundMicrosoftKB, "%q not found", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kbid))
+		}
+
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kbid))
 		}
 
 		return nil
