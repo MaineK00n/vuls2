@@ -6,6 +6,7 @@ import (
 
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
 	necriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
 	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
@@ -208,6 +209,31 @@ func TestWalkCriteria(t *testing.T) {
 				},
 			},
 			want: []string{"kpatch-patch-3_10_0-1062_1_1", "kernel"},
+		},
+		{
+			name: "kb",
+			args: args{
+				ca: criteriaTypes.Criteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.Criterion{
+						{
+							Type: criterionTypes.CriterionTypeKB,
+							KB: &kbcTypes.Criterion{
+								Product: "Windows 10 Version 1607 for x64-based Systems",
+								KBID:    "5001234",
+							},
+						},
+						{
+							Type: criterionTypes.CriterionTypeKB,
+							KB: &kbcTypes.Criterion{
+								Product: "Windows Server 2019",
+								KBID:    "5001234",
+							},
+						},
+					},
+				},
+			},
+			want: []string{"Windows 10 Version 1607 for x64-based Systems", "Windows Server 2019"},
 		},
 	}
 	for _, tt := range tests {

@@ -29,6 +29,7 @@ func NewCmd() *cobra.Command {
 		newAdvisoryCmd(),
 		newVulnerabilityCmd(),
 		newPackageCmd(),
+		newKBCmd(),
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
@@ -232,6 +233,48 @@ func newPackageCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.ecosystems, "ecosystem", "", options.filterOpts.ecosystems, "filter by ecosystem (e.g., redhat:9, ubuntu:24.04)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., ELSA-2024-2881, CVE-2024-4367)")
 
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newKBCmd() *cobra.Command {
+	options := struct {
+		dbtype      utilflag.DBType
+		dbpath      string
+		datasources []string
+		debug       bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "kb <KB ID>...",
+		Short: "search Microsoft KB data in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search kb 5001234
+		$ vuls db search kb 5001234 5005678
+		$ vuls db search kb --datasource microsoft-msuc 5001234
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			ds := make([]sourceTypes.SourceID, 0, len(options.datasources))
+			for _, d := range options.datasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			if err := db.SearchKB(args, ds, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().StringSliceVarP(&options.datasources, "datasource", "", options.datasources, "filter by datasource (e.g., microsoft-msuc, microsoft-bulletin)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

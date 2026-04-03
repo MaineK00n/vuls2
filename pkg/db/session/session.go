@@ -18,6 +18,7 @@ import (
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
+	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/cache"
@@ -40,6 +41,7 @@ type Storage interface {
 	GetEcosystems() ([]ecosystemTypes.Ecosystem, error)
 	GetIndex(ecosystemTypes.Ecosystem, string) ([]dataTypes.RootID, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
+	GetMicrosoftKB(string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error)
 	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (datasourceTypes.DataSource, error)
 

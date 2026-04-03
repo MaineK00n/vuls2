@@ -13,9 +13,10 @@ type ScanResult struct {
 	Family      ecosystemTypes.Ecosystem `json:"family,omitempty"`
 	Release     string                   `json:"release,omitempty"`
 
-	Kernel     Kernel      `json:"kernel,omitzero"`
-	OSPackages []OSPackage `json:"os_packages,omitempty"`
-	CPE        []string    `json:"cpe,omitempty"`
+	Kernel      Kernel      `json:"kernel,omitzero"`
+	OSPackages  []OSPackage `json:"os_packages,omitempty"`
+	CPE         []string    `json:"cpe,omitempty"`
+	MicrosoftKB MicrosoftKB `json:"microsoft_kb,omitzero"`
 
 	Optional  map[string]any `json:"optional,omitempty"`
 	Config    any            `json:"config,omitempty"`
@@ -43,4 +44,9 @@ type OSPackage struct {
 	SrcEpoch        *int   `json:"src_epoch,omitempty"`
 	SrcVersion      string `json:"src_version,omitempty"`
 	SrcRelease      string `json:"src_release,omitempty"`
+}
+
+type MicrosoftKB struct {
+	Applied   []string `json:"applied,omitempty"`
+	Unapplied []string `json:"unapplied,omitempty"`
 }

@@ -1,0 +1,23 @@
+{
+  "kb_id": "5000802",
+  "url": "https://support.microsoft.com/help/5000802",
+  "products": [
+    "Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+    "Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+    "Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+    "Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+    "Windows 10 Version 2004 for x64-based Systems",
+    "Windows 10 Version 20H2 for x64-based Systems"
+  ],
+  "superseded_by": [
+    {
+      "kb_id": "5001330"
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/2021-Mar/2021/CVE-2021-1640.json"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "kb_id": "5001330",
+  "url": "https://support.microsoft.com/help/5001330",
+  "products": [
+    "Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+    "Windows 10 Version 2004 for x64-based Systems",
+    "Windows 10 Version 20H2 for x64-based Systems"
+  ],
+  "superseded_by": [
+    {
+      "kb_id": "5003173"
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/2021-Apr/2021/CVE-2021-26413.json"
+    ]
+  }
+}

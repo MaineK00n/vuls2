@@ -1,0 +1,98 @@
+{
+	"id": "MS17-010",
+	"advisories": [
+		{
+			"content": {
+				"id": "MS17-010",
+				"title": "Security Update for Microsoft Windows SMB Server",
+				"severity": [
+					{
+						"type": "vendor",
+						"source": "security@microsoft.com",
+						"vendor": "Critical"
+					}
+				],
+				"references": [
+					{
+						"source": "security@microsoft.com",
+						"url": "https://learn.microsoft.com/en-us/security-updates/securitybulletins/2017/ms17-010"
+					}
+				],
+				"published": "2017-03-14T00:00:00Z",
+				"optional": {
+					"impact": "Remote Code Execution"
+				}
+			},
+			"segments": [
+				{
+					"ecosystem": "microsoft",
+					"tag": "Windows 10 for x64-based Systems"
+				}
+			]
+		}
+	],
+	"vulnerabilities": [
+		{
+			"content": {
+				"id": "CVE-2017-0143",
+				"references": [
+					{
+						"source": "security@microsoft.com",
+						"url": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0143"
+					}
+				]
+			},
+			"segments": [
+				{
+					"ecosystem": "microsoft",
+					"tag": "Windows 10 for x64-based Systems"
+				}
+			]
+		},
+		{
+			"content": {
+				"id": "CVE-2017-0144",
+				"references": [
+					{
+						"source": "security@microsoft.com",
+						"url": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0144"
+					}
+				]
+			},
+			"segments": [
+				{
+					"ecosystem": "microsoft",
+					"tag": "Windows 10 for x64-based Systems"
+				}
+			]
+		}
+	],
+	"detections": [
+		{
+			"ecosystem": "microsoft",
+			"conditions": [
+				{
+					"criteria": {
+						"operator": "OR",
+						"criterions": [
+							{
+								"type": "kb",
+								"kb": {
+									"product": "Windows 10 for x64-based Systems",
+									"kb_id": "4012606"
+								}
+							}
+						]
+					},
+					"tag": "Windows 10 for x64-based Systems"
+				}
+			]
+		}
+	],
+	"data_source": {
+		"id": "microsoft-bulletin",
+		"raws": [
+			"vuls-data-raw-microsoft-bulletin/17/MS17-010.json"
+		]
+	}
+}

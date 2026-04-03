@@ -31,6 +31,7 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	repositoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource/repository"
+	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
@@ -293,6 +294,40 @@ func TestConnection_Put(t *testing.T) {
 				"alma:8 -> index -> mariadb-devel:10.3::Judy": []byte(`["ALSA-2019:3708"]`),
 				"datasource":                                  nil,
 				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+		},
+		{
+			name: "microsoft",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				root: "testdata/fixtures/microsoft-small/microsoft-bulletin",
+			},
+			want: map[string][]byte{
+				"metadata":                                        nil,
+				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":                                   nil,
+				"vulnerability -> root":                           nil,
+				"vulnerability -> root -> MS17-010":               []byte(`{"id":"MS17-010","advisories":["MS17-010"],"vulnerabilities":["CVE-2017-0143","CVE-2017-0144","CVE-2017-0145","CVE-2017-0146","CVE-2017-0147","CVE-2017-0148"],"ecosystems":["microsoft"],"data_sources":["microsoft-bulletin"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> MS17-010":           []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"MS17-010","title":"Security Update for Microsoft Windows SMB Server","severity":[{"type":"vendor","source":"security@microsoft.com","vendor":"Critical"}],"references":[{"source":"security@microsoft.com","url":"https://learn.microsoft.com/en-us/security-updates/securitybulletins/2017/ms17-010"}],"published":"2017-03-14T00:00:00Z","optional":{"impact":"Remote Code Execution"}},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2017-0143": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0143","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0143"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2017-0144": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0144","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0144"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2017-0145": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0145","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0145"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2017-0146": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0146","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0146"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2017-0147": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0147","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0147"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2017-0148": []byte(`{"microsoft-bulletin":{"MS17-010":[{"content":{"id":"CVE-2017-0148","references":[{"source":"security@microsoft.com","url":"https://msrc.microsoft.com/update-guide/vulnerability/CVE-2017-0148"}]},"segments":[{"ecosystem":"microsoft","tag":"Windows 10 for x64-based Systems"}]}]}}`),
+				"microsoft":                          nil,
+				"microsoft -> detection":             nil,
+				"microsoft -> detection -> MS17-010": []byte(`{"microsoft-bulletin":[{"criteria":{"operator":"OR","criterions":[{"type":"kb","kb":{"product":"Windows 10 for x64-based Systems","kb_id":"4012606"}}]},"tag":"Windows 10 for x64-based Systems"}]}`),
+				"microsoft -> index":                 nil,
+				"microsoft -> index -> Windows 10 for x64-based Systems": []byte(`["MS17-010"]`),
+				"microsoft -> kb":                  nil,
+				"microsoft -> kb -> 4012606":       []byte(`{"microsoft-bulletin":{"kb_id":"4012606","url":"https://support.microsoft.com/help/4012606","products":["Internet Explorer 11 on Windows 10 for x64-based Systems","Microsoft Edge on Windows 10 for x64-based Systems","Microsoft XML Core Services 3.0 on Windows 10 for x64-based Systems","Windows 10 for x64-based Systems"],"data_source":{"id":"microsoft-bulletin","raws":["vuls-data-raw-microsoft-bulletin/17/MS17-006.json","vuls-data-raw-microsoft-bulletin/17/MS17-007.json","vuls-data-raw-microsoft-bulletin/17/MS17-008.json","vuls-data-raw-microsoft-bulletin/17/MS17-009.json","vuls-data-raw-microsoft-bulletin/17/MS17-010.json","vuls-data-raw-microsoft-bulletin/17/MS17-011.json","vuls-data-raw-microsoft-bulletin/17/MS17-012.json","vuls-data-raw-microsoft-bulletin/17/MS17-013.json","vuls-data-raw-microsoft-bulletin/17/MS17-016.json","vuls-data-raw-microsoft-bulletin/17/MS17-017.json","vuls-data-raw-microsoft-bulletin/17/MS17-018.json","vuls-data-raw-microsoft-bulletin/17/MS17-021.json","vuls-data-raw-microsoft-bulletin/17/MS17-022.json"]}}}`),
+				"datasource":                       nil,
+				"datasource -> microsoft-bulletin": []byte(`{"id":"microsoft-bulletin","name":"Microsoft Security Bulletin","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-bulletin","commit":"3dd51f6ac89db13efedf13fadd1b7f99b174bc5d","date":"2026-04-01T04:02:55Z"}]}`),
 			},
 		},
 	}
@@ -990,6 +1025,91 @@ func TestConnection_GetDataSource(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Connection.GetDataSource(). (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestConnection_GetMicrosoftKB(t *testing.T) {
+	type fields struct {
+		Config *boltdb.Config
+	}
+	type args struct {
+		kbid string
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID]microsoftkbTypes.KB
+		wantErr bool
+	}{
+		{
+			name:    "not found",
+			fixture: "testdata/fixtures/microsoft-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				kbid: "KBID-NOT-EXISTS",
+			},
+			wantErr: true,
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/microsoft-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				kbid: "4012606",
+			},
+			want: map[sourceTypes.SourceID]microsoftkbTypes.KB{
+				sourceTypes.SourceID("microsoft-bulletin"): {
+					KBID: "4012606",
+					URL:  "https://support.microsoft.com/help/4012606",
+					Products: []string{
+						"Internet Explorer 11 on Windows 10 for x64-based Systems",
+						"Microsoft Edge on Windows 10 for x64-based Systems",
+						"Microsoft XML Core Services 3.0 on Windows 10 for x64-based Systems",
+						"Windows 10 for x64-based Systems",
+					},
+					DataSource: sourceTypes.Source{
+						ID:   sourceTypes.SourceID("microsoft-bulletin"),
+						Raws: []string{"vuls-data-raw-microsoft-bulletin/17/MS17-006.json", "vuls-data-raw-microsoft-bulletin/17/MS17-007.json", "vuls-data-raw-microsoft-bulletin/17/MS17-008.json", "vuls-data-raw-microsoft-bulletin/17/MS17-009.json", "vuls-data-raw-microsoft-bulletin/17/MS17-010.json", "vuls-data-raw-microsoft-bulletin/17/MS17-011.json", "vuls-data-raw-microsoft-bulletin/17/MS17-012.json", "vuls-data-raw-microsoft-bulletin/17/MS17-013.json", "vuls-data-raw-microsoft-bulletin/17/MS17-016.json", "vuls-data-raw-microsoft-bulletin/17/MS17-017.json", "vuls-data-raw-microsoft-bulletin/17/MS17-018.json", "vuls-data-raw-microsoft-bulletin/17/MS17-021.json", "vuls-data-raw-microsoft-bulletin/17/MS17-022.json"},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(session.Config{
+				Type: "boltdb",
+				Path: tt.fields.Config.Path,
+				Options: session.StorageOptions{
+					BoltDB: tt.fields.Config.Options,
+				},
+			}, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			c := &boltdb.Connection{
+				Config: tt.fields.Config,
+			}
+			if err := c.Open(); err != nil {
+				t.Fatalf("open db. error = %v", err)
+			}
+			defer c.Close()
+
+			got, err := c.GetMicrosoftKB(tt.args.kbid)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Connection.GetMicrosoftKB() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Connection.GetMicrosoftKB(). (-expected +got):\n%s", diff)
 			}
 		})
 	}

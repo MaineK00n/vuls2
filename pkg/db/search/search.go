@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -13,6 +14,8 @@ import (
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
@@ -498,6 +501,73 @@ func SearchPackage(ecosytem ecosystemTypes.Ecosystem, queries []string, opts ...
 		}
 		if err := json.MarshalWrite(os.Stdout, d); err != nil {
 			return errors.Wrapf(err, "encode %s", d.ID)
+		}
+	}
+
+	return nil
+}
+
+func SearchKB(queries []string, datasources []sourceTypes.SourceID, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get Microsoft KB", "kb", queries)
+	for _, query := range queries {
+		kb, err := s.Storage().GetMicrosoftKB(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrap(err, "get microsoft kb")
+		}
+
+		if len(datasources) > 0 {
+			filtered := make(map[sourceTypes.SourceID]microsoftkbTypes.KB, len(kb))
+			for id, v := range kb {
+				if slices.Contains(datasources, id) {
+					filtered[id] = v
+				}
+			}
+			kb = filtered
+		}
+		if err := json.MarshalWrite(os.Stdout, kb); err != nil {
+			return errors.Wrapf(err, "encode kb %s", query)
 		}
 	}
 

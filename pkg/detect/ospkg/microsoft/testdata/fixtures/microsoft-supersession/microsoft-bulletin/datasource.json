@@ -1,0 +1,14 @@
+{
+	"id": "microsoft-bulletin",
+	"name": "Microsoft Security Bulletin",
+	"raw": [
+		{
+			"url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-bulletin",
+			"commit": "0000000000000000000000000000000000000000",
+			"date": "2025-01-01T00:00:00Z"
+		}
+	],
+	"extracted": {
+		"url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-microsoft-bulletin"
+	}
+}
