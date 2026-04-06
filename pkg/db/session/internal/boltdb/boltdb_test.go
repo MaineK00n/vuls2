@@ -330,6 +330,28 @@ func TestConnection_Put(t *testing.T) {
 				"datasource -> microsoft-bulletin": []byte(`{"id":"microsoft-bulletin","name":"Microsoft Security Bulletin","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-bulletin","commit":"3dd51f6ac89db13efedf13fadd1b7f99b174bc5d","date":"2026-04-01T04:02:55Z"}]}`),
 			},
 		},
+		{
+			name: "microsoft-kb-only",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				root: "testdata/fixtures/microsoft-small/microsoft-msuc",
+			},
+			want: map[string][]byte{
+				"metadata":                       nil,
+				"metadata -> db":                 fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":                  nil,
+				"vulnerability -> root":          nil,
+				"vulnerability -> advisory":      nil,
+				"vulnerability -> vulnerability": nil,
+				"microsoft":                      nil,
+				"microsoft -> kb":                nil,
+				"microsoft -> kb -> 5000854":     []byte(`{"microsoft-msuc":{"kb_id":"5000854","url":"https://support.microsoft.com/help/5000854","updates":[{"update_id":"a328f9a9-f5c2-4734-a4ae-d01785fb4711","title":"2021-03 Cumulative Update Preview for Windows Server 2019 for x64-based Systems (KB5000854)","architecture":"AMD64","classification":"Updates","products":["WindowsServer2019"],"superseded_by":[{"kb_id":"5001384","update_id":"41498488-597f-44ea-9c26-dbb65bec2ffa"}],"catalog_url":""}],"data_source":{"id":"microsoft-msuc","raws":["vuls-data-raw-microsoft-msuc/a328f9a9-f5c2-4734-a4ae-d01785fb4711.json"]}}}`),
+				"datasource":                     nil,
+				"datasource -> microsoft-msuc":   []byte(`{"id":"microsoft-msuc","name":"Microsoft Update Catalog","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-msuc","commit":"0000000000000000000000000000000000000000","date":"2026-04-01T00:00:00Z"}]}`),
+			},
+		},
 	}
 
 	for _, tt := range tests {

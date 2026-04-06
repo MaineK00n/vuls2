@@ -134,7 +134,15 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 func (c *Connection) Put(root string) error {
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
 		if err := func() error {
-			if err := filepath.WalkDir(filepath.Join(root, "data"), func(path string, d fs.DirEntry, err error) error {
+			dataDir := filepath.Join(root, "data")
+			if _, err := os.Stat(dataDir); err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return errors.Wrapf(err, "stat %s", dataDir)
+			}
+
+			if err := filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}
@@ -172,7 +180,7 @@ func (c *Connection) Put(root string) error {
 
 				return nil
 			}); err != nil {
-				return errors.Wrapf(err, "walk %s", root)
+				return errors.Wrapf(err, "walk %s", dataDir)
 			}
 
 			return nil
