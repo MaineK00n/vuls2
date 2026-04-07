@@ -568,12 +568,28 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "no suffix passes",
+			name: "no suffix, non-matching product filtered",
 			args: args{
 				product: "Microsoft Edge (Chromium-based)",
 				release: "Windows 10 Version 1607 for x64-based Systems",
 			},
+			want: false,
+		},
+		{
+			name: "bare OS name matching release passes",
+			args: args{
+				product: "Windows 10 Version 21H2 for x64-based Systems",
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
 			want: true,
+		},
+		{
+			name: "bare OS name cross-product filtered",
+			args: args{
+				product: "Windows Server 2012 R2",
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: false,
 		},
 		{
 			name: "matching release passes",
@@ -611,6 +627,14 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 			name: "empty release passes any suffix",
 			args: args{
 				product: "Microsoft Edge (EdgeHTML-based) on Windows 10 Version 1511 for x64-based Systems",
+				release: "",
+			},
+			want: true,
+		},
+		{
+			name: "empty release passes bare product",
+			args: args{
+				product: "Windows Server 2012 R2",
 				release: "",
 			},
 			want: true,

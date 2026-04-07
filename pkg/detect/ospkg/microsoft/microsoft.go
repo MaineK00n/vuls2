@@ -68,7 +68,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 				if !filterMicrosoftKBProduct(p, sr.Release) {
 					continue
 				}
-				if vcm[p] == nil {
+				if _, ok := vcm[p]; !ok {
 					vcm[p] = nil
 				}
 			}
@@ -224,11 +224,17 @@ var microsoftPackageNameRules = []normalizeRule{
 }
 
 func filterMicrosoftKBProduct(product, release string) bool {
-	suffix := extractOSSuffix(product)
-	if suffix == "" {
+	if release == "" {
 		return true
 	}
-	return release == "" || suffix == release
+	suffix := extractOSSuffix(product)
+	if suffix == "" {
+		// Bare OS name (e.g. "Windows 10 Version 21H2 for x64-based Systems",
+		// "Windows Server 2012 R2"). Must match release exactly to avoid
+		// cross-product contamination from multi-product KBs.
+		return product == release
+	}
+	return suffix == release
 }
 
 func extractOSSuffix(product string) string {
