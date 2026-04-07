@@ -1,0 +1,27 @@
+{
+    "kb_id": "5000854",
+    "url": "https://support.microsoft.com/help/5000854",
+    "updates": [
+        {
+            "update_id": "a328f9a9-f5c2-4734-a4ae-d01785fb4711",
+            "title": "2021-03 Cumulative Update Preview for Windows Server 2019 for x64-based Systems (KB5000854)",
+            "architecture": "AMD64",
+            "classification": "Updates",
+            "products": [
+                "WindowsServer2019"
+            ],
+            "superseded_by": [
+                {
+                    "kb_id": "5001384",
+                    "update_id": "41498488-597f-44ea-9c26-dbb65bec2ffa"
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "microsoft-msuc",
+        "raws": [
+            "vuls-data-raw-microsoft-msuc/a328f9a9-f5c2-4734-a4ae-d01785fb4711.json"
+        ]
+    }
+}
