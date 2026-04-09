@@ -451,6 +451,20 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name:    "KB in both applied and unapplied prefers unapplied",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:   []string{"5000802", "5001330"},
+				unapplied: []string{"5000802"},
+			},
+			want: []string{"5000802", "5003173"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -112,9 +112,17 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 }
 
 func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string) ([]string, error) {
+	// Prefer unapplied when a KB appears in both lists because:
+	// 1. QueryHistory may record a past successful install (Operation=1, ResultCode=2) even after
+	//    the update was rolled back or never fully applied, causing a false "applied" entry.
+	// 2. RebootRequired=1 KBs are intentionally placed in unapplied by the scanner, but other
+	//    sources (e.g. Get-HotFix) may also add them to applied, masking the pending reboot state.
 	appliedSet := make(map[string]struct{}, len(applied))
 	for _, kb := range applied {
 		appliedSet[kb] = struct{}{}
+	}
+	for _, kb := range unapplied {
+		delete(appliedSet, kb)
 	}
 
 	// Collect all reachable KBs by traversing SupersededBy chains forward
