@@ -59,7 +59,7 @@ func TestDetect(t *testing.T) {
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
 		{
-			name:    "detect CVE-2021-1640 by unapplied KB",
+			name:    "detect CVE-2021-1640 and CVE-2021-26413 by unapplied KB with supersession",
 			fixture: "testdata/fixtures/microsoft-supersession",
 			config: session.Config{
 				Type:    "boltdb",
@@ -72,7 +72,6 @@ func TestDetect(t *testing.T) {
 					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
 					Release: "Windows 10 Version 2004 for x64-based Systems",
 					MicrosoftKB: scanTypes.MicrosoftKB{
-						Applied:   []string{"5001330"},
 						Unapplied: []string{"5000802"},
 					},
 				},
@@ -104,6 +103,31 @@ func TestDetect(t *testing.T) {
 						},
 					},
 				},
+				"CVE-2021-26413": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeKB,
+												KB: &kbcTypes.Criterion{
+													Product: "Windows 10 Version 2004 for x64-based Systems",
+													KBID:    "5001330",
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{KB: true},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -121,6 +145,28 @@ func TestDetect(t *testing.T) {
 					Release: "Windows 10 Version 2004 for x64-based Systems",
 					MicrosoftKB: scanTypes.MicrosoftKB{
 						Applied: []string{"5000802", "5001330"},
+					},
+				},
+				concurrency: 1,
+			},
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+		},
+		{
+			name:    "fix KB covered by applied superseding KB, no detection",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
+					Release: "Windows 10 Version 2004 for x64-based Systems",
+					MicrosoftKB: scanTypes.MicrosoftKB{
+						Applied:   []string{"5001330"},
+						Unapplied: []string{"5000802"},
 					},
 				},
 				concurrency: 1,
@@ -422,7 +468,7 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802"},
 			},
-			want: []string{"5001330", "5003173"},
+			want: []string{"5001330", "5003173", "5003637"},
 		},
 		{
 			name:    "unapplied with chain",
@@ -436,10 +482,10 @@ func Test_computeUnappliedKBs(t *testing.T) {
 				applied:   []string{},
 				unapplied: []string{"5000802"},
 			},
-			want: []string{"5000802", "5001330", "5003173"},
+			want: []string{"5000802", "5001330", "5003173", "5003637"},
 		},
 		{
-			name:    "all applied returns empty",
+			name:    "latest superseding KB not applied remains unapplied",
 			fixture: "testdata/fixtures/microsoft-supersession",
 			config: session.Config{
 				Type:    "boltdb",
@@ -449,7 +495,20 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802", "5001330", "5003173"},
 			},
-			want: nil,
+			want: []string{"5003637"},
+		},
+		{
+			name:    "intermediate KB covered by applied superseding KB",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied: []string{"5000802", "5003173"},
+			},
+			want: []string{"5003637"},
 		},
 		{
 			name:    "KB in both applied and unapplied prefers unapplied",
@@ -463,7 +522,7 @@ func Test_computeUnappliedKBs(t *testing.T) {
 				applied:   []string{"5000802", "5001330"},
 				unapplied: []string{"5000802"},
 			},
-			want: []string{"5000802", "5003173"},
+			want: []string{"5000802", "5003173", "5003637"},
 		},
 	}
 	for _, tt := range tests {

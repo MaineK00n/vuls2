@@ -1,0 +1,19 @@
+{
+  "kb_id": "5003173",
+  "url": "https://support.microsoft.com/help/5003173",
+  "products": [
+    "Windows 10 Version 2004 for x64-based Systems",
+    "Windows 10 Version 20H2 for x64-based Systems"
+  ],
+  "superseded_by": [
+    {
+      "kb_id": "5003637"
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/2021-May/2021/CVE-2021-31184.json"
+    ]
+  }
+}

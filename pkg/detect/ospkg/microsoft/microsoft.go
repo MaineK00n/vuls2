@@ -121,14 +121,19 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 	for _, kb := range applied {
 		appliedSet[kb] = struct{}{}
 	}
+	removedFromApplied := make(map[string]struct{})
 	for _, kb := range unapplied {
+		if _, ok := appliedSet[kb]; ok {
+			removedFromApplied[kb] = struct{}{}
+		}
 		delete(appliedSet, kb)
 	}
 
 	// Collect all reachable KBs by traversing SupersededBy chains forward
-	// from both Applied and Unapplied. Any discovered KB not in Applied is unapplied.
+	// from both Applied and Unapplied, and build a reverse edge map
+	// (superseding KB → list of superseded KBs) for the coverage BFS.
 	visited := make(map[string]struct{})
-	unappliedSet := make(map[string]struct{})
+	revEdges := make(map[string][]string)
 
 	var walk func(kbid string) error
 	walk = func(kbid string) error {
@@ -136,10 +141,6 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 			return nil
 		}
 		visited[kbid] = struct{}{}
-
-		if _, ok := appliedSet[kbid]; !ok {
-			unappliedSet[kbid] = struct{}{}
-		}
 
 		m, err := s.GetMicrosoftKB(kbid)
 		if err != nil {
@@ -154,8 +155,9 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 				if sup.KBID == "" {
 					continue
 				}
+				revEdges[sup.KBID] = append(revEdges[sup.KBID], kbid)
 				if err := walk(sup.KBID); err != nil {
-					return err
+					return errors.Wrapf(err, "walk supersession from KB %s to %s", kbid, sup.KBID)
 				}
 			}
 			for _, u := range kb.Updates {
@@ -163,8 +165,9 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 					if sup.KBID == "" {
 						continue
 					}
+					revEdges[sup.KBID] = append(revEdges[sup.KBID], kbid)
 					if err := walk(sup.KBID); err != nil {
-						return err
+						return errors.Wrapf(err, "walk supersession from KB %s to %s (via update)", kbid, sup.KBID)
 					}
 				}
 			}
@@ -184,7 +187,41 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 		}
 	}
 
-	return slices.Collect(maps.Keys(unappliedSet)), nil
+	// Find all KBs covered by an applied superseding KB. BFS backwards from
+	// appliedSet through reverse edges. Handles cycles via the covered set.
+	covered := make(map[string]struct{}, len(appliedSet))
+	queue := make([]string, 0, len(appliedSet))
+	for kbid := range appliedSet {
+		if _, ok := visited[kbid]; ok {
+			covered[kbid] = struct{}{}
+			queue = append(queue, kbid)
+		}
+	}
+	for head := 0; head < len(queue); head++ {
+		cur := queue[head]
+		for _, pred := range revEdges[cur] {
+			if _, ok := covered[pred]; !ok {
+				covered[pred] = struct{}{}
+				queue = append(queue, pred)
+			}
+		}
+	}
+
+	// A KB is unapplied if it was discovered (in visited) and either:
+	//   - not covered by any applied superseding KB, or
+	//   - removed from appliedSet by unapplied-preference (always treated as
+	//     unapplied regardless of coverage, to honour the scanner's signal).
+	var unappliedKBs []string
+	for kbid := range visited {
+		if _, ok := covered[kbid]; ok {
+			if _, ok := removedFromApplied[kbid]; !ok {
+				continue
+			}
+		}
+		unappliedKBs = append(unappliedKBs, kbid)
+	}
+
+	return unappliedKBs, nil
 }
 
 func normalizeMicrosoftPackageName(name, release string) []string {
