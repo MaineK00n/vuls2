@@ -64,7 +64,12 @@ func (c *Connection) Open() error {
 		return errors.New("connection config is not set")
 	}
 
-	db, err := bolt.Open(c.Config.Path, 0600, c.Config.Options)
+	db, err := bolt.Open(c.Config.Path, func() os.FileMode {
+		if c.Config.Options != nil && c.Config.Options.ReadOnly {
+			return 0400
+		}
+		return 0600
+	}(), c.Config.Options)
 	if err != nil {
 		return errors.WithStack(err)
 	}
