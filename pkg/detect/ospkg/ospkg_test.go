@@ -78,16 +78,21 @@ func TestDetect(t *testing.T) {
 							{
 								Criteria: criteriaTypes.FilteredCriteria{
 									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.FilteredCriterion{
+									Criterias: []criteriaTypes.FilteredCriteria{
 										{
-											Criterion: criterionTypes.Criterion{
-												Type: criterionTypes.CriterionTypeKB,
-												KB: &kbcTypes.Criterion{
-													Product: "Windows 10 Version 2004 for x64-based Systems",
-													KBID:    "5000802",
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5000802",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
 												},
 											},
-											Accepts: criterionTypes.AcceptQueries{KB: true},
 										},
 									},
 								},
@@ -103,16 +108,21 @@ func TestDetect(t *testing.T) {
 							{
 								Criteria: criteriaTypes.FilteredCriteria{
 									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.FilteredCriterion{
+									Criterias: []criteriaTypes.FilteredCriteria{
 										{
-											Criterion: criterionTypes.Criterion{
-												Type: criterionTypes.CriterionTypeKB,
-												KB: &kbcTypes.Criterion{
-													Product: "Windows 10 Version 2004 for x64-based Systems",
-													KBID:    "5001330",
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5001330",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
 												},
 											},
-											Accepts: criterionTypes.AcceptQueries{KB: true},
 										},
 									},
 								},

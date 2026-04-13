@@ -75,12 +75,27 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 		}
 	}
 
-	unappliedKBs, err := computeUnappliedKBs(s, sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied)
+	coveredKBs, unappliedKBs, err := classifyKBs(s, sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied)
 	if err != nil {
-		return nil, errors.Wrap(err, "compute unapplied KBs")
+		return nil, errors.Wrap(err, "classify KBs")
 	}
 
-	dm, err := util.Detect(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+	// Filter unapplied/covered KBs to only those whose products are relevant
+	// to this host. Without this filter, supersession chain walking can discover
+	// KBs for unrelated products (e.g., a Server 2012 KB reachable from a Win11
+	// chain), causing the KB criterion to match cross-product conditions.
+	coveredKBs, err = filterKBIDsByRelease(s, coveredKBs, sr.Release)
+	if err != nil {
+		return nil, errors.Wrap(err, "filter covered KBs by release")
+	}
+	unappliedKBs, err = filterKBIDsByRelease(s, unappliedKBs, sr.Release)
+	if err != nil {
+		return nil, errors.Wrap(err, "filter unapplied KBs by release")
+	}
+
+	vcmProducts := slices.Collect(maps.Keys(vcm))
+
+	dm, err := util.Detect(s, ecosystem, vcmProducts, func(rootID dataTypes.RootID, queries []string) util.Request {
 		var (
 			qs    []vcTypes.Query
 			idxes []int
@@ -95,8 +110,12 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 		query := criterionTypes.Query{
 			Version: qs,
 		}
-		if len(unappliedKBs) > 0 {
-			query.KB = &kbcTypes.Query{UnappliedKBs: unappliedKBs}
+		if len(coveredKBs) > 0 || len(unappliedKBs) > 0 {
+			query.KB = &kbcTypes.Query{
+				AcceptProducts: vcmProducts,
+				CoveredKBs:     coveredKBs,
+				UnappliedKBs:   unappliedKBs,
+			}
 		}
 
 		return util.Request{
@@ -111,7 +130,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	return dm, nil
 }
 
-func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string) ([]string, error) {
+func classifyKBs(s session.Storage, applied []string, unapplied []string) (coveredKBs, unappliedKBs []string, _ error) {
 	// Prefer unapplied when a KB appears in both lists because:
 	// 1. QueryHistory may record a past successful install (Operation=1, ResultCode=2) even after
 	//    the update was rolled back or never fully applied, causing a false "applied" entry.
@@ -178,12 +197,12 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 
 	for _, kbid := range applied {
 		if err := walk(kbid); err != nil {
-			return nil, errors.Wrapf(err, "walk supersession chain from applied KB: %s", kbid)
+			return nil, nil, errors.Wrapf(err, "walk supersession chain from applied KB: %s", kbid)
 		}
 	}
 	for _, kbid := range unapplied {
 		if err := walk(kbid); err != nil {
-			return nil, errors.Wrapf(err, "walk supersession chain from unapplied KB: %s", kbid)
+			return nil, nil, errors.Wrapf(err, "walk supersession chain from unapplied KB: %s", kbid)
 		}
 	}
 
@@ -211,7 +230,6 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 	//   - not covered by any applied superseding KB, or
 	//   - removed from appliedSet by unapplied-preference (always treated as
 	//     unapplied regardless of coverage, to honour the scanner's signal).
-	var unappliedKBs []string
 	for kbid := range visited {
 		if _, ok := covered[kbid]; ok {
 			if _, ok := removedFromApplied[kbid]; !ok {
@@ -221,7 +239,45 @@ func computeUnappliedKBs(s session.Storage, applied []string, unapplied []string
 		unappliedKBs = append(unappliedKBs, kbid)
 	}
 
-	return unappliedKBs, nil
+	for kbid := range covered {
+		coveredKBs = append(coveredKBs, kbid)
+	}
+
+	return coveredKBs, unappliedKBs, nil
+}
+
+// filterKBIDsByRelease removes KBs whose products are all irrelevant to
+// the given release. When release is empty, all KBs pass through unchanged.
+// KBs not found in the DB are kept to avoid false negatives.
+func filterKBIDsByRelease(s session.Storage, kbs []string, release string) ([]string, error) {
+	if release == "" {
+		return kbs, nil
+	}
+
+	filtered := make([]string, 0, len(kbs))
+	for _, kbid := range kbs {
+		m, err := s.GetMicrosoftKB(kbid)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
+				filtered = append(filtered, kbid)
+				continue
+			}
+			return nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
+		}
+		if func() bool {
+			for _, kb := range m {
+				if slices.ContainsFunc(kb.Products, func(p string) bool {
+					return filterMicrosoftKBProduct(p, release)
+				}) {
+					return true
+				}
+			}
+			return false
+		}() {
+			filtered = append(filtered, kbid)
+		}
+	}
+	return filtered, nil
 }
 
 func normalizeMicrosoftPackageName(name, release string) []string {
