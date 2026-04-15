@@ -151,7 +151,7 @@ func (f Filter) ApplyToAdvisories(asmm map[sourceTypes.SourceID]map[dataTypes.Ro
 
 			for _, a := range as {
 				a.Segments = f.applyToSegments(a.Segments)
-				if len(a.Segments) == 0 {
+				if len(f.Ecosystems) > 0 && len(a.Segments) == 0 {
 					continue
 				}
 
@@ -184,7 +184,7 @@ func (f Filter) ApplyToVulnerabilities(vsmm map[sourceTypes.SourceID]map[dataTyp
 
 			for _, v := range vs {
 				v.Segments = f.applyToSegments(v.Segments)
-				if len(v.Segments) == 0 {
+				if len(f.Ecosystems) > 0 && len(v.Segments) == 0 {
 					continue
 				}
 
