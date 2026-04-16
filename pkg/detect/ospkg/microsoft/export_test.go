@@ -1,7 +1,8 @@
 package microsoft
 
 var (
-	ComputeUnappliedKBs           = computeUnappliedKBs
+	ClassifyKBs                   = classifyKBs
+	FilterKBIDsByRelease          = filterKBIDsByRelease
 	NormalizeMicrosoftPackageName = normalizeMicrosoftPackageName
 	FilterMicrosoftKBProduct      = filterMicrosoftKBProduct
 )

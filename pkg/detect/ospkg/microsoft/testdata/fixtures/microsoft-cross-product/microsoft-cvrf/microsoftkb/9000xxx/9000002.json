@@ -1,0 +1,14 @@
+{
+  "kb_id": "9000002",
+  "url": "https://support.microsoft.com/help/9000002",
+  "products": [
+    "Windows 10 Version 21H2 for x64-based Systems",
+    "Windows 10 Version 21H2 for ARM64-based Systems"
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/test/CVE-2024-90002.json"
+    ]
+  }
+}

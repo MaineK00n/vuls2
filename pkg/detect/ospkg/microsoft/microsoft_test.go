@@ -85,16 +85,21 @@ func TestDetect(t *testing.T) {
 							{
 								Criteria: criteriaTypes.FilteredCriteria{
 									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.FilteredCriterion{
+									Criterias: []criteriaTypes.FilteredCriteria{
 										{
-											Criterion: criterionTypes.Criterion{
-												Type: criterionTypes.CriterionTypeKB,
-												KB: &kbcTypes.Criterion{
-													Product: "Windows 10 Version 2004 for x64-based Systems",
-													KBID:    "5000802",
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5000802",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
 												},
 											},
-											Accepts: criterionTypes.AcceptQueries{KB: true},
 										},
 									},
 								},
@@ -110,16 +115,21 @@ func TestDetect(t *testing.T) {
 							{
 								Criteria: criteriaTypes.FilteredCriteria{
 									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.FilteredCriterion{
+									Criterias: []criteriaTypes.FilteredCriteria{
 										{
-											Criterion: criterionTypes.Criterion{
-												Type: criterionTypes.CriterionTypeKB,
-												KB: &kbcTypes.Criterion{
-													Product: "Windows 10 Version 2004 for x64-based Systems",
-													KBID:    "5001330",
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5001330",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
 												},
 											},
-											Accepts: criterionTypes.AcceptQueries{KB: true},
 										},
 									},
 								},
@@ -200,16 +210,21 @@ func TestDetect(t *testing.T) {
 							{
 								Criteria: criteriaTypes.FilteredCriteria{
 									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.FilteredCriterion{
+									Criterias: []criteriaTypes.FilteredCriteria{
 										{
-											Criterion: criterionTypes.Criterion{
-												Type: criterionTypes.CriterionTypeKB,
-												KB: &kbcTypes.Criterion{
-													Product: "Windows 10 Version 2004 for x64-based Systems",
-													KBID:    "5001330",
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5001330",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Covered: true}},
 												},
 											},
-											Accepts: criterionTypes.AcceptQueries{KB: true},
 										},
 									},
 								},
@@ -393,6 +408,88 @@ func TestDetect(t *testing.T) {
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
+		{
+			name:    "cross-product KB filtered: Win10 host does not detect Server 2012 condition",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
+					Release: "Windows 10 Version 21H2 for x64-based Systems",
+					MicrosoftKB: scanTypes.MicrosoftKB{
+						Unapplied: []string{"9000001", "9000002"},
+					},
+				},
+				concurrency: 1,
+			},
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2024-90001": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 21H2 for x64-based Systems",
+															KBID:    "9000001",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for x64-based Systems"),
+							},
+						},
+					},
+				},
+				"CVE-2024-90002": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 21H2 for x64-based Systems",
+															KBID:    "9000002",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for x64-based Systems"),
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -429,19 +526,20 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func Test_computeUnappliedKBs(t *testing.T) {
+func Test_classifyKBs(t *testing.T) {
 	type args struct {
 		_         session.Storage
 		applied   []string
 		unapplied []string
 	}
 	tests := []struct {
-		name    string
-		fixture string
-		config  session.Config
-		args    args
-		want    []string
-		wantErr error
+		name        string
+		fixture     string
+		config      session.Config
+		args        args
+		wantCovered   []string
+		wantUnapplied []string
+		wantErr       error
 	}{
 		{
 			name:    "no input",
@@ -455,7 +553,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 				applied:   nil,
 				unapplied: nil,
 			},
-			want: nil,
+			wantCovered:   nil,
+			wantUnapplied: nil,
 		},
 		{
 			name:    "applied only, discover unapplied via supersession",
@@ -468,7 +567,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802"},
 			},
-			want: []string{"5001330", "5003173", "5003637"},
+			wantCovered:   []string{"5000802"},
+			wantUnapplied: []string{"5001330", "5003173", "5003637"},
 		},
 		{
 			name:    "unapplied with chain",
@@ -482,7 +582,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 				applied:   []string{},
 				unapplied: []string{"5000802"},
 			},
-			want: []string{"5000802", "5001330", "5003173", "5003637"},
+			wantCovered:   nil,
+			wantUnapplied: []string{"5000802", "5001330", "5003173", "5003637"},
 		},
 		{
 			name:    "latest superseding KB not applied remains unapplied",
@@ -495,7 +596,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802", "5001330", "5003173"},
 			},
-			want: []string{"5003637"},
+			wantCovered:   []string{"5000802", "5001330", "5003173"},
+			wantUnapplied: []string{"5003637"},
 		},
 		{
 			name:    "intermediate KB covered by applied superseding KB",
@@ -508,7 +610,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802", "5003173"},
 			},
-			want: []string{"5003637"},
+			wantCovered:   []string{"5000802", "5001330", "5003173"},
+			wantUnapplied: []string{"5003637"},
 		},
 		{
 			name:    "KB in both applied and unapplied prefers unapplied",
@@ -522,7 +625,8 @@ func Test_computeUnappliedKBs(t *testing.T) {
 				applied:   []string{"5000802", "5001330"},
 				unapplied: []string{"5000802"},
 			},
-			want: []string{"5000802", "5003173", "5003637"},
+			wantCovered:   []string{"5000802", "5001330"},
+			wantUnapplied: []string{"5000802", "5003173", "5003637"},
 		},
 	}
 	for _, tt := range tests {
@@ -541,19 +645,155 @@ func Test_computeUnappliedKBs(t *testing.T) {
 			}
 			defer s.Storage().Close()
 
-			got, err := microsoft.ComputeUnappliedKBs(s.Storage(), tt.args.applied, tt.args.unapplied)
+			gotCovered, gotUnapplied, err := microsoft.ClassifyKBs(s.Storage(), tt.args.applied, tt.args.unapplied)
 			switch {
 			case tt.wantErr == nil && err != nil:
-				t.Errorf("computeUnappliedKBs() unexpected error: %v", err)
+				t.Errorf("classifyKBs() unexpected error: %v", err)
 			case tt.wantErr != nil && err == nil:
-				t.Errorf("computeUnappliedKBs() expected error has not occurred")
+				t.Errorf("classifyKBs() expected error has not occurred")
 			case tt.wantErr != nil && err != nil:
 				if tt.wantErr.Error() != err.Error() {
-					t.Errorf("computeUnappliedKBs() error mismatch: want %v, got %v", tt.wantErr, err)
+					t.Errorf("classifyKBs() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-					t.Errorf("computeUnappliedKBs() (-expected +got):\n%s", diff)
+				if diff := cmp.Diff(tt.wantCovered, gotCovered, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+					t.Errorf("classifyKBs() covered (-expected +got):\n%s", diff)
+				}
+				if diff := cmp.Diff(tt.wantUnapplied, gotUnapplied, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+					t.Errorf("classifyKBs() unapplied (-expected +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func Test_filterKBIDsByRelease(t *testing.T) {
+	type args struct {
+		kbs     []string
+		release string
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    []string
+		wantErr error
+	}{
+		{
+			name:    "no input",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     nil,
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: []string{},
+		},
+		{
+			name:    "filters out cross-product KB for different release",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9000001", "9000002"},
+				release: "Windows Server 2012 R2",
+			},
+			want: []string{"9000001"},
+		},
+		{
+			name:    "keeps KB matching host release",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9000001", "9000002"},
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: []string{"9000001", "9000002"},
+		},
+		{
+			name:    "KB not found in DB is kept",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9999999", "9000001"},
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: []string{"9999999", "9000001"},
+		},
+		{
+			name:    "empty release keeps all KBs",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9000001", "9000002"},
+				release: "",
+			},
+			want: []string{"9000001", "9000002"},
+		},
+		{
+			name:    "ARM64 release filters out x64-only KB",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9000001", "9000002"},
+				release: "Windows 10 Version 21H2 for ARM64-based Systems",
+			},
+			want: []string{"9000002"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			got, err := microsoft.FilterKBIDsByRelease(s.Storage(), tt.args.kbs, tt.args.release)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("filterKBIDsByRelease() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("filterKBIDsByRelease() expected error has not occurred")
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("filterKBIDsByRelease() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("filterKBIDsByRelease() (-expected +got):\n%s", diff)
 				}
 			}
 		})

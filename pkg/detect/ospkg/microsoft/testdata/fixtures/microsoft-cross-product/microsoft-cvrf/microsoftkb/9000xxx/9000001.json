@@ -1,0 +1,14 @@
+{
+  "kb_id": "9000001",
+  "url": "https://support.microsoft.com/help/9000001",
+  "products": [
+    "Windows 10 Version 21H2 for x64-based Systems",
+    "Windows Server 2012 R2"
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/test/CVE-2024-90001.json"
+    ]
+  }
+}
