@@ -628,6 +628,36 @@ func Test_classifyKBs(t *testing.T) {
 			wantCovered:   []string{"5000802", "5001330"},
 			wantUnapplied: []string{"5000802", "5003173", "5003637"},
 		},
+		{
+			name:    "supersedes bridges gap in superseded_by chain",
+			fixture: "testdata/fixtures/microsoft-supersedes",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:   []string{"7000004"},
+				unapplied: []string{"7000001"},
+			},
+			wantCovered:   []string{"7000001", "7000002", "7000003", "7000004"},
+			wantUnapplied: nil,
+		},
+		{
+			name:    "superseded_by chain to applied KB covers all without supersedes field",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:   []string{"5003637"},
+				unapplied: []string{"5000802"},
+			},
+			wantCovered:   []string{"5000802", "5001330", "5003173", "5003637"},
+			wantUnapplied: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
