@@ -1371,6 +1371,112 @@ func TestFilter_ApplyToAdvisories(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "filter by datasource only with empty segments",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-2": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-2",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource and ecosystem with empty segments",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+				Ecosystems:  []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+			},
+			args: args{
+				asmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+					"source-1": {
+						"root-1": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: advisoryContentTypes.Content{
+									ID: "adv-2",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory{
+				"source-1": {
+					"root-1": {
+						{
+							Content: advisoryContentTypes.Content{
+								ID: "adv-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2298,6 +2404,112 @@ func TestFilter_ApplyToVulnerabilities(t *testing.T) {
 							},
 							Segments: []segmentTypes.Segment{
 								{Ecosystem: "oracle:9"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource only with empty segments",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+							},
+						},
+					},
+					"source-2": {
+						"root-3": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-3",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "oracle:9"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
+							},
+						},
+					},
+					"root-2": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-2",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "filter by datasource and ecosystem with empty segments",
+			fields: fields{
+				DataSources: []sourceTypes.SourceID{"source-1"},
+				Ecosystems:  []ecosystemTypes.Ecosystem{"ubuntu:24.04"},
+			},
+			args: args{
+				vsmm: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+					"source-1": {
+						"root-1": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-1",
+								},
+								Segments: []segmentTypes.Segment{
+									{Ecosystem: "ubuntu:24.04"},
+								},
+							},
+						},
+						"root-2": {
+							{
+								Content: vulnerabilityContentTypes.Content{
+									ID: "vuln-2",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[sourceTypes.SourceID]map[dataTypes.RootID][]vulnerabilityTypes.Vulnerability{
+				"source-1": {
+					"root-1": {
+						{
+							Content: vulnerabilityContentTypes.Content{
+								ID: "vuln-1",
+							},
+							Segments: []segmentTypes.Segment{
+								{Ecosystem: "ubuntu:24.04"},
 							},
 						},
 					},
