@@ -29,7 +29,8 @@ func NewCmd() *cobra.Command {
 		newAdvisoryCmd(),
 		newVulnerabilityCmd(),
 		newPackageCmd(),
-		newKBCmd(),
+		newKBInfoCmd(),
+		newKBVulnCmd(),
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
@@ -238,7 +239,7 @@ func newPackageCmd() *cobra.Command {
 	return cmd
 }
 
-func newKBCmd() *cobra.Command {
+func newKBInfoCmd() *cobra.Command {
 	options := struct {
 		dbtype      utilflag.DBType
 		dbpath      string
@@ -251,12 +252,12 @@ func newKBCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "kb <KB ID>...",
-		Short: "search Microsoft KB data in vuls db",
+		Use:   "kb-info <KB ID>...",
+		Short: "search Microsoft KB info (products, supersession) in vuls db",
 		Example: heredoc.Doc(`
-		$ vuls db search kb 5001234
-		$ vuls db search kb 5001234 5005678
-		$ vuls db search kb --datasource microsoft-msuc 5001234
+		$ vuls db search kb-info 5001234
+		$ vuls db search kb-info 5001234 5005678
+		$ vuls db search kb-info --datasource microsoft-msuc 5001234
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -264,7 +265,7 @@ func newKBCmd() *cobra.Command {
 			for _, d := range options.datasources {
 				ds = append(ds, sourceTypes.SourceID(d))
 			}
-			if err := db.SearchKB(args, ds, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.SearchKBInfo(args, ds, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
@@ -275,6 +276,58 @@ func newKBCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().StringSliceVarP(&options.datasources, "datasource", "", options.datasources, "filter by datasource (e.g., microsoft-msuc, microsoft-bulletin)")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newKBVulnCmd() *cobra.Command {
+	options := struct {
+		dbtype        utilflag.DBType
+		dbpath        string
+		kbDatasources []string
+		filterOpts    filterOptions
+		debug         bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		filterOpts: filterOptions{
+			contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "kb-vuln <KB ID>...",
+		Short: "search vulnerability data in vuls db by Microsoft KB ID",
+		Example: heredoc.Doc(`
+		$ vuls db search kb-vuln 5001234
+		$ vuls db search kb-vuln 5001234 5005678
+		$ vuls db search kb-vuln --kb-datasource microsoft-msuc 5001234
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			ds := make([]sourceTypes.SourceID, 0, len(options.kbDatasources))
+			for _, d := range options.kbDatasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			if err := db.SearchKBVuln(args, ds, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithFilter(options.filterOpts.buildFilter()), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().StringSliceVarP(&options.kbDatasources, "kb-datasource", "", options.kbDatasources, "filter KB lookup by datasource (e.g., microsoft-msuc, microsoft-bulletin)")
+
+	cmd.Flags().VarP(newContentSliceValue(options.filterOpts.contents, &options.filterOpts.contents), "content", "", "types of content to include")
+	_ = cmd.RegisterFlagCompletionFunc("content", cobra.FixedCompletions(allFilterContentCandidates(), cobra.ShellCompDirectiveNoFileComp))
+	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
+	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., CVE-2024-4367)")
+
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

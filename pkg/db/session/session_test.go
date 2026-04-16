@@ -1,17 +1,17 @@
 package session_test
 
 import (
+	"cmp"
 	"encoding/json/v2"
 	"iter"
-	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	gocmp "github.com/google/go-cmp/cmp"
+	gocmpopts "github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
@@ -469,12 +469,12 @@ func TestSession_GetVulnerabilityDataByRootID(t *testing.T) {
 					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
 				}
 
-				if diff := cmp.Diff(want, got,
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
-					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
 				); diff != "" {
 					t.Errorf("Session.GetVulnerabilityDataByRootID() data mismatch (-want +got):\n%s", diff)
 				}
@@ -730,12 +730,12 @@ func TestSession_GetVulnerabilityDataByAdvisoryID(t *testing.T) {
 					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
 				}
 
-				if diff := cmp.Diff(want, got,
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
-					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
 				); diff != "" {
 					t.Errorf("Session.GetVulnerabilityDataByAdvisoryID() data mismatch (-want +got):\n%s", diff)
 				}
@@ -991,12 +991,12 @@ func TestSession_GetVulnerabilityDataByVulnerabilityID(t *testing.T) {
 					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
 				}
 
-				if diff := cmp.Diff(want, got,
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
-					cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
-					cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+					gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
 				); diff != "" {
 					t.Errorf("Session.GetVulnerabilityDataByVulnerabilityID() data mismatch (-want +got):\n%s", diff)
 				}
@@ -1363,12 +1363,12 @@ func TestSession_GetVulnerabilityDataByPackage(t *testing.T) {
 						t.Fatalf("unmarshal %s. err: %v", wantpath, err)
 					}
 
-					if diff := cmp.Diff(want, got,
-						cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
-						cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
-						cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
-						cmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
-						cmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+					if diff := gocmp.Diff(want, got,
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+						gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
 					); diff != "" {
 						t.Errorf("Session.GetVulnerabilityDataByPackage() data mismatch (-want +got):\n%s", diff)
 					}
@@ -1383,17 +1383,286 @@ func sorted(i iter.Seq2[dbTypes.VulnerabilityData, error]) iter.Seq2[dbTypes.Vul
 		v1 dbTypes.VulnerabilityData
 		v2 error
 	}
-	m := make(map[string]v)
+	var items []v
 	for v1, v2 := range i {
-		m[v1.ID] = v{v1, v2}
+		items = append(items, v{v1, v2})
 	}
+	slices.SortStableFunc(items, func(a, b v) int {
+		return cmp.Compare(a.v1.ID, b.v1.ID)
+	})
 
 	return func(yield func(dbTypes.VulnerabilityData, error) bool) {
-		for _, id := range slices.Sorted(maps.Keys(m)) {
-			if !yield(m[id].v1, m[id].v2) {
+		for _, item := range items {
+			if !yield(item.v1, item.v2) {
 				return
 			}
 		}
+	}
+}
+
+func TestSession_GetVulnerabilityDataByKBID(t *testing.T) {
+	type args struct {
+		kbIDs       []string
+		datasources []sourceTypes.SourceID
+		filter      dbTypes.Filter
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    iter.Seq2[string, error]
+	}{
+		{
+			name:    "non-existent KB",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"KB-NOT-EXISTS"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("", errors.Wrap(errors.Wrapf(dbTypes.ErrNotFoundMicrosoftKB, "%q not found", "microsoft -> kb -> KB-NOT-EXISTS"), "get microsoft kb KB-NOT-EXISTS")) {
+					return
+				}
+			},
+		},
+		{
+			name:    "KB with no matching index",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"5009999"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("", errors.Wrap(errors.Wrapf(dbTypes.ErrNotFoundIndex, "%q not found", "microsoft -> index -> Windows Server 2019"), "get index for product Windows Server 2019")) {
+					return
+				}
+			},
+		},
+		{
+			name:    "happy",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"5001234"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10001/happy.json", nil) {
+					return
+				}
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10002/happy.json", nil) {
+					return
+				}
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-20001/happy.json", nil) {
+					return
+				}
+			},
+		},
+		{
+			name:    "datasource filter excludes all KB sources",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs:       []string{"5001234"},
+				datasources: []sourceTypes.SourceID{"non-existent-source"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {},
+		},
+		{
+			name:    "kb datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs:       []string{"5001234"},
+				datasources: []sourceTypes.SourceID{"microsoft-cvrf"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10001/kb-datasource-filter.json", nil) {
+					return
+				}
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10002/kb-datasource-filter.json", nil) {
+					return
+				}
+			},
+		},
+		{
+			name:    "ecosystem filter excludes microsoft",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"5001234"},
+				filter: dbTypes.Filter{
+					Contents:   dbTypes.AllFilterContentTypes(),
+					Ecosystems: []ecosystemTypes.Ecosystem{"redhat:8"},
+				},
+			},
+			want: func(yield func(string, error) bool) {},
+		},
+		{
+			name:    "datasource filter",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"5001234"},
+				filter: dbTypes.Filter{
+					Contents:    dbTypes.AllFilterContentTypes(),
+					DataSources: []sourceTypes.SourceID{"microsoft-cvrf"},
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10001/datasource-filter.json", nil) {
+					return
+				}
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10002/datasource-filter.json", nil) {
+					return
+				}
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-20001/datasource-filter.json", nil) {
+					return
+				}
+			},
+		},
+		{
+			name:    "root id filter",
+			fixture: "testdata/fixtures/get-vulnerability-data-by-kbid",
+			config: session.Config{
+				Type:      "boltdb",
+				Path:      filepath.Join(t.TempDir(), "vuls.db"),
+				Options:   session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+				WithCache: true,
+			},
+			args: args{
+				kbIDs: []string{"5001234"},
+				filter: dbTypes.Filter{
+					Contents: dbTypes.AllFilterContentTypes(),
+					RootIDs:  []dataTypes.RootID{"CVE-2024-10001"},
+				},
+			},
+			want: func(yield func(string, error) bool) {
+				if !yield("testdata/golden/get-vulnerability-data-by-kbid/5001234/CVE-2024-10001/happy.json", nil) {
+					return
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			if tt.config.WithCache {
+				defer s.Cache().Close()
+			}
+
+			wnext, wstop := iter.Pull2(tt.want)
+			defer wstop()
+			gnext, gstop := iter.Pull2(sorted(s.GetVulnerabilityDataByKBID(tt.args.kbIDs, tt.args.datasources, tt.args.filter)))
+			defer gstop()
+
+			for {
+				wantpath, wantErr, wantOk := wnext()
+				got, gotErr, gotOk := gnext()
+
+				if !wantOk || !gotOk {
+					if wantOk != gotOk {
+						t.Errorf("Session.GetVulnerabilityDataByKBID() length mismatch: want hasNext=%v, got hasNext=%v", wantOk, gotOk)
+					}
+					break
+				}
+
+				switch {
+				case wantErr == nil && gotErr != nil:
+					t.Errorf("Session.GetVulnerabilityDataByKBID() unexpected error: %v", gotErr)
+				case wantErr != nil && gotErr == nil:
+					t.Errorf("Session.GetVulnerabilityDataByKBID() expected error has not occurred")
+				case wantErr != nil && gotErr != nil:
+					if wantErr.Error() != gotErr.Error() {
+						t.Errorf("Session.GetVulnerabilityDataByKBID() error mismatch: want %v, got %v", wantErr, gotErr)
+					}
+				default:
+					f, err := os.Open(wantpath)
+					if err != nil {
+						t.Fatalf("open %s. err: %v", wantpath, err)
+					}
+					defer f.Close()
+
+					var want dbTypes.VulnerabilityData
+					if err := json.UnmarshalRead(f, &want); err != nil {
+						t.Fatalf("unmarshal %s. err: %v", wantpath, err)
+					}
+
+					if diff := gocmp.Diff(want, got,
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityData) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataAdvisory) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataVulnerability) bool { return x.ID < y.ID }),
+						gocmpopts.SortSlices(func(x, y dbTypes.VulnerabilityDataDetection) bool { return x.Ecosystem < y.Ecosystem }),
+						gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+					); diff != "" {
+						t.Errorf("Session.GetVulnerabilityDataByKBID() data mismatch (-want +got):\n%s", diff)
+					}
+				}
+			}
+		})
 	}
 }
 

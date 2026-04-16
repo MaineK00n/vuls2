@@ -410,6 +410,94 @@ func (s Session) GetVulnerabilityDataByPackage(ecosystem ecosystemTypes.Ecosyste
 	}
 }
 
+func (s Session) GetVulnerabilityDataByKBID(kbIDs []string, datasources []sourceTypes.SourceID, filter dbTypes.Filter) iter.Seq2[dbTypes.VulnerabilityData, error] {
+	return func(yield func(dbTypes.VulnerabilityData, error) bool) {
+		if filter.ExcludesEcosystem(ecosystemTypes.EcosystemTypeMicrosoft) {
+			return
+		}
+
+		// Collect all products from all KB IDs, then deduplicate rootIDs.
+		products := make(map[string]struct{})
+		for _, kbid := range kbIDs {
+			kb, err := s.Storage().GetMicrosoftKB(kbid)
+			if err != nil {
+				if !yield(dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get microsoft kb %s", kbid)) {
+					return
+				}
+				continue
+			}
+
+			if len(datasources) > 0 {
+				filtered := make(map[sourceTypes.SourceID]microsoftkbTypes.KB, len(kb))
+				for id, v := range kb {
+					if slices.Contains(datasources, id) {
+						filtered[id] = v
+					}
+				}
+				kb = filtered
+			}
+
+			for _, v := range kb {
+				for _, p := range v.Products {
+					products[p] = struct{}{}
+				}
+			}
+		}
+
+		if len(products) == 0 {
+			return
+		}
+
+		ecosystem := ecosystemTypes.Ecosystem(ecosystemTypes.EcosystemTypeMicrosoft)
+
+		// Look up rootIDs for all products
+		rootIDs := make(map[dataTypes.RootID]struct{})
+		for p := range products {
+			rs, err := s.Storage().GetIndex(ecosystem, p)
+			if err != nil {
+				if !yield(dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get index for product %s", p)) {
+					return
+				}
+				continue
+			}
+			for _, r := range rs {
+				if filter.ExcludesRootID(r) {
+					continue
+				}
+				rootIDs[r] = struct{}{}
+			}
+		}
+
+		for rootID := range rootIDs {
+			d, err := s.GetVulnerabilityData(rootID, filter)
+			if err != nil {
+				if !yield(dbTypes.VulnerabilityData{}, errors.Wrapf(err, "get vulnerability data by root id: %s", rootID)) {
+					return
+				}
+				continue
+			}
+
+			// Filter detections to only the microsoft ecosystem
+			d.Detections = func() []dbTypes.VulnerabilityDataDetection {
+				var ds []dbTypes.VulnerabilityDataDetection
+				for _, dd := range d.Detections {
+					if dd.Ecosystem == ecosystem {
+						ds = append(ds, dbTypes.VulnerabilityDataDetection{
+							Ecosystem: dd.Ecosystem,
+							Contents:  dd.Contents,
+						})
+					}
+				}
+				return ds
+			}()
+
+			if !yield(d, nil) {
+				return
+			}
+		}
+	}
+}
+
 func (s Session) getAdvisory(id advisoryContentTypes.AdvisoryID) (map[sourceTypes.SourceID]map[dataTypes.RootID][]advisoryTypes.Advisory, error) {
 	if m, ok := s.cache.LoadAdvisory(id); ok {
 		return m, nil
