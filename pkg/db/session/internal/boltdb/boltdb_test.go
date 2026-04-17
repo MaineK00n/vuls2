@@ -676,6 +676,14 @@ func TestConnection_GetEcosystems(t *testing.T) {
 			},
 			want: []ecosystemTypes.Ecosystem{"alma:8"},
 		},
+		{
+			name:    "microsoft bucket is reserved",
+			fixture: "testdata/fixtures/microsoft-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			want: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -24,6 +24,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/util"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
+	boltdbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
@@ -667,9 +668,7 @@ func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
 	var es []ecosystemTypes.Ecosystem
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
-			switch n := string(name); n {
-			case "metadata", "vulnerability", "datasource":
-			default:
+			if !slices.Contains(boltdbTypes.ReservedRootBucket(), string(name)) {
 				es = append(es, ecosystemTypes.Ecosystem(name))
 			}
 			return nil
