@@ -507,7 +507,7 @@ func SearchPackage(ecosytem ecosystemTypes.Ecosystem, queries []string, opts ...
 	return nil
 }
 
-func SearchKB(queries []string, datasources []sourceTypes.SourceID, opts ...Option) error {
+func SearchKBInfo(queries []string, datasources []sourceTypes.SourceID, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -568,6 +568,68 @@ func SearchKB(queries []string, datasources []sourceTypes.SourceID, opts ...Opti
 		}
 		if err := json.MarshalWrite(os.Stdout, kb); err != nil {
 			return errors.Wrapf(err, "encode kb %s", query)
+		}
+	}
+
+	return nil
+}
+
+func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		filter: dbTypes.Filter{
+			Contents: dbTypes.AllFilterContentTypes(),
+		},
+		debug: false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:      options.dbtype,
+		Path:      options.dbpath,
+		Debug:     options.debug,
+		Options:   options.storageopts,
+		WithCache: true,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	defer s.Cache().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get Vulnerability Data by KB ID", "kb", queries)
+	for d, err := range s.GetVulnerabilityDataByKBID(queries, datasources, options.filter) {
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrap(err, "get vulnerability data by kb id")
+		}
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s", d.ID)
 		}
 	}
 
