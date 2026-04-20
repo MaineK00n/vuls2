@@ -14,8 +14,8 @@ import (
 func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold float64) (bool, error) {
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
-			cmp.Compare(max(b.DetectionChangeRate, b.KBChangeRate),
-				max(a.DetectionChangeRate, a.KBChangeRate)),
+			cmp.Compare(-max(a.DetectionChangeRate, a.KBChangeRate),
+				-max(b.DetectionChangeRate, b.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
 		)
 	})
