@@ -20,11 +20,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 			cmp.Compare(a.Name, b.Name),
 		)
 	})
-
 	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
-	maxDiff := slices.MaxFunc(diffs, func(a, b FileDiff) int {
-		return cmp.Compare(a.ChangeRate, b.ChangeRate)
-	})
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
@@ -36,7 +32,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|
-`, resultLabel(pass), changeRateThreshold, formatMax(maxDiff.ChangeRate, maxDiff.Name)); err != nil {
+`, resultLabel(pass), changeRateThreshold, formatMax(diffs[0].ChangeRate, diffs[0].Name)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
