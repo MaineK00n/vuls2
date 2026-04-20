@@ -22,19 +22,9 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	})
 
 	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
-
-	maxName := ""
-	maxRate := 0.0
-	for _, d := range diffs {
-		if d.ChangeRate > maxRate {
-			maxRate = d.ChangeRate
-			maxName = d.Name
-		}
-	}
-	maxCell := fmt.Sprintf("%.1f%%", maxRate)
-	if maxName != "" {
-		maxCell = fmt.Sprintf("%.1f%% (%s)", maxRate, maxName)
-	}
+	maxDiff := slices.MaxFunc(diffs, func(a, b FileDiff) int {
+		return cmp.Compare(a.ChangeRate, b.ChangeRate)
+	})
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
@@ -46,7 +36,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|
-`, resultLabel(pass), changeRateThreshold, maxCell); err != nil {
+`, resultLabel(pass), changeRateThreshold, formatMax(maxDiff.ChangeRate, maxDiff.Name)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
@@ -82,27 +72,14 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 					return false, errors.Wrapf(err, "write added header %s", d.Name)
 				}
 				slices.Sort(d.Added)
-				for _, id := range d.Added {
-					if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
-						return false, errors.Wrapf(err, "write added ID %s", d.Name)
-					}
-				}
-				if _, err := fmt.Fprintln(w); err != nil {
-					return false, errors.Wrapf(err, "write added separator %s", d.Name)
+				if err := writeIDList(w, "Added IDs", d.Added); err != nil {
+					return false, errors.Wrapf(err, "write added IDs %s", d.Name)
 				}
 			}
 			if len(d.Removed) > 0 {
-				if _, err := fmt.Fprintf(w, "#### Removed IDs (%d)\n\n", len(d.Removed)); err != nil {
-					return false, errors.Wrapf(err, "write removed header %s", d.Name)
-				}
 				slices.Sort(d.Removed)
-				for _, id := range d.Removed {
-					if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
-						return false, errors.Wrapf(err, "write removed ID %s", d.Name)
-					}
-				}
-				if _, err := fmt.Fprintln(w); err != nil {
-					return false, errors.Wrapf(err, "write removed separator %s", d.Name)
+				if err := writeIDList(w, "Removed IDs", d.Removed); err != nil {
+					return false, errors.Wrapf(err, "write removed IDs %s", d.Name)
 				}
 			}
 		}
@@ -111,9 +88,38 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	return pass, nil
 }
 
+// formatMax renders a "<rate>% (<name>)" cell for the report header, omitting
+// the name part when the rate is 0 (no non-zero change exists).
+func formatMax(rate float64, name string) string {
+	if rate == 0 {
+		return fmt.Sprintf("%.1f%%", rate)
+	}
+	return fmt.Sprintf("%.1f%% (%s)", rate, name)
+}
+
 func resultLabel(pass bool) string {
 	if pass {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
+// It is a no-op when ids is empty.
+func writeIDList(w io.Writer, label string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "#### %s (%d)\n\n", label, len(ids)); err != nil {
+		return errors.Wrap(err, "write header")
+	}
+	for _, id := range ids {
+		if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
+			return errors.Wrap(err, "write id")
+		}
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return errors.Wrap(err, "write separator")
+	}
+	return nil
 }
