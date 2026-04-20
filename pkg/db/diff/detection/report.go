@@ -81,6 +81,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 				if _, err := fmt.Fprintf(w, "#### Added IDs (%d)\n\n", len(d.Added)); err != nil {
 					return false, errors.Wrapf(err, "write added header %s", d.Name)
 				}
+				slices.Sort(d.Added)
 				for _, id := range d.Added {
 					if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
 						return false, errors.Wrapf(err, "write added ID %s", d.Name)
@@ -94,6 +95,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 				if _, err := fmt.Fprintf(w, "#### Removed IDs (%d)\n\n", len(d.Removed)); err != nil {
 					return false, errors.Wrapf(err, "write removed header %s", d.Name)
 				}
+				slices.Sort(d.Removed)
 				for _, id := range d.Removed {
 					if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
 						return false, errors.Wrapf(err, "write removed ID %s", d.Name)

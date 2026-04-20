@@ -122,11 +122,11 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		})))
 	}
 
-	baselibeDB, err := bolt.Open(baselinePath, 0400, &bolt.Options{ReadOnly: true})
+	baselineDB, err := bolt.Open(baselinePath, 0400, &bolt.Options{ReadOnly: true})
 	if err != nil {
 		return errors.Wrapf(err, "open baseline DB %s", baselinePath)
 	}
-	defer baselibeDB.Close()
+	defer baselineDB.Close()
 
 	targetDB, err := bolt.Open(targetPath, 0400, &bolt.Options{ReadOnly: true})
 	if err != nil {
@@ -134,7 +134,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 	defer targetDB.Close()
 
-	results, err := computeDiffs(baselibeDB, targetDB, o.changeRateThreshold)
+	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold)
 	if err != nil {
 		return errors.Wrap(err, "compute diffs")
 	}
