@@ -122,24 +122,41 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		})))
 	}
 
-	bdb, err := bolt.Open(baselinePath, 0400, &bolt.Options{ReadOnly: true})
+	baselibeDB, err := bolt.Open(baselinePath, 0400, &bolt.Options{ReadOnly: true})
 	if err != nil {
 		return errors.Wrapf(err, "open baseline DB %s", baselinePath)
 	}
-	defer bdb.Close()
+	defer baselibeDB.Close()
 
-	tdb, err := bolt.Open(targetPath, 0400, &bolt.Options{ReadOnly: true})
+	targetDB, err := bolt.Open(targetPath, 0400, &bolt.Options{ReadOnly: true})
 	if err != nil {
 		return errors.Wrapf(err, "open target DB %s", targetPath)
 	}
-	defer tdb.Close()
+	defer targetDB.Close()
 
-	baselineEcos, err := getEcosystems(bdb)
+	results, err := computeDiffs(baselibeDB, targetDB, o.changeRateThreshold)
 	if err != nil {
-		return errors.Wrap(err, "get baseline ecosystems")
+		return errors.Wrap(err, "compute diffs")
+	}
+
+	pass, err := generateReport(o.writer, results, o.changeRateThreshold)
+	if err != nil {
+		return errors.Wrap(err, "generate report")
+	}
+
+	if !pass {
+		return errors.Errorf("diff failed: detection and/or KB change rate exceeded threshold (%.1f%%)", o.changeRateThreshold)
+	}
+	return nil
+}
+
+func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64) ([]EcosystemDiff, error) {
+	baselineEcos, err := getEcosystems(baselineDB)
+	if err != nil {
+		return nil, errors.Wrap(err, "get baseline ecosystems")
 	}
 	if len(baselineEcos) == 0 {
-		return errors.New("no ecosystems found in baseline DB")
+		return nil, errors.New("no ecosystems found in baseline DB")
 	}
 
 	total := len(baselineEcos)
@@ -157,14 +174,10 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(bdb, tdb, eco)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, changeRateThreshold)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
-
-			d.DetectionChangeRate = changeRate(d.BaselineCriterions, d.TargetCriterions, d.MatchedCriterions)
-			d.KBChangeRate = changeRate(d.BaselineKBs, d.TargetKBs, d.MatchedKBs)
-			d.Pass = d.DetectionChangeRate <= o.changeRateThreshold && d.KBChangeRate <= o.changeRateThreshold
 
 			slog.Debug("ecosystem diff done",
 				"ecosystem", eco, "pass", d.Pass,
@@ -176,7 +189,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if err := g.Wait(); err != nil {
-		return errors.Wrap(err, "diff ecosystems")
+		return nil, errors.Wrap(err, "diff ecosystems")
 	}
 	close(ch)
 
@@ -184,16 +197,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	for d := range ch {
 		results = append(results, d)
 	}
-
-	pass, err := generateReport(o.writer, results, o.changeRateThreshold)
-	if err != nil {
-		return errors.Wrap(err, "generate report")
-	}
-
-	if !pass {
-		return errors.Errorf("diff failed: detection and/or KB change rate exceeded threshold (%.1f%%)", o.changeRateThreshold)
-	}
-	return nil
+	return results, nil
 }
 
 // changeRate computes a per-bucket change rate as a percentage:
@@ -233,7 +237,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently. Either sub-bucket may be absent.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem) (EcosystemDiff, error) {
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, changeRateThreshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
@@ -268,6 +272,10 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	}); err != nil {
 		return EcosystemDiff{}, errors.Wrap(err, "diff ecosystem")
 	}
+
+	diff.DetectionChangeRate = changeRate(diff.BaselineCriterions, diff.TargetCriterions, diff.MatchedCriterions)
+	diff.KBChangeRate = changeRate(diff.BaselineKBs, diff.TargetKBs, diff.MatchedKBs)
+	diff.Pass = diff.DetectionChangeRate <= changeRateThreshold && diff.KBChangeRate <= changeRateThreshold
 	return diff, nil
 }
 

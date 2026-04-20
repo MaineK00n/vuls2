@@ -115,6 +115,7 @@ func TestDiffEcosystem(t *testing.T) {
 				BaselineCriterions: 6,
 				TargetCriterions:   6,
 				MatchedCriterions:  6,
+				Pass:               true,
 			},
 		},
 		{
@@ -125,13 +126,14 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "alma:8",
-				BaselineKeys:       1,
-				TargetKeys:         1,
-				Added:              []string{"ALSA-2019:3708"},
-				Removed:            []string{"ALSA-2024:0113"},
-				BaselineCriterions: 6,
-				TargetCriterions:   6,
+				Ecosystem:           "alma:8",
+				BaselineKeys:        1,
+				TargetKeys:          1,
+				Added:               []string{"ALSA-2019:3708"},
+				Removed:             []string{"ALSA-2024:0113"},
+				BaselineCriterions:  6,
+				TargetCriterions:    6,
+				DetectionChangeRate: 200,
 			},
 		},
 		{
@@ -142,13 +144,14 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "alma:8",
-				BaselineKeys:       1,
-				TargetKeys:         1,
-				Changed:            []string{"ALSA-2024:0113"},
-				BaselineCriterions: 6,
-				TargetCriterions:   6,
-				MatchedCriterions:  5,
+				Ecosystem:           "alma:8",
+				BaselineKeys:        1,
+				TargetKeys:          1,
+				Changed:             []string{"ALSA-2024:0113"},
+				BaselineCriterions:  6,
+				TargetCriterions:    6,
+				MatchedCriterions:   5,
+				DetectionChangeRate: float64(6-5+6-5) / float64(6) * 100,
 			},
 		},
 		{
@@ -159,10 +162,11 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "alma:8",
-				BaselineKeys:       1,
-				Removed:            []string{"ALSA-2024:0113"},
-				BaselineCriterions: 6,
+				Ecosystem:           "alma:8",
+				BaselineKeys:        1,
+				Removed:             []string{"ALSA-2024:0113"},
+				BaselineCriterions:  6,
+				DetectionChangeRate: 100,
 			},
 		},
 		{
@@ -173,13 +177,14 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "alma:8",
-				BaselineKeys:       1,
-				TargetKeys:         2,
-				Added:              []string{"ALSA-2019:3708"},
-				BaselineCriterions: 6,
-				TargetCriterions:   12,
-				MatchedCriterions:  6,
+				Ecosystem:           "alma:8",
+				BaselineKeys:        1,
+				TargetKeys:          2,
+				Added:               []string{"ALSA-2019:3708"},
+				BaselineCriterions:  6,
+				TargetCriterions:    12,
+				MatchedCriterions:   6,
+				DetectionChangeRate: 100,
 			},
 		},
 		{
@@ -190,13 +195,14 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "test:change",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "test:change",
-				BaselineKeys:       2,
-				TargetKeys:         2,
-				Changed:            []string{"ROOT-0001", "ROOT-0002"},
-				BaselineCriterions: 6,
-				TargetCriterions:   2,
-				MatchedCriterions:  0,
+				Ecosystem:           "test:change",
+				BaselineKeys:        2,
+				TargetKeys:          2,
+				Changed:             []string{"ROOT-0001", "ROOT-0002"},
+				BaselineCriterions:  6,
+				TargetCriterions:    2,
+				MatchedCriterions:   0,
+				DetectionChangeRate: float64(6-0+2-0) / float64(6) * 100,
 			},
 		},
 		{
@@ -213,6 +219,7 @@ func TestDiffEcosystem(t *testing.T) {
 				BaselineKBs:    2,
 				TargetKBs:      2,
 				MatchedKBs:     2,
+				Pass:           true,
 			},
 		},
 		{
@@ -230,6 +237,7 @@ func TestDiffEcosystem(t *testing.T) {
 				BaselineKBs:    2,
 				TargetKBs:      3,
 				MatchedKBs:     2,
+				KBChangeRate:   50,
 			},
 		},
 		{
@@ -247,6 +255,7 @@ func TestDiffEcosystem(t *testing.T) {
 				BaselineKBs:    2,
 				TargetKBs:      2,
 				MatchedKBs:     1,
+				KBChangeRate:   100,
 			},
 		},
 		{
@@ -261,6 +270,7 @@ func TestDiffEcosystem(t *testing.T) {
 				BaselineKBKeys: 2,
 				RemovedKBs:     []string{"KB5001000", "KB5001111"},
 				BaselineKBs:    2,
+				KBChangeRate:   100,
 			},
 		},
 	}
@@ -295,7 +305,7 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem)
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -950,7 +960,7 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: FAIL
+**Result**: **FAIL**
 **Change Rate Threshold**:     10.0%
 **Detection Change Rate Max**: 75.0% (ubuntu:22.04)
 **KB Change Rate Max**:        0.0%
@@ -1048,7 +1058,7 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: FAIL
+**Result**: **FAIL**
 **Change Rate Threshold**:     10.0%
 **Detection Change Rate Max**: 0.0%
 **KB Change Rate Max**:        140.0% (microsoft)
@@ -1169,7 +1179,7 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: FAIL
+**Result**: **FAIL**
 **Change Rate Threshold**:     10.0%
 **Detection Change Rate Max**: 1.5% (mixed:1)
 **KB Change Rate Max**:        80.0% (mixed:1)

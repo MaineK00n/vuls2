@@ -23,13 +23,6 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
 
-	overallResult := func() string {
-		if !pass {
-			return "FAIL"
-		}
-		return "PASS"
-	}()
-
 	maxName := ""
 	maxRate := 0.0
 	for _, d := range diffs {
@@ -53,19 +46,13 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|
-`, overallResult, changeRateThreshold, maxCell); err != nil {
+`, resultLabel(pass), changeRateThreshold, maxCell); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, d := range diffs {
-		result := func() string {
-			if !d.Pass {
-				return "**FAIL**"
-			}
-			return "PASS"
-		}()
 		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s |\n",
-			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate, result); err != nil {
+			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate, resultLabel(d.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -120,4 +107,11 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	}
 
 	return pass, nil
+}
+
+func resultLabel(pass bool) string {
+	if pass {
+		return "PASS"
+	}
+	return "**FAIL**"
 }

@@ -181,7 +181,7 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "vuls0 detection")
 	}
 	close(resChan)
 
@@ -204,7 +204,7 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 }
 
 // runVuls0Report runs vuls0 report on a single scan result file and returns detected CVE IDs.
-func runVuls0Report(ctx context.Context, binary, dbpath, filePath string) ([]string, error) {
+func runVuls0Report(ctx context.Context, binary, dbpath, scanResultPath string) ([]string, error) {
 	tmpDir, err := os.MkdirTemp("", "diff-vuls0-*")
 	if err != nil {
 		return nil, errors.Wrap(err, "mkdtemp")
@@ -232,11 +232,11 @@ skipUpdate = true
 		return nil, errors.Wrapf(err, "mkdir %s", tsDir)
 	}
 
-	dst := filepath.Join(tsDir, filepath.Base(filePath))
+	dst := filepath.Join(tsDir, filepath.Base(scanResultPath))
 	if err := func() error {
-		in, err := os.Open(filePath)
+		in, err := os.Open(scanResultPath)
 		if err != nil {
-			return errors.Wrapf(err, "open %s", filePath)
+			return errors.Wrapf(err, "open %s", scanResultPath)
 		}
 		defer in.Close()
 
@@ -247,11 +247,11 @@ skipUpdate = true
 		defer out.Close()
 
 		if _, err := io.Copy(out, in); err != nil {
-			return errors.Wrapf(err, "copy %s to %s", filePath, dst)
+			return errors.Wrapf(err, "copy %s to %s", scanResultPath, dst)
 		}
 		return nil
 	}(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "copy scan result file")
 	}
 
 	cmd := exec.CommandContext(ctx, binary,
@@ -292,37 +292,29 @@ skipUpdate = true
 // therefore invisible. This is sufficient for regression detection (missing or
 // extra CVEs), but not for validating data source migrations where IDs stay
 // the same but metadata differs.
-func computeDiffs(detections map[string]FileDiff, changeRateThreshold float64) map[string]FileDiff {
-	result := make(map[string]FileDiff, len(detections))
-	for name, d := range detections {
-		added := subtract(d.TargetIDs, d.BaselineIDs)
-		removed := subtract(d.BaselineIDs, d.TargetIDs)
+func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64) map[string]FileDiff {
+	for name, d := range ds {
+		d.Added = subtract(d.TargetIDs, d.BaselineIDs)
+		d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
 
 		// changeRate can exceed 100% when additions outnumber baseline entries.
 		// This is intentional — capping at 100 would hide the magnitude of large additions.
-		changeRate := func() float64 {
+		d.ChangeRate = func() float64 {
 			switch {
 			case len(d.BaselineIDs) > 0:
-				return float64(len(added)+len(removed)) / float64(len(d.BaselineIDs)) * 100
-			case len(added)+len(removed) > 0:
+				return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
+			case len(d.Added)+len(d.Removed) > 0:
 				return 100
 			default:
 				return 0
 			}
 		}()
+		d.Pass = d.ChangeRate <= changeRateThreshold
 
-		result[name] = FileDiff{
-			Name:        d.Name,
-			BaselineIDs: d.BaselineIDs,
-			TargetIDs:   d.TargetIDs,
-			Added:       added,
-			Removed:     removed,
-			ChangeRate:  changeRate,
-			Pass:        changeRate <= changeRateThreshold,
-		}
+		ds[name] = d
 	}
 
-	return result
+	return ds
 }
 
 // subtract returns elements in a that are not in b (i.e. a \ b).

@@ -13,47 +13,60 @@ import (
 )
 
 func TestSubtract(t *testing.T) {
+	type args struct {
+		a []string
+		b []string
+	}
 	tests := []struct {
 		name string
-		a    []string
-		b    []string
+		args args
 		want []string
 	}{
 		{
 			name: "no diff",
-			a:    []string{"CVE-2026-0001", "CVE-2026-0002"},
-			b:    []string{"CVE-2026-0001", "CVE-2026-0002"},
+			args: args{
+				a: []string{"CVE-2026-0001", "CVE-2026-0002"},
+				b: []string{"CVE-2026-0001", "CVE-2026-0002"},
+			},
 			want: nil,
 		},
 		{
 			name: "a has extras",
-			a:    []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-			b:    []string{"CVE-2026-0001"},
+			args: args{
+				a: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+				b: []string{"CVE-2026-0001"},
+			},
 			want: []string{"CVE-2026-0002", "CVE-2026-0003"},
 		},
 		{
 			name: "b has extras",
-			a:    []string{"CVE-2026-0001"},
-			b:    []string{"CVE-2026-0001", "CVE-2026-0002"},
+			args: args{
+				a: []string{"CVE-2026-0001"},
+				b: []string{"CVE-2026-0001", "CVE-2026-0002"},
+			},
 			want: nil,
 		},
 		{
 			name: "empty a",
-			a:    nil,
-			b:    []string{"CVE-2026-0001"},
+			args: args{
+				a: nil,
+				b: []string{"CVE-2026-0001"},
+			},
 			want: nil,
 		},
 		{
 			name: "empty b",
-			a:    []string{"CVE-2026-0001"},
-			b:    nil,
+			args: args{
+				a: []string{"CVE-2026-0001"},
+				b: nil,
+			},
 			want: []string{"CVE-2026-0001"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.Subtract(tt.a, tt.b)
+			got := detection.Subtract(tt.args.a, tt.args.b)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Subtract() mismatch (-want +got):\n%s", diff)
 			}
@@ -329,7 +342,7 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: Detection
 
-**Result**: FAIL
+**Result**: **FAIL**
 **Change Rate Threshold**: 10.0%
 **Change Rate Max**:       75.0% (ubuntu_22.04)
 
@@ -436,49 +449,60 @@ func TestDiff(t *testing.T) {
 
 	emptyDir := t.TempDir()
 
-	tests := []struct {
-		name                string
+	type args struct {
 		dir                 string
 		detectFunc          detection.DetectFunc
 		changeRateThreshold float64
-		wantErr             bool
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
 	}{
 		{
-			name:                "fail on exceeded change rate",
-			dir:                 scanDir,
-			detectFunc:          fakeDetect,
-			changeRateThreshold: 10,
-			wantErr:             true,
+			name: "fail on exceeded change rate",
+			args: args{
+				dir:                 scanDir,
+				detectFunc:          fakeDetect,
+				changeRateThreshold: 10,
+			},
+			wantErr: true,
 		},
 		{
-			name:                "pass within threshold",
-			dir:                 scanDir,
-			detectFunc:          fakeDetect,
-			changeRateThreshold: 100,
-			wantErr:             false,
+			name: "pass within threshold",
+			args: args{
+				dir:                 scanDir,
+				detectFunc:          fakeDetect,
+				changeRateThreshold: 100,
+			},
+			wantErr: false,
 		},
 		{
-			name:                "detect error propagated",
-			dir:                 scanDir,
-			detectFunc:          fakeDetectErr,
-			changeRateThreshold: 10,
-			wantErr:             true,
+			name: "detect error propagated",
+			args: args{
+				dir:                 scanDir,
+				detectFunc:          fakeDetectErr,
+				changeRateThreshold: 10,
+			},
+			wantErr: true,
 		},
 		{
-			name:                "no scan results error",
-			dir:                 emptyDir,
-			detectFunc:          fakeDetect,
-			changeRateThreshold: 10,
-			wantErr:             true,
+			name: "no scan results error",
+			args: args{
+				dir:                 emptyDir,
+				detectFunc:          fakeDetect,
+				changeRateThreshold: 10,
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := detection.Diff(
-				tt.dir, "baseline.db", "vuls0", "target.db", "vuls0",
-				detection.WithChangeRateThreshold(tt.changeRateThreshold),
+				tt.args.dir, "baseline.db", "vuls0", "target.db", "vuls0",
+				detection.WithChangeRateThreshold(tt.args.changeRateThreshold),
 				detection.WithWriter(&bytes.Buffer{}),
-				detection.WithDetectFunc(tt.detectFunc),
+				detection.WithDetectFunc(tt.args.detectFunc),
 			)
 
 			if (err != nil) != tt.wantErr {

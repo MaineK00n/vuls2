@@ -9,51 +9,25 @@ import (
 	"github.com/pkg/errors"
 )
 
-// maxRate returns the larger of the two per-bucket rates for sorting/reporting.
-func maxRate(d EcosystemDiff) float64 {
-	return max(d.DetectionChangeRate, d.KBChangeRate)
-}
-
-// formatMax renders a "<rate>% (<name>)" cell for the report header, omitting
-// the name part when the rate is 0 (no non-zero change exists).
-func formatMax(rate float64, name string) string {
-	if name == "" {
-		return fmt.Sprintf("%.1f%%", rate)
-	}
-	return fmt.Sprintf("%.1f%% (%s)", rate, name)
-}
-
 // generateReport writes a Markdown report for DB diff to w.
 // It returns whether all ecosystems passed and any write error.
 func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold float64) (bool, error) {
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
-			cmp.Compare(maxRate(b), maxRate(a)),
+			cmp.Compare(max(b.DetectionChangeRate, b.KBChangeRate),
+				max(a.DetectionChangeRate, a.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
 		)
 	})
 
 	pass := !slices.ContainsFunc(diffs, func(r EcosystemDiff) bool { return !r.Pass })
 
-	overallResult := func() string {
-		if !pass {
-			return "FAIL"
-		}
-		return "PASS"
-	}()
-
-	detMaxName, detMax := "", 0.0
-	kbMaxName, kbMax := "", 0.0
-	for _, d := range diffs {
-		if d.DetectionChangeRate > detMax {
-			detMax = d.DetectionChangeRate
-			detMaxName = string(d.Ecosystem)
-		}
-		if d.KBChangeRate > kbMax {
-			kbMax = d.KBChangeRate
-			kbMaxName = string(d.Ecosystem)
-		}
-	}
+	detMaxDiff := slices.MaxFunc(diffs, func(a, b EcosystemDiff) int {
+		return cmp.Compare(a.DetectionChangeRate, b.DetectionChangeRate)
+	})
+	kbMaxDiff := slices.MaxFunc(diffs, func(a, b EcosystemDiff) int {
+		return cmp.Compare(a.KBChangeRate, b.KBChangeRate)
+	})
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: DB
 
@@ -66,21 +40,21 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
-`, overallResult, changeRateThreshold, formatMax(detMax, detMaxName), formatMax(kbMax, kbMaxName)); err != nil {
+`,
+		resultLabel(pass),
+		changeRateThreshold,
+		formatMax(detMaxDiff.DetectionChangeRate, string(detMaxDiff.Ecosystem)),
+		formatMax(kbMaxDiff.KBChangeRate, string(kbMaxDiff.Ecosystem)),
+	); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 	for _, d := range diffs {
-		result := func() string {
-			if !d.Pass {
-				return "**FAIL**"
-			}
-			return "PASS"
-		}()
 		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %s |\n",
 			d.Ecosystem,
 			d.DetectionChangeRate,
 			d.KBChangeRate,
-			result); err != nil {
+			resultLabel(d.Pass),
+		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -88,10 +62,9 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 		return false, errors.Wrap(err, "write summary separator")
 	}
 
-	hasAnyDetection := slices.ContainsFunc(diffs, func(d EcosystemDiff) bool {
+	if slices.ContainsFunc(diffs, func(d EcosystemDiff) bool {
 		return d.BaselineKeys > 0 || d.TargetKeys > 0
-	})
-	if hasAnyDetection {
+	}) {
 		if _, err := fmt.Fprintf(w, `## Detection
 
 | Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
@@ -179,6 +152,22 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 	}
 
 	return pass, nil
+}
+
+// formatMax renders a "<rate>% (<name>)" cell for the report header, omitting
+// the name part when the rate is 0 (no non-zero change exists).
+func formatMax(rate float64, name string) string {
+	if rate == 0 {
+		return fmt.Sprintf("%.1f%%", rate)
+	}
+	return fmt.Sprintf("%.1f%% (%s)", rate, name)
+}
+
+func resultLabel(pass bool) string {
+	if pass {
+		return "PASS"
+	}
+	return "**FAIL**"
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
