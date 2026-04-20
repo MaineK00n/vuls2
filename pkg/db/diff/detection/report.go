@@ -64,9 +64,6 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 				return false, errors.Wrapf(err, "write file header %s", d.Name)
 			}
 			if len(d.Added) > 0 {
-				if _, err := fmt.Fprintf(w, "#### Added IDs (%d)\n\n", len(d.Added)); err != nil {
-					return false, errors.Wrapf(err, "write added header %s", d.Name)
-				}
 				slices.Sort(d.Added)
 				if err := writeIDList(w, "Added IDs", d.Added); err != nil {
 					return false, errors.Wrapf(err, "write added IDs %s", d.Name)
