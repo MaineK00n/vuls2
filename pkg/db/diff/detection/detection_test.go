@@ -342,11 +342,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: Detection
 
-**Result**: **FAIL**
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       75.0% (ubuntu_22.04)
-
 ## Summary
+
+**Result**: **FAIL** (Change Rate Threshold: 10.0%)
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|
@@ -355,7 +353,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL files)
 
-### ubuntu_22.04
+### ubuntu_22.04 (75.0%)
 
 #### Removed IDs (3)
 
@@ -382,11 +380,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: true,
 			wantReport: `# Diff Report: Detection
 
-**Result**: PASS
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       0.0%
-
 ## Summary
+
+**Result**: PASS (Change Rate Threshold: 10.0%)
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|

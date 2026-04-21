@@ -960,11 +960,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: **FAIL**
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       75.0% (ubuntu:22.04)
-
 ## Summary
+
+**Result**: **FAIL** (Change Rate Threshold: 10.0%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
@@ -980,7 +978,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL ecosystems)
 
-### ubuntu:22.04
+### ubuntu:22.04 (75.0%)
 
 #### Removed Root IDs (3)
 
@@ -1015,11 +1013,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: true,
 			wantReport: `# Diff Report: DB
 
-**Result**: PASS
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       4.8% (alma:8)
-
 ## Summary
+
+**Result**: PASS (Change Rate Threshold: 10.0%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
@@ -1056,11 +1052,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: **FAIL**
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       140.0% (microsoft)
-
 ## Summary
+
+**Result**: **FAIL** (Change Rate Threshold: 10.0%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
@@ -1074,7 +1068,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL ecosystems)
 
-### microsoft
+### microsoft (0.0%)
 
 #### Added KB IDs (1)
 
@@ -1119,11 +1113,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: true,
 			wantReport: `# Diff Report: DB
 
-**Result**: PASS
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       0.0%
-
 ## Summary
+
+**Result**: PASS (Change Rate Threshold: 10.0%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
@@ -1175,11 +1167,9 @@ func TestGenerateReport(t *testing.T) {
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
-**Result**: **FAIL**
-**Change Rate Threshold**: 10.0%
-**Change Rate Max**:       80.0% (mixed:1)
-
 ## Summary
+
+**Result**: **FAIL** (Change Rate Threshold: 10.0%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
@@ -1199,7 +1189,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL ecosystems)
 
-### mixed:1
+### mixed:1 (1.5%)
 
 #### Changed KB IDs (2)
 

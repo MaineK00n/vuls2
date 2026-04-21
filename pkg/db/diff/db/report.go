@@ -28,18 +28,15 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: DB
 
-**Result**: %s
-**Change Rate Threshold**: %.1f%%
-**Change Rate Max**:       %s
-
 ## Summary
+
+**Result**: %s (Change Rate Threshold: %.1f%%)
 
 | Ecosystem | Detection Change Rate | KB Change Rate | Result |
 |-----------|-----------------------|----------------|--------|
 `,
 		resultLabel(pass),
 		changeRateThreshold,
-		formatMax(max(diffs[0].DetectionChangeRate, diffs[0].KBChangeRate), string(diffs[0].Ecosystem)),
 	); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
@@ -122,7 +119,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, d := range failDiffs {
-			if _, err := fmt.Fprintf(w, "### %s\n\n", d.Ecosystem); err != nil {
+			if _, err := fmt.Fprintf(w, "### %s (%.1f%%)\n\n", d.Ecosystem, d.DetectionChangeRate); err != nil {
 				return false, errors.Wrapf(err, "write ecosystem header %s", d.Ecosystem)
 			}
 			if err := writeIDList(w, "Added Root IDs", d.Added); err != nil {
@@ -147,15 +144,6 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 	}
 
 	return pass, nil
-}
-
-// formatMax renders a "<rate>% (<name>)" cell for the report header, omitting
-// the name part when the rate is 0 (no non-zero change exists).
-func formatMax(rate float64, name string) string {
-	if rate == 0 {
-		return fmt.Sprintf("%.1f%%", rate)
-	}
-	return fmt.Sprintf("%.1f%% (%s)", rate, name)
 }
 
 func resultLabel(pass bool) string {

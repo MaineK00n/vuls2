@@ -28,15 +28,13 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
-**Result**: %s
-**Change Rate Threshold**: %.1f%%
-**Change Rate Max**:       %s
-
 ## Summary
+
+**Result**: %s (Change Rate Threshold: %.1f%%)
 
 | Name | Baseline | Target | Added | Removed | Change Rate | Result |
 |------|----------|--------|-------|---------|-------------|--------|
-`, resultLabel(pass), changeRateThreshold, formatMax(diffs[0].ChangeRate, diffs[0].Name)); err != nil {
+`, resultLabel(pass), changeRateThreshold); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
@@ -64,7 +62,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, d := range failDiffs {
-			if _, err := fmt.Fprintf(w, "### %s\n\n", d.Name); err != nil {
+			if _, err := fmt.Fprintf(w, "### %s (%.1f%%)\n\n", d.Name, d.ChangeRate); err != nil {
 				return false, errors.Wrapf(err, "write file header %s", d.Name)
 			}
 			if len(d.Added) > 0 {
@@ -83,15 +81,6 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	}
 
 	return pass, nil
-}
-
-// formatMax renders a "<rate>% (<name>)" cell for the report header, omitting
-// the name part when the rate is 0 (no non-zero change exists).
-func formatMax(rate float64, name string) string {
-	if rate == 0 {
-		return fmt.Sprintf("%.1f%%", rate)
-	}
-	return fmt.Sprintf("%.1f%% (%s)", rate, name)
 }
 
 func resultLabel(pass bool) string {
