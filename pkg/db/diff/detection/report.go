@@ -13,6 +13,10 @@ import (
 // generateReport writes a Markdown report for detection diff to w.
 // It returns whether all files passed and any write error.
 func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold float64) (bool, error) {
+	if len(diffm) == 0 {
+		return true, errors.New("no files to compare")
+	}
+
 	diffs := slices.Collect(maps.Values(diffm))
 	slices.SortFunc(diffs, func(a, b FileDiff) int {
 		return cmp.Or(
