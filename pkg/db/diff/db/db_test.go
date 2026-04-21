@@ -961,9 +961,8 @@ func TestGenerateReport(t *testing.T) {
 			wantReport: `# Diff Report: DB
 
 **Result**: **FAIL**
-**Change Rate Threshold**:     10.0%
-**Detection Change Rate Max**: 75.0% (ubuntu:22.04)
-**KB Change Rate Max**:        0.0%
+**Change Rate Threshold**: 10.0%
+**Change Rate Max**:       75.0% (ubuntu:22.04)
 
 ## Summary
 
@@ -1017,9 +1016,8 @@ func TestGenerateReport(t *testing.T) {
 			wantReport: `# Diff Report: DB
 
 **Result**: PASS
-**Change Rate Threshold**:     10.0%
-**Detection Change Rate Max**: 4.8% (alma:8)
-**KB Change Rate Max**:        0.0%
+**Change Rate Threshold**: 10.0%
+**Change Rate Max**:       4.8% (alma:8)
 
 ## Summary
 
@@ -1059,9 +1057,8 @@ func TestGenerateReport(t *testing.T) {
 			wantReport: `# Diff Report: DB
 
 **Result**: **FAIL**
-**Change Rate Threshold**:     10.0%
-**Detection Change Rate Max**: 0.0%
-**KB Change Rate Max**:        140.0% (microsoft)
+**Change Rate Threshold**: 10.0%
+**Change Rate Max**:       140.0% (microsoft)
 
 ## Summary
 
@@ -1123,9 +1120,8 @@ func TestGenerateReport(t *testing.T) {
 			wantReport: `# Diff Report: DB
 
 **Result**: PASS
-**Change Rate Threshold**:     10.0%
-**Detection Change Rate Max**: 0.0%
-**KB Change Rate Max**:        0.0%
+**Change Rate Threshold**: 10.0%
+**Change Rate Max**:       0.0%
 
 ## Summary
 
@@ -1180,9 +1176,8 @@ func TestGenerateReport(t *testing.T) {
 			wantReport: `# Diff Report: DB
 
 **Result**: **FAIL**
-**Change Rate Threshold**:     10.0%
-**Detection Change Rate Max**: 1.5% (mixed:1)
-**KB Change Rate Max**:        80.0% (mixed:1)
+**Change Rate Threshold**: 10.0%
+**Change Rate Max**:       80.0% (mixed:1)
 
 ## Summary
 

@@ -12,6 +12,10 @@ import (
 // generateReport writes a Markdown report for DB diff to w.
 // It returns whether all ecosystems passed and any write error.
 func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold float64) (bool, error) {
+	if len(diffs) == 0 {
+		return true, errors.New("no ecosystems to compare")
+	}
+
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
 			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
@@ -22,19 +26,11 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 
 	pass := !slices.ContainsFunc(diffs, func(r EcosystemDiff) bool { return !r.Pass })
 
-	detMaxDiff := slices.MaxFunc(diffs, func(a, b EcosystemDiff) int {
-		return cmp.Compare(a.DetectionChangeRate, b.DetectionChangeRate)
-	})
-	kbMaxDiff := slices.MaxFunc(diffs, func(a, b EcosystemDiff) int {
-		return cmp.Compare(a.KBChangeRate, b.KBChangeRate)
-	})
-
 	if _, err := fmt.Fprintf(w, `# Diff Report: DB
 
 **Result**: %s
-**Change Rate Threshold**:     %.1f%%
-**Detection Change Rate Max**: %s
-**KB Change Rate Max**:        %s
+**Change Rate Threshold**: %.1f%%
+**Change Rate Max**:       %s
 
 ## Summary
 
@@ -43,8 +39,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 `,
 		resultLabel(pass),
 		changeRateThreshold,
-		formatMax(detMaxDiff.DetectionChangeRate, string(detMaxDiff.Ecosystem)),
-		formatMax(kbMaxDiff.KBChangeRate, string(kbMaxDiff.Ecosystem)),
+		formatMax(max(diffs[0].DetectionChangeRate, diffs[0].KBChangeRate), string(diffs[0].Ecosystem)),
 	); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
