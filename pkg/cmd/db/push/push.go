@@ -20,10 +20,23 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "push <repository> <Zstandard compressed dbpath>",
+		Use:   "push <repository>[:<tag>] <Zstandard compressed dbpath>",
 		Short: "Push vuls db to repository",
+		Long: heredoc.Doc(`
+		Push a Zstandard-compressed vuls db to an OCI registry.
+
+		If the reference is given as "<repository>:<tag>" the manifest is
+		tagged. If only "<repository>" is given, the manifest is pushed
+		without a tag and is only reachable by its digest. Digest
+		references ("<repository>@<digest>") are rejected.
+
+		The pushed manifest's digest is written to stdout (as a single
+		"sha256:..." line), so callers can capture it directly, e.g.
+		"digest=$(vuls db push ghcr.io/... vuls.db.zst)".
+		`),
 		Example: heredoc.Doc(`
 		$ vuls db push ghcr.io/mainek00n/vuls2:latest vuls.db.zst
+		$ vuls db push ghcr.io/mainek00n/vuls2 vuls.db.zst
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
