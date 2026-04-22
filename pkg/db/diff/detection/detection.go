@@ -266,7 +266,7 @@ skipUpdate = true
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, "vuls0 report: %s", tailBytes(output, 4096))
+		return nil, errors.Wrapf(err, "vuls0 report: %s", output)
 	}
 
 	f, err := os.Open(dst)
@@ -330,13 +330,4 @@ func subtract(a, b []string) []string {
 		}
 	}
 	return diff
-}
-
-// tailBytes returns the trailing max bytes of b, prefixed with a truncation
-// marker when b is longer than max. Used to keep error messages bounded.
-func tailBytes(b []byte, max int) string {
-	if len(b) <= max {
-		return string(b)
-	}
-	return "...[truncated]..." + string(b[len(b)-max:])
 }
