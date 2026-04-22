@@ -1,0 +1,11 @@
+{
+    "kb_id": "KB5001111",
+    "url": "https://support.microsoft.com/kb/5001111",
+    "products": [
+        "Windows 10",
+        "Windows Server 2019"
+    ],
+    "data_source": {
+        "id": "microsoft-cvrf"
+    }
+}

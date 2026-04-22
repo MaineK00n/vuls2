@@ -1,0 +1,10 @@
+{
+    "kb_id": "KB5001222",
+    "url": "https://support.microsoft.com/kb/5001222",
+    "products": [
+        "Windows Server 2022"
+    ],
+    "data_source": {
+        "id": "microsoft-cvrf"
+    }
+}
