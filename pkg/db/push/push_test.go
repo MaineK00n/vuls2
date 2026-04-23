@@ -13,16 +13,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/go-containerregistry/pkg/registry"
+	containerregistry "github.com/google/go-containerregistry/pkg/registry"
 	"github.com/klauspost/compress/zstd"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"github.com/MaineK00n/vuls2/pkg/db/push"
@@ -42,11 +44,11 @@ func TestPush(t *testing.T) {
 	nonZstdBytes := []byte("plain text, no magic")
 
 	type args struct {
-		requestPath string
-		dbBytes     []byte
-		dbName      string
-		token       string
-		opts        []push.Option
+		image   string
+		dbBytes []byte
+		dbName  string
+		token   string
+		opts    []push.Option
 	}
 
 	tests := []struct {
@@ -59,10 +61,10 @@ func TestPush(t *testing.T) {
 		{
 			name: "happy (tagged)",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db:v1",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db:v1",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
@@ -75,16 +77,19 @@ func TestPush(t *testing.T) {
 					Size:        int64(len(newBytes)),
 					Annotations: map[string]string{ocispec.AnnotationTitle: "vuls.db.zst"},
 				}},
+				Annotations: map[string]string{
+					"org.opencontainers.image.created": time.Now().UTC().Format(time.RFC3339),
+				},
 			},
 			wantTag: "v1",
 		},
 		{
 			name: "tagless push",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
@@ -97,26 +102,29 @@ func TestPush(t *testing.T) {
 					Size:        int64(len(newBytes)),
 					Annotations: map[string]string{ocispec.AnnotationTitle: "vuls.db.zst"},
 				}},
+				Annotations: map[string]string{
+					"org.opencontainers.image.created": time.Now().UTC().Format(time.RFC3339),
+				},
 			},
 		},
 		{
 			name: "tag already exists",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db:existing",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db:existing",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			wantErr: true,
 		},
 		{
 			name: "tag already exists, but force push",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db:existing",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
-				opts:        []push.Option{push.WithForce(true)},
+				image:   "ghcr.io/vulsio/vuls-nightly-db:existing",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
+				opts:    []push.Option{push.WithForce(true)},
 			},
 			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
@@ -129,16 +137,19 @@ func TestPush(t *testing.T) {
 					Size:        int64(len(newBytes)),
 					Annotations: map[string]string{ocispec.AnnotationTitle: "vuls.db.zst"},
 				}},
+				Annotations: map[string]string{
+					"org.opencontainers.image.created": time.Now().UTC().Format(time.RFC3339),
+				},
 			},
 			wantTag: "existing",
 		},
 		{
 			name: "not zstd-compressed",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db:v1",
-				dbBytes:     nonZstdBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db:v1",
+				dbBytes: nonZstdBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			wantErr: true,
 		},
@@ -148,27 +159,27 @@ func TestPush(t *testing.T) {
 			// fail with a confusing registry error.
 			name: "digest reference rejected",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			wantErr: true,
 		},
 		{
 			name: "tag and digest reference rejected",
 			args: args{
-				requestPath: "vulsio/vuls-nightly-db:v1@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
-				dbBytes:     newBytes,
-				dbName:      "vuls.db.zst",
-				token:       "gho_xxx",
+				image:   "ghcr.io/vulsio/vuls-nightly-db:v1@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
 			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewTLSServer(registry.New())
+			ts := httptest.NewTLSServer(containerregistry.New())
 			defer ts.Close()
 
 			originalTransport := http.DefaultTransport
@@ -182,12 +193,18 @@ func TestPush(t *testing.T) {
 				t.Fatalf("parse url: %v", err)
 			}
 
-			image := fmt.Sprintf("%s/%s", u.Host, tt.args.requestPath)
-			repo, err := remote.NewRepository(image)
+			ref, err := remote.NewRepository(tt.args.image)
 			if err != nil {
-				t.Fatalf("parse repository %q: %v", image, err)
+				t.Fatalf("parse repository %q: %v", tt.args.image, err)
 			}
-			repo.Reference.Reference = ""
+			ref.Reference.Registry = u.Host
+
+			repo := &remote.Repository{
+				Reference: registry.Reference{
+					Registry:   ref.Reference.Registry,
+					Repository: ref.Reference.Repository,
+				},
+			}
 
 			if err := setupExisting(repo, "existing", existingBytes); err != nil {
 				t.Fatalf("setup(): %v", err)
@@ -201,7 +218,7 @@ func TestPush(t *testing.T) {
 			var digestOut bytes.Buffer
 			tt.args.opts = append(tt.args.opts, push.WithDigestWriter(&digestOut))
 
-			if err := push.Push(image, dbpath, tt.args.token, tt.args.opts...); (err != nil) != tt.wantErr {
+			if err := push.Push(ref.Reference.String(), dbpath, tt.args.token, tt.args.opts...); (err != nil) != tt.wantErr {
 				t.Errorf("Push() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -302,20 +319,9 @@ func checkManifest(repo *remote.Repository, reference string, want ocispec.Manif
 		return errors.Wrap(err, "unmarshal manifest")
 	}
 
-	if got.Annotations != nil {
-		delete(got.Annotations, "org.opencontainers.image.created")
-		if len(got.Annotations) == 0 {
-			got.Annotations = nil
-		}
-	}
-	if want.Annotations != nil {
-		delete(want.Annotations, "org.opencontainers.image.created")
-		if len(want.Annotations) == 0 {
-			want.Annotations = nil
-		}
-	}
-
-	if diff := cmp.Diff(got, want); diff != "" {
+	if diff := cmp.Diff(got, want, cmpopts.IgnoreMapEntries(func(k, v string) bool {
+		return k == "org.opencontainers.image.created"
+	})); diff != "" {
 		return errors.Errorf("manifest mismatch (-got +want):\n%s", diff)
 	}
 
