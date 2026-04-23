@@ -209,9 +209,14 @@ func TestPush(t *testing.T) {
 				return
 			}
 
-			manifestDigest := strings.TrimRight(digestOut.String(), "\n")
+			rawDigest := digestOut.String()
+			if !strings.HasSuffix(rawDigest, "\n") || strings.Count(rawDigest, "\n") != 1 {
+				t.Errorf("digest writer: want single %q line, got %q", "sha256:<hex>", rawDigest)
+				return
+			}
+			manifestDigest := strings.TrimSuffix(rawDigest, "\n")
 			if !strings.HasPrefix(manifestDigest, "sha256:") || strings.Contains(manifestDigest, "\n") {
-				t.Errorf("digest writer: want single %q line, got %q", "sha256:<hex>", digestOut.String())
+				t.Errorf("digest writer: want single %q line, got %q", "sha256:<hex>", rawDigest)
 			}
 			if err := checkManifest(repo, manifestDigest, tt.want); err != nil {
 				t.Errorf("checkManifest() by digest: %v", err)
