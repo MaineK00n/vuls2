@@ -71,6 +71,9 @@ func Push(image, dbpath, token string, opts ...Option) error {
 	for _, opt := range opts {
 		opt.apply(options)
 	}
+	if options.digestWriter == nil {
+		return errors.New("invalid digest writer. writer: nil")
+	}
 
 	ctx := context.TODO()
 

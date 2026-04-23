@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/klauspost/compress/zstd"
 	godigest "github.com/opencontainers/go-digest"
@@ -22,7 +23,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"github.com/MaineK00n/vuls2/pkg/db/push"
@@ -42,30 +42,29 @@ func TestPush(t *testing.T) {
 	nonZstdBytes := []byte("plain text, no magic")
 
 	type args struct {
-		dbBytes []byte
-		dbName  string
-		tag     string
-		digest  string
-		token   string
-		opts    []push.Option
+		requestPath string
+		dbBytes     []byte
+		dbName      string
+		token       string
+		opts        []push.Option
 	}
 
 	tests := []struct {
 		name    string
 		args    args
-		want    *ocispec.Manifest
+		want    ocispec.Manifest
 		wantTag string // tag expected to resolve after the call; "" = no tag expected
 		wantErr bool
 	}{
 		{
 			name: "happy (tagged)",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				tag:     "v1",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db:v1",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
-			want: &ocispec.Manifest{
+			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
 				MediaType:    ocispec.MediaTypeImageManifest,
 				ArtifactType: "application/vnd.vulsio.vuls.db+type",
@@ -82,11 +81,12 @@ func TestPush(t *testing.T) {
 		{
 			name: "tagless push",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
-			want: &ocispec.Manifest{
+			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
 				MediaType:    ocispec.MediaTypeImageManifest,
 				ArtifactType: "application/vnd.vulsio.vuls.db+type",
@@ -102,23 +102,23 @@ func TestPush(t *testing.T) {
 		{
 			name: "tag already exists",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				tag:     "existing",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db:existing",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
 			wantErr: true,
 		},
 		{
 			name: "tag already exists, but force push",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				tag:     "existing",
-				token:   "gho_xxx",
-				opts:    []push.Option{push.WithForce(true)},
+				requestPath: "vulsio/vuls-nightly-db:existing",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
+				opts:        []push.Option{push.WithForce(true)},
 			},
-			want: &ocispec.Manifest{
+			want: ocispec.Manifest{
 				Versioned:    specs.Versioned{SchemaVersion: 2},
 				MediaType:    ocispec.MediaTypeImageManifest,
 				ArtifactType: "application/vnd.vulsio.vuls.db+type",
@@ -135,10 +135,10 @@ func TestPush(t *testing.T) {
 		{
 			name: "not zstd-compressed",
 			args: args{
-				dbBytes: nonZstdBytes,
-				dbName:  "vuls.db.zst",
-				tag:     "v1",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db:v1",
+				dbBytes:     nonZstdBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
 			wantErr: true,
 		},
@@ -148,21 +148,20 @@ func TestPush(t *testing.T) {
 			// fail with a confusing registry error.
 			name: "digest reference rejected",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				digest:  "sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
 			wantErr: true,
 		},
 		{
 			name: "tag and digest reference rejected",
 			args: args{
-				dbBytes: newBytes,
-				dbName:  "vuls.db.zst",
-				tag:     "v1",
-				digest:  "sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
-				token:   "gho_xxx",
+				requestPath: "vulsio/vuls-nightly-db:v1@sha256:33e976b83329e6acb35f96b2d6531080bdaf5eeb399d0a2c701098ee82a7f4e3",
+				dbBytes:     newBytes,
+				dbName:      "vuls.db.zst",
+				token:       "gho_xxx",
 			},
 			wantErr: true,
 		},
@@ -183,65 +182,53 @@ func TestPush(t *testing.T) {
 				t.Fatalf("parse url: %v", err)
 			}
 
-			repository := fmt.Sprintf("%s/vulsio/vuls-nightly-db", u.Host)
+			image := fmt.Sprintf("%s/%s", u.Host, tt.args.requestPath)
+			repo, err := remote.NewRepository(image)
+			if err != nil {
+				t.Fatalf("parse repository %q: %v", image, err)
+			}
+			repo.Reference.Reference = ""
 
-			if err := setupExisting(repository, "existing", existingBytes); err != nil {
+			if err := setupExisting(repo, "existing", existingBytes); err != nil {
 				t.Fatalf("setup(): %v", err)
 			}
 
-			image := repository
-			if tt.args.tag != "" {
-				image = fmt.Sprintf("%s:%s", image, tt.args.tag)
-			}
-			if tt.args.digest != "" {
-				image = fmt.Sprintf("%s@%s", image, tt.args.digest)
-			}
 			dbpath := filepath.Join(t.TempDir(), tt.args.dbName)
 			if err := os.WriteFile(dbpath, tt.args.dbBytes, 0o600); err != nil {
 				t.Fatalf("write fixture %q: %v", dbpath, err)
 			}
 
-			// Always capture the stdout-style digest output so the
-			// table can assert both success (single sha256 line) and
-			// failure (no output) paths.
 			var digestOut bytes.Buffer
-			opts := append([]push.Option{push.WithDigestWriter(&digestOut)}, tt.args.opts...)
+			tt.args.opts = append(tt.args.opts, push.WithDigestWriter(&digestOut))
 
-			if err := push.Push(image, dbpath, tt.args.token, opts...); (err != nil) != tt.wantErr {
+			if err := push.Push(image, dbpath, tt.args.token, tt.args.opts...); (err != nil) != tt.wantErr {
 				t.Errorf("Push() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
 			if tt.wantErr {
-				if got := digestOut.String(); got != "" {
-					t.Errorf("digest writer: want empty on error, got %q", got)
-				}
 				return
 			}
-
-			if tt.want == nil {
-				t.Fatalf("want must be set for success case")
-			}
-			want := *tt.want
 
 			manifestDigest := strings.TrimRight(digestOut.String(), "\n")
 			if !strings.HasPrefix(manifestDigest, "sha256:") || strings.Contains(manifestDigest, "\n") {
 				t.Errorf("digest writer: want single %q line, got %q", "sha256:<hex>", digestOut.String())
 			}
-			if err := checkManifest(repository, manifestDigest, want); err != nil {
+			if err := checkManifest(repo, manifestDigest, tt.want); err != nil {
 				t.Errorf("checkManifest() by digest: %v", err)
 			}
-			if err := checkBlobExists(repository, want.Layers[0].Digest); err != nil {
+			if err := checkBlobExists(repo, tt.want.Layers[0].Digest); err != nil {
 				t.Errorf("checkBlobExists(): %v", err)
 			}
 
 			if tt.wantTag != "" {
-				if err := checkManifest(repository, tt.wantTag, want); err != nil {
+				if err := checkManifest(repo, tt.wantTag, tt.want); err != nil {
 					t.Errorf("checkManifest() by tag: %v", err)
 				}
 			} else {
-				// Tagless push: `newTag` must not have been created.
-				if err := checkNoTag(repository, "v1"); err != nil {
-					t.Errorf("checkNoTag(): %v", err)
+				// Tagless push must not create any new tag; only the
+				// pre-seeded "existing" tag should remain.
+				if err := checkTags(repo, []string{"existing"}); err != nil {
+					t.Errorf("checkTags(): %v", err)
 				}
 			}
 		})
@@ -265,15 +252,11 @@ func compressZstd(payload string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func setupExisting(repository, tag string, bs []byte) error {
+func setupExisting(repo *remote.Repository, tag string, bs []byte) error {
 	ctx := context.TODO()
 
-	repo, err := remote.NewRepository(repository)
-	if err != nil {
-		return errors.Wrapf(err, "create client for %s", repository)
-	}
 	if repo.Reference.Reference != "" {
-		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>"}, repository)
+		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>"}, fmt.Sprintf("%s/%s:%s", repo.Reference.Host(), repo.Reference.Repository, repo.Reference.Reference))
 	}
 
 	layerDescriptor, err := oras.PushBytes(ctx, repo, "application/vnd.vulsio.vuls.db.layer.v1+zstd", bs)
@@ -299,13 +282,9 @@ func setupExisting(repository, tag string, bs []byte) error {
 	return nil
 }
 
-func checkManifest(repository, reference string, want ocispec.Manifest) error {
-	repo, err := remote.NewRepository(repository)
-	if err != nil {
-		return errors.Wrapf(err, "create client for %s", repository)
-	}
+func checkManifest(repo *remote.Repository, reference string, want ocispec.Manifest) error {
 	if repo.Reference.Reference != "" {
-		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>"}, repository)
+		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>"}, fmt.Sprintf("%s/%s:%s", repo.Reference.Host(), repo.Reference.Repository, repo.Reference.Reference))
 	}
 
 	_, fetchedManifestContent, err := oras.FetchBytes(context.TODO(), repo, reference, oras.DefaultFetchBytesOptions)
@@ -338,26 +317,25 @@ func checkManifest(repository, reference string, want ocispec.Manifest) error {
 	return nil
 }
 
-func checkBlobExists(repository string, dgst godigest.Digest) error {
-	repo, err := remote.NewRepository(repository)
-	if err != nil {
-		return errors.Wrapf(err, "create client for %s", repository)
-	}
+func checkBlobExists(repo *remote.Repository, dgst godigest.Digest) error {
 	if _, err := repo.Blobs().Resolve(context.TODO(), string(dgst)); err != nil {
 		return errors.Wrapf(err, "resolve blob %q", dgst)
 	}
 	return nil
 }
 
-func checkNoTag(repository, tag string) error {
-	repo, err := remote.NewRepository(repository)
-	if err != nil {
-		return errors.Wrapf(err, "create client for %s", repository)
+func checkTags(repo *remote.Repository, want []string) error {
+	var tags []string
+	if err := repo.Tags(context.TODO(), "", func(ts []string) error {
+		tags = append(tags, ts...)
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "list tags")
 	}
-	if _, err := repo.Resolve(context.TODO(), tag); err == nil {
-		return errors.Errorf("tag %q unexpectedly exists in %q", tag, repository)
-	} else if !errors.Is(err, errdef.ErrNotFound) {
-		return errors.Wrapf(err, "resolve tag %q", tag)
+
+	if diff := cmp.Diff(tags, want, cmpopts.SortSlices(func(x, y string) bool { return x < y })); diff != "" {
+		return errors.Errorf("tag list mismatch (-got +want):\n%s", diff)
 	}
+
 	return nil
 }
