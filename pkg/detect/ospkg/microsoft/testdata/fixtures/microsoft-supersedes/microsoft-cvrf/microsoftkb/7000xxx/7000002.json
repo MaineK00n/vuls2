@@ -1,0 +1,10 @@
+{
+  "kb_id": "7000002",
+  "url": "https://support.microsoft.com/help/7000002",
+  "products": [
+    "Windows 10 Version 2004 for x64-based Systems"
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf"
+  }
+}

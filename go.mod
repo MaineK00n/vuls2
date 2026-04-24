@@ -3,7 +3,7 @@ module github.com/MaineK00n/vuls2
 go 1.26
 
 require (
-	github.com/MaineK00n/vuls-data-update v0.0.0-20260415100620-ce86ca1a408d
+	github.com/MaineK00n/vuls-data-update v0.0.0-20260423125038-ca8c9432d996
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/go-cmp v0.7.0
@@ -56,13 +56,13 @@ require (
 	github.com/pandatix/go-cvss v0.6.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/term v0.41.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/term v0.42.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
-	modernc.org/libc v1.70.0 // indirect
+	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.48.1 // indirect
+	modernc.org/sqlite v1.49.1 // indirect
 )

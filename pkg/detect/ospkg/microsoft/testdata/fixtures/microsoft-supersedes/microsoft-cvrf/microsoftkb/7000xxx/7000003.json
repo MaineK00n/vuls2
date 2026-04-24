@@ -1,0 +1,20 @@
+{
+  "kb_id": "7000003",
+  "url": "https://support.microsoft.com/help/7000003",
+  "products": [
+    "Windows 10 Version 2004 for x64-based Systems"
+  ],
+  "superseded_by": [
+    {
+      "kb_id": "7000004"
+    }
+  ],
+  "supersedes": [
+    {
+      "kb_id": "7000002"
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf"
+  }
+}
