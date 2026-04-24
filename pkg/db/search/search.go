@@ -641,14 +641,15 @@ func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...
 
 // KBExpandResult is the JSON-serialisable form of a kb-expand run.
 type KBExpandResult struct {
-	Inputs                      KBExpandInputs `json:"inputs"`
-	Covered                     []string       `json:"covered"`
-	Unapplied                   []string       `json:"unapplied"`
-	Conflicts                   []string       `json:"conflicts,omitempty"`
-	Release                     string         `json:"release,omitempty"`
-	CoveredAfterReleaseFilter   []string       `json:"covered_after_release_filter,omitempty"`
-	UnappliedAfterReleaseFilter []string       `json:"unapplied_after_release_filter,omitempty"`
-	DroppedByRelease            *KBExpandDrop  `json:"dropped_by_release,omitempty"`
+	Inputs                      KBExpandInputs         `json:"inputs"`
+	DataSources                 []sourceTypes.SourceID `json:"datasources,omitempty"`
+	Covered                     []string               `json:"covered"`
+	Unapplied                   []string               `json:"unapplied"`
+	Conflicts                   []string               `json:"conflicts,omitempty"`
+	Releases                    []string               `json:"releases,omitempty"`
+	CoveredAfterReleaseFilter   []string               `json:"covered_after_release_filter,omitempty"`
+	UnappliedAfterReleaseFilter []string               `json:"unapplied_after_release_filter,omitempty"`
+	DroppedByRelease            *KBExpandDrop          `json:"dropped_by_release,omitempty"`
 }
 
 type KBExpandInputs struct {
@@ -661,13 +662,24 @@ type KBExpandDrop struct {
 	Unapplied []string `json:"unapplied,omitempty"`
 }
 
+// KBExpandRequest captures the inputs and filters for a kb-expand run.
+type KBExpandRequest struct {
+	Applied     []string
+	Unapplied   []string
+	Releases    []string
+	DataSources []sourceTypes.SourceID
+	Explain     bool
+}
+
 // SearchKBExpand expands the given Applied/Unapplied KB inputs through
 // Microsoft KB supersession chains using the same logic detect uses, and
-// reports the resulting Covered/Unapplied classification. When release is
-// non-empty, also applies the same release filter detect applies and reports
-// what was dropped. When explain is true, renders a human-readable tree
-// instead of JSON.
-func SearchKBExpand(applied []string, unapplied []string, release string, explain bool, opts ...Option) error {
+// reports the resulting Covered/Unapplied classification. When Releases is
+// non-empty, also applies the same release filter detect applies (with union
+// semantics across releases) and reports what was dropped. When DataSources
+// is non-empty, only edges and products contributed by those sources are
+// considered. When Explain is true, renders a human-readable tree instead
+// of JSON.
+func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -706,8 +718,12 @@ func SearchKBExpand(applied []string, unapplied []string, release string, explai
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 	}
 
-	slog.Info("Expand Microsoft KB", "applied", applied, "unapplied", unapplied)
-	exp, err := microsoft.ExpandKBs(s.Storage(), applied, unapplied)
+	slog.Info("Expand Microsoft KB", "applied", req.Applied, "unapplied", req.Unapplied, "datasources", req.DataSources)
+	expandOpts := []microsoft.ExpandOption{}
+	if len(req.DataSources) > 0 {
+		expandOpts = append(expandOpts, microsoft.WithExpandDataSources(req.DataSources))
+	}
+	exp, err := microsoft.ExpandKBs(s.Storage(), req.Applied, req.Unapplied, expandOpts...)
 	if err != nil {
 		return errors.Wrap(err, "expand microsoft kb")
 	}
@@ -716,29 +732,30 @@ func SearchKBExpand(applied []string, unapplied []string, release string, explai
 		coveredAfter, unappliedAfter     []string
 		coveredDropped, unappliedDropped []string
 	)
-	if release != "" {
-		coveredAfter, coveredDropped, err = microsoft.PartitionKBIDsByRelease(s.Storage(), exp.Covered, release)
+	if len(req.Releases) > 0 {
+		coveredAfter, coveredDropped, err = microsoft.PartitionKBIDsByReleases(s.Storage(), exp.Covered, req.Releases, expandOpts...)
 		if err != nil {
 			return errors.Wrap(err, "partition covered KBs by release")
 		}
-		unappliedAfter, unappliedDropped, err = microsoft.PartitionKBIDsByRelease(s.Storage(), exp.Unapplied, release)
+		unappliedAfter, unappliedDropped, err = microsoft.PartitionKBIDsByReleases(s.Storage(), exp.Unapplied, req.Releases, expandOpts...)
 		if err != nil {
 			return errors.Wrap(err, "partition unapplied KBs by release")
 		}
 	}
 
-	if explain {
-		return printKBExpandTree(os.Stdout, exp, release, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped)
+	if req.Explain {
+		return printKBExpandTree(os.Stdout, exp, req.DataSources, req.Releases, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped)
 	}
 
 	out := KBExpandResult{
-		Inputs:    KBExpandInputs{Applied: applied, Unapplied: unapplied},
-		Covered:   exp.Covered,
-		Unapplied: exp.Unapplied,
-		Conflicts: exp.Conflicts,
+		Inputs:      KBExpandInputs{Applied: req.Applied, Unapplied: req.Unapplied},
+		DataSources: req.DataSources,
+		Covered:     exp.Covered,
+		Unapplied:   exp.Unapplied,
+		Conflicts:   exp.Conflicts,
 	}
-	if release != "" {
-		out.Release = release
+	if len(req.Releases) > 0 {
+		out.Releases = req.Releases
 		out.CoveredAfterReleaseFilter = coveredAfter
 		out.UnappliedAfterReleaseFilter = unappliedAfter
 		if len(coveredDropped) > 0 || len(unappliedDropped) > 0 {
@@ -754,7 +771,7 @@ func SearchKBExpand(applied []string, unapplied []string, release string, explai
 	return nil
 }
 
-func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, release string, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped []string) error {
+func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []sourceTypes.SourceID, releases []string, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped []string) error {
 	appliedSet := toSet(exp.Inputs.Applied)
 	unappliedSet := toSet(exp.Inputs.Unapplied)
 	coveredSet := toSet(exp.Covered)
@@ -791,6 +808,15 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, release string,
 	}
 	if _, err := fmt.Fprintf(w, "  Unapplied: %s\n", joinSpace(exp.Inputs.Unapplied)); err != nil {
 		return err
+	}
+	if len(datasources) > 0 {
+		dsStrs := make([]string, len(datasources))
+		for i, d := range datasources {
+			dsStrs[i] = string(d)
+		}
+		if _, err := fmt.Fprintf(w, "  Data sources: %s\n", joinSpace(dsStrs)); err != nil {
+			return err
+		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
 		return err
@@ -864,11 +890,11 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, release string,
 		return err
 	}
 
-	if release != "" {
+	if len(releases) > 0 {
 		if _, err := fmt.Fprintln(w); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "Release filter (%q):\n", release); err != nil {
+		if _, err := fmt.Fprintf(w, "Release filter (%s):\n", formatReleases(releases)); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(w, "  Covered after filter:   %s\n", joinSpace(coveredAfter)); err != nil {
@@ -892,6 +918,17 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, release string,
 	}
 
 	return nil
+}
+
+func formatReleases(releases []string) string {
+	if len(releases) == 1 {
+		return fmt.Sprintf("%q", releases[0])
+	}
+	parts := make([]string, len(releases))
+	for i, r := range releases {
+		parts[i] = fmt.Sprintf("%q", r)
+	}
+	return "[" + joinComma(parts) + "]"
 }
 
 func writeKBExpandSubtree(w io.Writer, exp *microsoft.ExpandResult, classify func(string) string, from string, indent string, emittedSubtree map[string]struct{}) error {

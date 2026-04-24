@@ -70,6 +70,38 @@ type ExpandEdge struct {
 	UpdateID string
 }
 
+// ExpandOption configures KB-expansion helpers (ExpandKBs and
+// PartitionKBIDsByReleases). Options are additive; the zero set of options
+// matches the behaviour Detect uses.
+type ExpandOption func(*expandOptions)
+
+type expandOptions struct {
+	datasources []sourceTypes.SourceID
+}
+
+// WithExpandDataSources restricts KB-expansion (supersession walking and
+// product evaluation) to the given Microsoft data sources. When the list is
+// empty, all sources are considered. Edges and products contributed by a
+// source not in the list are ignored.
+func WithExpandDataSources(ds []sourceTypes.SourceID) ExpandOption {
+	return func(o *expandOptions) { o.datasources = ds }
+}
+
+func newExpandOptions(opts []ExpandOption) *expandOptions {
+	eo := &expandOptions{}
+	for _, o := range opts {
+		o(eo)
+	}
+	return eo
+}
+
+func (o *expandOptions) allowSource(id sourceTypes.SourceID) bool {
+	if len(o.datasources) == 0 {
+		return true
+	}
+	return slices.Contains(o.datasources, id)
+}
+
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
 	// Collect product names as index keys from installed packages and KB data.
 	vcm := make(map[string][]int)
@@ -244,7 +276,11 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 // Applied and Unapplied inputs and returns the full classification result,
 // including per-edge data-source attribution for diagnostic use. The
 // classification logic is identical to what Detect uses internally.
-func ExpandKBs(s session.Storage, applied []string, unapplied []string) (*ExpandResult, error) {
+//
+// Options can restrict which Microsoft data sources contribute supersession
+// edges; see WithExpandDataSources.
+func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...ExpandOption) (*ExpandResult, error) {
+	eo := newExpandOptions(opts)
 	// Prefer unapplied when a KB appears in both lists because:
 	// 1. QueryHistory may record a past successful install (Operation=1, ResultCode=2) even after
 	//    the update was rolled back or never fully applied, causing a false "applied" entry.
@@ -298,6 +334,9 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string) (*Expand
 		}
 
 		for srcID, kb := range m {
+			if !eo.allowSource(srcID) {
+				continue
+			}
 			// Forward direction: this KB is superseded by newer KBs.
 			for _, sup := range kb.SupersededBy {
 				if sup.KBID == "" {
@@ -513,18 +552,27 @@ func forwardSupersedersFromApplied(s session.Storage, applied []string) ([]strin
 // the given release. When release is empty, all KBs pass through unchanged.
 // KBs not found in the DB are kept to avoid false negatives.
 func filterKBIDsByRelease(s session.Storage, kbs []string, release string) ([]string, error) {
-	kept, _, err := PartitionKBIDsByRelease(s, kbs, release)
+	var releases []string
+	if release != "" {
+		releases = []string{release}
+	}
+	kept, _, err := PartitionKBIDsByReleases(s, kbs, releases)
 	return kept, err
 }
 
-// PartitionKBIDsByRelease splits kbs into those whose products are relevant
-// to the release (kept) and those whose products are all unrelated (dropped).
-// When release is empty, all KBs are kept. KBs not found in the database are
-// kept (to avoid false negatives) and are not reported in dropped.
-func PartitionKBIDsByRelease(s session.Storage, kbs []string, release string) (kept, dropped []string, _ error) {
-	if release == "" {
+// PartitionKBIDsByReleases splits kbs into those whose products are relevant
+// to any of the given releases (kept) and those whose products are unrelated
+// to all of them (dropped). When releases is empty, all KBs are kept. KBs
+// not found in the database are kept (to avoid false negatives) and are not
+// reported in dropped.
+//
+// Options can restrict the data sources whose products are considered when
+// evaluating relevance; see WithExpandDataSources.
+func PartitionKBIDsByReleases(s session.Storage, kbs []string, releases []string, opts ...ExpandOption) (kept, dropped []string, _ error) {
+	if len(releases) == 0 {
 		return kbs, nil, nil
 	}
+	eo := newExpandOptions(opts)
 
 	kept = make([]string, 0, len(kbs))
 	for _, kbid := range kbs {
@@ -537,9 +585,17 @@ func PartitionKBIDsByRelease(s session.Storage, kbs []string, release string) (k
 			return nil, nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
 		}
 		if func() bool {
-			for _, kb := range m {
+			for srcID, kb := range m {
+				if !eo.allowSource(srcID) {
+					continue
+				}
 				if slices.ContainsFunc(kb.Products, func(p string) bool {
-					return filterMicrosoftKBProduct(p, release)
+					for _, r := range releases {
+						if filterMicrosoftKBProduct(p, r) {
+							return true
+						}
+					}
+					return false
 				}) {
 					return true
 				}

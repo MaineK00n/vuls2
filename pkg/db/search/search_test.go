@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg/microsoft"
 )
 
@@ -12,7 +13,8 @@ func TestPrintKBExpandTree(t *testing.T) {
 	tests := []struct {
 		name             string
 		exp              *microsoft.ExpandResult
-		release          string
+		datasources      []sourceTypes.SourceID
+		releases         []string
 		coveredAfter     []string
 		unappliedAfter   []string
 		coveredDropped   []string
@@ -43,7 +45,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"Covered:   5000802",
 				"Unapplied: 5001330",
 			},
-			wantNotContains: []string{"Release filter"},
+			wantNotContains: []string{"Release filter", "Data sources:"},
 		},
 		{
 			name: "applied input that is also unapplied input is flagged conflict",
@@ -79,13 +81,13 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 		},
 		{
-			name: "release filter section is rendered when release is set",
+			name: "release filter section is rendered when a single release is set",
 			exp: &microsoft.ExpandResult{
 				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
 				Covered:   []string{"5000802"},
 				Unapplied: []string{"5001330", "9999999"},
 			},
-			release:          "Windows 10 Version 22H2 for x64-based Systems",
+			releases:         []string{"Windows 10 Version 22H2 for x64-based Systems"},
 			coveredAfter:     []string{"5000802"},
 			unappliedAfter:   []string{"5001330"},
 			unappliedDropped: []string{"9999999"},
@@ -94,6 +96,38 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"Covered after filter:   5000802",
 				"Unapplied after filter: 5001330",
 				"Dropped:                9999999",
+			},
+		},
+		{
+			name: "release filter renders bracketed list when multiple releases are set",
+			exp: &microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+				Covered:   []string{"5000802"},
+				Unapplied: []string{"5001330"},
+			},
+			releases: []string{
+				"Windows 10 Version 22H2 for x64-based Systems",
+				"Windows 11 Version 23H2 for x64-based Systems",
+			},
+			coveredAfter:   []string{"5000802"},
+			unappliedAfter: []string{"5001330"},
+			wantContains: []string{
+				`Release filter (["Windows 10 Version 22H2 for x64-based Systems", "Windows 11 Version 23H2 for x64-based Systems"]):`,
+				"Covered after filter:   5000802",
+				"Unapplied after filter: 5001330",
+				"Dropped:                (none)",
+			},
+		},
+		{
+			name: "datasource filter is reflected in the inputs section",
+			exp: &microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+				Covered:   []string{"5000802"},
+				Unapplied: nil,
+			},
+			datasources: []sourceTypes.SourceID{"microsoft-cvrf", "microsoft-msuc"},
+			wantContains: []string{
+				"Data sources: microsoft-cvrf microsoft-msuc",
 			},
 		},
 		{
@@ -118,7 +152,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := printKBExpandTree(&buf, tt.exp, tt.release, tt.coveredAfter, tt.unappliedAfter, tt.coveredDropped, tt.unappliedDropped); err != nil {
+			if err := printKBExpandTree(&buf, tt.exp, tt.datasources, tt.releases, tt.coveredAfter, tt.unappliedAfter, tt.coveredDropped, tt.unappliedDropped); err != nil {
 				t.Fatalf("printKBExpandTree() error = %v", err)
 			}
 			got := buf.String()

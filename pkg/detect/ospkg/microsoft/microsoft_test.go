@@ -1657,3 +1657,222 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 		})
 	}
 }
+
+func TestExpandKBs_DataSourceFilter(t *testing.T) {
+	type args struct {
+		applied     []string
+		unapplied   []string
+		datasources []sourceTypes.SourceID
+	}
+	tests := []struct {
+		name          string
+		fixture       string
+		config        session.Config
+		args          args
+		wantCovered   []string
+		wantUnapplied []string
+	}{
+		{
+			name:    "no filter walks every source's chain",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied: []string{"4012606"},
+			},
+			wantCovered:   []string{"4012606"},
+			wantUnapplied: []string{"4013429"},
+		},
+		{
+			name:    "filtering to a source that doesn't know the input KB stops the walk",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:     []string{"4012606"},
+				datasources: []sourceTypes.SourceID{"microsoft-cvrf"},
+			},
+			wantCovered:   []string{"4012606"},
+			wantUnapplied: nil,
+		},
+		{
+			name:    "filtering to the source that owns the chain preserves it",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:     []string{"5000802"},
+				datasources: []sourceTypes.SourceID{"microsoft-cvrf"},
+			},
+			wantCovered:   []string{"5000802"},
+			wantUnapplied: []string{"5001330", "5003173", "5003637"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			var opts []microsoft.ExpandOption
+			if len(tt.args.datasources) > 0 {
+				opts = append(opts, microsoft.WithExpandDataSources(tt.args.datasources))
+			}
+			got, err := microsoft.ExpandKBs(s.Storage(), tt.args.applied, tt.args.unapplied, opts...)
+			if err != nil {
+				t.Fatalf("ExpandKBs() unexpected error: %v", err)
+			}
+
+			less := func(a, b string) bool { return a < b }
+			if diff := cmp.Diff(tt.wantCovered, got.Covered, cmpopts.SortSlices(less)); diff != "" {
+				t.Errorf("ExpandKBs() covered (-expected +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantUnapplied, got.Unapplied, cmpopts.SortSlices(less)); diff != "" {
+				t.Errorf("ExpandKBs() unapplied (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestPartitionKBIDsByReleases_MultiRelease(t *testing.T) {
+	type args struct {
+		kbs      []string
+		releases []string
+	}
+	tests := []struct {
+		name        string
+		fixture     string
+		config      session.Config
+		args        args
+		wantKept    []string
+		wantDropped []string
+	}{
+		{
+			name:    "empty releases keeps everything",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:      []string{"9000001", "9000002"},
+				releases: nil,
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name:    "single release matches both KBs",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 10 Version 21H2 for x64-based Systems"},
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name:    "single release matches only one KB",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows Server 2012 R2"},
+			},
+			wantKept:    []string{"9000001"},
+			wantDropped: []string{"9000002"},
+		},
+		{
+			name:    "two releases keep both KBs via union semantics",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs: []string{"9000001", "9000002"},
+				releases: []string{
+					"Windows Server 2012 R2",
+					"Windows 10 Version 21H2 for ARM64-based Systems",
+				},
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name:    "release that matches none drops everything",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 11 Version 23H2 for x64-based Systems"},
+			},
+			wantKept:    []string{},
+			wantDropped: []string{"9000001", "9000002"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			gotKept, gotDropped, err := microsoft.PartitionKBIDsByReleases(s.Storage(), tt.args.kbs, tt.args.releases)
+			if err != nil {
+				t.Fatalf("PartitionKBIDsByReleases() unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tt.wantKept, gotKept); diff != "" {
+				t.Errorf("PartitionKBIDsByReleases() kept (-expected +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantDropped, gotDropped); diff != "" {
+				t.Errorf("PartitionKBIDsByReleases() dropped (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
