@@ -1,0 +1,22 @@
+{
+  "kb_id": "8000003",
+  "url": "https://support.microsoft.com/help/8000003",
+  "updates": [
+    {
+      "update_id": "00000000-0000-0000-0000-000000008003",
+      "title": "2024-03 Update for Windows 10 Version 2004 for x64-based Systems (KB8000003)",
+      "products": [
+        "Windows10"
+      ],
+      "supersedes": [
+        {
+          "kb_id": "8000002",
+          "update_id": "00000000-0000-0000-0000-000000008002"
+        }
+      ]
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-msuc"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "kb_id": "8000001",
+  "url": "https://support.microsoft.com/help/8000001",
+  "updates": [
+    {
+      "update_id": "00000000-0000-0000-0000-000000008001",
+      "title": "2024-01 Update for Windows 10 Version 2004 for x64-based Systems (KB8000001)",
+      "products": [
+        "Windows10"
+      ]
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-msuc"
+  }
+}
