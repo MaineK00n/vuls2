@@ -14,12 +14,61 @@ import (
 	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
+
+// ExpandResult describes how an input set of Applied/Unapplied KBs is
+// expanded through Microsoft KB supersession chains for vulnerability
+// detection. It carries the inputs, the discovered edges (with data-source
+// attribution), and the final classification used by Detect.
+type ExpandResult struct {
+	Inputs    ExpandInputs
+	Covered   []string
+	Unapplied []string
+	Visited   []string
+	// Edges maps a "from" KB ID (the superseded KB) to the list of edges
+	// pointing at superseding KBs, each annotated with the data source and
+	// whether the edge was reported at KB level or per-update level.
+	Edges map[string][]ExpandEdge
+	// Conflicts lists KBs that appeared in both the Applied and Unapplied
+	// inputs. Per the classifier policy, conflicts are treated as Unapplied.
+	Conflicts []string
+}
+
+type ExpandInputs struct {
+	Applied   []string
+	Unapplied []string
+}
+
+type ExpandEdgeLevel int
+
+const (
+	ExpandEdgeLevelKB ExpandEdgeLevel = iota
+	ExpandEdgeLevelUpdate
+)
+
+func (l ExpandEdgeLevel) String() string {
+	switch l {
+	case ExpandEdgeLevelKB:
+		return "KB-level"
+	case ExpandEdgeLevelUpdate:
+		return "Update-level"
+	default:
+		return "unknown"
+	}
+}
+
+type ExpandEdge struct {
+	To       string
+	Source   sourceTypes.SourceID
+	Level    ExpandEdgeLevel
+	UpdateID string
+}
 
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
 	// Collect product names as index keys from installed packages and KB data.
@@ -184,6 +233,18 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 }
 
 func classifyKBs(s session.Storage, applied []string, unapplied []string) (coveredKBs, unappliedKBs []string, _ error) {
+	r, err := ExpandKBs(s, applied, unapplied)
+	if err != nil {
+		return nil, nil, err
+	}
+	return r.Covered, r.Unapplied, nil
+}
+
+// ExpandKBs walks Microsoft KB supersession chains starting from the given
+// Applied and Unapplied inputs and returns the full classification result,
+// including per-edge data-source attribution for diagnostic use. The
+// classification logic is identical to what Detect uses internally.
+func ExpandKBs(s session.Storage, applied []string, unapplied []string) (*ExpandResult, error) {
 	// Prefer unapplied when a KB appears in both lists because:
 	// 1. QueryHistory may record a past successful install (Operation=1, ResultCode=2) even after
 	//    the update was rolled back or never fully applied, causing a false "applied" entry.
@@ -201,16 +262,25 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 		delete(appliedSet, kb)
 	}
 
-	// Collect all reachable KBs by traversing SupersededBy chains forward
-	// and Supersedes chains backward from both Applied and Unapplied, and
-	// build a reverse edge map (superseding KB → list of superseded KBs) for
-	// the coverage BFS. Walking both directions makes the graph discovery
-	// robust against incomplete SupersededBy data: even if old→new links are
-	// missing, new→old Supersedes links can bridge the gap. Edges are sourced
-	// from both KB-level fields (e.g. CVRF) and per-Update fields (e.g. MSUC,
-	// wsusscn2) to maximize coverage across data sources.
+	// build a forward edge map keyed by the superseded KB ID (so the same
+	// edge can be inspected later, with its data-source attribution
+	// preserved, by the kb-expand command). Walking both directions makes
+	// the graph discovery robust against incomplete SupersededBy data:
+	// even if old→new links are missing, new→old Supersedes links can
+	// bridge the gap. Edges are sourced from both KB-level fields (e.g.
+	// CVRF) and per-Update fields (e.g. MSUC, wsusscn2) to maximize
+	// coverage across data sources.
 	visited := make(map[string]struct{})
-	revEdges := make(map[string][]string)
+	edges := make(map[string][]ExpandEdge)
+
+	addEdge := func(from string, e ExpandEdge) {
+		for _, existing := range edges[from] {
+			if existing == e {
+				return
+			}
+		}
+		edges[from] = append(edges[from], e)
+	}
 
 	var walk func(kbid string) error
 	walk = func(kbid string) error {
@@ -227,13 +297,13 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 			return errors.Wrapf(err, "get microsoft kb %s", kbid)
 		}
 
-		for _, kb := range m {
+		for srcID, kb := range m {
 			// Forward direction: this KB is superseded by newer KBs.
 			for _, sup := range kb.SupersededBy {
 				if sup.KBID == "" {
 					continue
 				}
-				revEdges[sup.KBID] = append(revEdges[sup.KBID], kbid)
+				addEdge(kbid, ExpandEdge{To: sup.KBID, Source: srcID, Level: ExpandEdgeLevelKB})
 				if err := walk(sup.KBID); err != nil {
 					return errors.Wrapf(err, "walk supersession from KB %s to %s", kbid, sup.KBID)
 				}
@@ -243,19 +313,21 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 					if sup.KBID == "" {
 						continue
 					}
-					revEdges[sup.KBID] = append(revEdges[sup.KBID], kbid)
+					addEdge(kbid, ExpandEdge{To: sup.KBID, Source: srcID, Level: ExpandEdgeLevelUpdate, UpdateID: u.UpdateID})
 					if err := walk(sup.KBID); err != nil {
 						return errors.Wrapf(err, "walk supersession from KB %s to %s (via update)", kbid, sup.KBID)
 					}
 				}
 			}
 
-			// Backward direction: this KB supersedes older KBs.
+			// Backward direction: this KB supersedes older KBs. Flip the
+			// edge direction to match our forward-keyed edges map (keyed
+			// by superseded KB ID).
 			for _, sub := range kb.Supersedes {
 				if sub.KBID == "" {
 					continue
 				}
-				revEdges[kbid] = append(revEdges[kbid], sub.KBID)
+				addEdge(sub.KBID, ExpandEdge{To: kbid, Source: srcID, Level: ExpandEdgeLevelKB})
 				if err := walk(sub.KBID); err != nil {
 					return errors.Wrapf(err, "walk supersedes from KB %s to %s", kbid, sub.KBID)
 				}
@@ -265,7 +337,7 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 					if sub.KBID == "" {
 						continue
 					}
-					revEdges[kbid] = append(revEdges[kbid], sub.KBID)
+					addEdge(sub.KBID, ExpandEdge{To: kbid, Source: srcID, Level: ExpandEdgeLevelUpdate, UpdateID: u.UpdateID})
 					if err := walk(sub.KBID); err != nil {
 						return errors.Wrapf(err, "walk supersedes from KB %s to %s (via update)", kbid, sub.KBID)
 					}
@@ -278,12 +350,26 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 
 	for _, kbid := range applied {
 		if err := walk(kbid); err != nil {
-			return nil, nil, errors.Wrapf(err, "walk supersession chain from applied KB: %s", kbid)
+			return nil, errors.Wrapf(err, "walk supersession chain from applied KB: %s", kbid)
 		}
 	}
 	for _, kbid := range unapplied {
 		if err := walk(kbid); err != nil {
-			return nil, nil, errors.Wrapf(err, "walk supersession chain from unapplied KB: %s", kbid)
+			return nil, errors.Wrapf(err, "walk supersession chain from unapplied KB: %s", kbid)
+		}
+	}
+
+	// Build the reverse adjacency (superseding → list of superseded) used
+	// by the coverage BFS, deduped on the (from, to) pair.
+	revAdj := make(map[string][]string)
+	for from, es := range edges {
+		seen := make(map[string]struct{}, len(es))
+		for _, e := range es {
+			if _, ok := seen[e.To]; ok {
+				continue
+			}
+			seen[e.To] = struct{}{}
+			revAdj[e.To] = append(revAdj[e.To], from)
 		}
 	}
 
@@ -299,7 +385,7 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 	}
 	for head := 0; head < len(queue); head++ {
 		cur := queue[head]
-		for _, pred := range revEdges[cur] {
+		for _, pred := range revAdj[cur] {
 			if _, ok := covered[pred]; !ok {
 				covered[pred] = struct{}{}
 				queue = append(queue, pred)
@@ -311,6 +397,7 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 	//   - not covered by any applied superseding KB, or
 	//   - removed from appliedSet by unapplied-preference (always treated as
 	//     unapplied regardless of coverage, to honour the scanner's signal).
+	var coveredKBs, unappliedKBs []string
 	for kbid := range visited {
 		if _, ok := covered[kbid]; ok {
 			if _, ok := removedFromApplied[kbid]; !ok {
@@ -324,7 +411,28 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 		coveredKBs = append(coveredKBs, kbid)
 	}
 
-	return coveredKBs, unappliedKBs, nil
+	visitedKBs := make([]string, 0, len(visited))
+	for kbid := range visited {
+		visitedKBs = append(visitedKBs, kbid)
+	}
+	slices.Sort(visitedKBs)
+	slices.Sort(coveredKBs)
+	slices.Sort(unappliedKBs)
+
+	conflicts := make([]string, 0, len(removedFromApplied))
+	for kbid := range removedFromApplied {
+		conflicts = append(conflicts, kbid)
+	}
+	slices.Sort(conflicts)
+
+	return &ExpandResult{
+		Inputs:    ExpandInputs{Applied: applied, Unapplied: unapplied},
+		Covered:   coveredKBs,
+		Unapplied: unappliedKBs,
+		Visited:   visitedKBs,
+		Edges:     edges,
+		Conflicts: conflicts,
+	}, nil
 }
 
 // forwardSupersedersFromApplied returns the KBs reachable from applied via
@@ -405,19 +513,28 @@ func forwardSupersedersFromApplied(s session.Storage, applied []string) ([]strin
 // the given release. When release is empty, all KBs pass through unchanged.
 // KBs not found in the DB are kept to avoid false negatives.
 func filterKBIDsByRelease(s session.Storage, kbs []string, release string) ([]string, error) {
+	kept, _, err := PartitionKBIDsByRelease(s, kbs, release)
+	return kept, err
+}
+
+// PartitionKBIDsByRelease splits kbs into those whose products are relevant
+// to the release (kept) and those whose products are all unrelated (dropped).
+// When release is empty, all KBs are kept. KBs not found in the database are
+// kept (to avoid false negatives) and are not reported in dropped.
+func PartitionKBIDsByRelease(s session.Storage, kbs []string, release string) (kept, dropped []string, _ error) {
 	if release == "" {
-		return kbs, nil
+		return kbs, nil, nil
 	}
 
-	filtered := make([]string, 0, len(kbs))
+	kept = make([]string, 0, len(kbs))
 	for _, kbid := range kbs {
 		m, err := s.GetMicrosoftKB(kbid)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
-				filtered = append(filtered, kbid)
+				kept = append(kept, kbid)
 				continue
 			}
-			return nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
+			return nil, nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
 		}
 		if func() bool {
 			for _, kb := range m {
@@ -429,10 +546,12 @@ func filterKBIDsByRelease(s session.Storage, kbs []string, release string) ([]st
 			}
 			return false
 		}() {
-			filtered = append(filtered, kbid)
+			kept = append(kept, kbid)
+		} else {
+			dropped = append(dropped, kbid)
 		}
 	}
-	return filtered, nil
+	return kept, dropped, nil
 }
 
 func normalizeMicrosoftPackageName(name, release string) []string {

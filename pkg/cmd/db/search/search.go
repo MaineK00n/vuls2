@@ -31,6 +31,7 @@ func NewCmd() *cobra.Command {
 		newPackageCmd(),
 		newKBInfoCmd(),
 		newKBVulnCmd(),
+		newKBExpandCmd(),
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
@@ -328,6 +329,57 @@ func newKBVulnCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., CVE-2024-4367)")
 
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newKBExpandCmd() *cobra.Command {
+	options := struct {
+		dbtype    utilflag.DBType
+		dbpath    string
+		applied   []string
+		unapplied []string
+		release   string
+		explain   bool
+		debug     bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "kb-expand",
+		Short: "expand input Microsoft KBs into covered/unapplied via supersession chains",
+		Example: heredoc.Doc(`
+		$ vuls db search kb-expand --applied 5034441,5034122 --unapplied 5036893
+		$ vuls db search kb-expand --applied 5034441 --explain
+		$ vuls db search kb-expand --applied 5034441 --release "Windows 10 Version 22H2 for x64-based Systems" --explain
+		`),
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if len(options.applied) == 0 && len(options.unapplied) == 0 {
+				return errors.New("at least one of --applied or --unapplied is required")
+			}
+			if err := db.SearchKBExpand(options.applied, options.unapplied, options.release, options.explain,
+				db.WithDBType(options.dbtype.String()),
+				db.WithDBPath(options.dbpath),
+				db.WithDebug(options.debug),
+			); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().StringSliceVarP(&options.applied, "applied", "", options.applied, "applied KB IDs (comma-separated or repeat the flag)")
+	cmd.Flags().StringSliceVarP(&options.unapplied, "unapplied", "", options.unapplied, "unapplied KB IDs (comma-separated or repeat the flag)")
+	cmd.Flags().StringVarP(&options.release, "release", "", options.release, "host release (e.g., \"Windows 10 Version 22H2 for x64-based Systems\"); when set, also reports KBs dropped by the release filter")
+	cmd.Flags().BoolVarP(&options.explain, "explain", "", options.explain, "render the supersession chains as a tree with data-source attribution instead of JSON")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

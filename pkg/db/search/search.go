@@ -2,6 +2,8 @@ package search
 
 import (
 	"encoding/json/v2"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
+	"github.com/MaineK00n/vuls2/pkg/detect/ospkg/microsoft"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
@@ -634,4 +637,331 @@ func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...
 	}
 
 	return nil
+}
+
+// KBExpandResult is the JSON-serialisable form of a kb-expand run.
+type KBExpandResult struct {
+	Inputs                      KBExpandInputs `json:"inputs"`
+	Covered                     []string       `json:"covered"`
+	Unapplied                   []string       `json:"unapplied"`
+	Conflicts                   []string       `json:"conflicts,omitempty"`
+	Release                     string         `json:"release,omitempty"`
+	CoveredAfterReleaseFilter   []string       `json:"covered_after_release_filter,omitempty"`
+	UnappliedAfterReleaseFilter []string       `json:"unapplied_after_release_filter,omitempty"`
+	DroppedByRelease            *KBExpandDrop  `json:"dropped_by_release,omitempty"`
+}
+
+type KBExpandInputs struct {
+	Applied   []string `json:"applied,omitempty"`
+	Unapplied []string `json:"unapplied,omitempty"`
+}
+
+type KBExpandDrop struct {
+	Covered   []string `json:"covered,omitempty"`
+	Unapplied []string `json:"unapplied,omitempty"`
+}
+
+// SearchKBExpand expands the given Applied/Unapplied KB inputs through
+// Microsoft KB supersession chains using the same logic detect uses, and
+// reports the resulting Covered/Unapplied classification. When release is
+// non-empty, also applies the same release filter detect applies and reports
+// what was dropped. When explain is true, renders a human-readable tree
+// instead of JSON.
+func SearchKBExpand(applied []string, unapplied []string, release string, explain bool, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Expand Microsoft KB", "applied", applied, "unapplied", unapplied)
+	exp, err := microsoft.ExpandKBs(s.Storage(), applied, unapplied)
+	if err != nil {
+		return errors.Wrap(err, "expand microsoft kb")
+	}
+
+	var (
+		coveredAfter, unappliedAfter     []string
+		coveredDropped, unappliedDropped []string
+	)
+	if release != "" {
+		coveredAfter, coveredDropped, err = microsoft.PartitionKBIDsByRelease(s.Storage(), exp.Covered, release)
+		if err != nil {
+			return errors.Wrap(err, "partition covered KBs by release")
+		}
+		unappliedAfter, unappliedDropped, err = microsoft.PartitionKBIDsByRelease(s.Storage(), exp.Unapplied, release)
+		if err != nil {
+			return errors.Wrap(err, "partition unapplied KBs by release")
+		}
+	}
+
+	if explain {
+		return printKBExpandTree(os.Stdout, exp, release, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped)
+	}
+
+	out := KBExpandResult{
+		Inputs:    KBExpandInputs{Applied: applied, Unapplied: unapplied},
+		Covered:   exp.Covered,
+		Unapplied: exp.Unapplied,
+		Conflicts: exp.Conflicts,
+	}
+	if release != "" {
+		out.Release = release
+		out.CoveredAfterReleaseFilter = coveredAfter
+		out.UnappliedAfterReleaseFilter = unappliedAfter
+		if len(coveredDropped) > 0 || len(unappliedDropped) > 0 {
+			out.DroppedByRelease = &KBExpandDrop{
+				Covered:   coveredDropped,
+				Unapplied: unappliedDropped,
+			}
+		}
+	}
+	if err := json.MarshalWrite(os.Stdout, out); err != nil {
+		return errors.Wrap(err, "encode kb-expand result")
+	}
+	return nil
+}
+
+func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, release string, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped []string) error {
+	appliedSet := toSet(exp.Inputs.Applied)
+	unappliedSet := toSet(exp.Inputs.Unapplied)
+	coveredSet := toSet(exp.Covered)
+	resultUnappliedSet := toSet(exp.Unapplied)
+
+	classify := func(kbid string) string {
+		var tags []string
+		_, isAppliedInput := appliedSet[kbid]
+		_, isUnappliedInput := unappliedSet[kbid]
+		switch {
+		case isAppliedInput && isUnappliedInput:
+			tags = append(tags, "input:applied", "input:unapplied", "conflict→unapplied")
+		case isAppliedInput:
+			tags = append(tags, "input:applied")
+		case isUnappliedInput:
+			tags = append(tags, "input:unapplied")
+		default:
+			tags = append(tags, "discovered")
+		}
+		if _, ok := coveredSet[kbid]; ok {
+			tags = append(tags, "covered")
+		}
+		if _, ok := resultUnappliedSet[kbid]; ok {
+			tags = append(tags, "unapplied")
+		}
+		return fmt.Sprintf("[%s]", joinComma(tags))
+	}
+
+	if _, err := fmt.Fprintln(w, "Inputs:"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  Applied:   %s\n", joinSpace(exp.Inputs.Applied)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  Unapplied: %s\n", joinSpace(exp.Inputs.Unapplied)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintln(w, "Conflicts (in both Applied & Unapplied → treated as Unapplied):"); err != nil {
+		return err
+	}
+	if len(exp.Conflicts) == 0 {
+		if _, err := fmt.Fprintln(w, "  (none)"); err != nil {
+			return err
+		}
+	} else {
+		for _, kb := range exp.Conflicts {
+			if _, err := fmt.Fprintf(w, "  %s\n", kb); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintln(w, "Supersession chains:"); err != nil {
+		return err
+	}
+
+	roots := make([]string, 0, len(exp.Inputs.Applied)+len(exp.Inputs.Unapplied))
+	rootSeen := make(map[string]struct{})
+	for _, kb := range exp.Inputs.Applied {
+		if _, ok := rootSeen[kb]; ok {
+			continue
+		}
+		rootSeen[kb] = struct{}{}
+		roots = append(roots, kb)
+	}
+	for _, kb := range exp.Inputs.Unapplied {
+		if _, ok := rootSeen[kb]; ok {
+			continue
+		}
+		rootSeen[kb] = struct{}{}
+		roots = append(roots, kb)
+	}
+
+	// emittedSubtree tracks nodes whose subtrees have already been printed
+	// in this run. The first occurrence of a KB renders fully; subsequent
+	// occurrences (across siblings or from later roots) are collapsed with
+	// "(→ see above)" to keep the tree readable in the presence of multiple
+	// data sources or supersession cycles.
+	emittedSubtree := make(map[string]struct{})
+	for _, root := range roots {
+		if _, err := fmt.Fprintf(w, "\n  %s  %s\n", root, classify(root)); err != nil {
+			return err
+		}
+		emittedSubtree[root] = struct{}{}
+		if err := writeKBExpandSubtree(w, exp, classify, root, "  ", emittedSubtree); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "Result:"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  Covered:   %s\n", joinSpace(exp.Covered)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "  Unapplied: %s\n", joinSpace(exp.Unapplied)); err != nil {
+		return err
+	}
+
+	if release != "" {
+		if _, err := fmt.Fprintln(w); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "Release filter (%q):\n", release); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  Covered after filter:   %s\n", joinSpace(coveredAfter)); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "  Unapplied after filter: %s\n", joinSpace(unappliedAfter)); err != nil {
+			return err
+		}
+		dropped := append(append([]string{}, coveredDropped...), unappliedDropped...)
+		slices.Sort(dropped)
+		dropped = slices.Compact(dropped)
+		if len(dropped) == 0 {
+			if _, err := fmt.Fprintln(w, "  Dropped:                (none)"); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "  Dropped:                %s\n", joinSpace(dropped)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func writeKBExpandSubtree(w io.Writer, exp *microsoft.ExpandResult, classify func(string) string, from string, indent string, emittedSubtree map[string]struct{}) error {
+	edges := exp.Edges[from]
+	if len(edges) == 0 {
+		return nil
+	}
+	for i, e := range edges {
+		last := i == len(edges)-1
+		branch := "├─"
+		nextIndent := indent + "│   "
+		if last {
+			branch = "└─"
+			nextIndent = indent + "    "
+		}
+		var srcLabel string
+		switch e.Level {
+		case microsoft.ExpandEdgeLevelKB:
+			srcLabel = fmt.Sprintf("%s, KB-level", e.Source)
+		case microsoft.ExpandEdgeLevelUpdate:
+			srcLabel = fmt.Sprintf("%s, Update %s", e.Source, e.UpdateID)
+		default:
+			srcLabel = string(e.Source)
+		}
+		if _, ok := emittedSubtree[e.To]; ok {
+			if _, err := fmt.Fprintf(w, "%s%s [%s] %s  (→ see above)\n", indent, branch, srcLabel, e.To); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s%s [%s] %s  %s\n", indent, branch, srcLabel, e.To, classify(e.To)); err != nil {
+			return err
+		}
+		emittedSubtree[e.To] = struct{}{}
+		if err := writeKBExpandSubtree(w, exp, classify, e.To, nextIndent, emittedSubtree); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func toSet(ss []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(ss))
+	for _, s := range ss {
+		m[s] = struct{}{}
+	}
+	return m
+}
+
+func joinSpace(ss []string) string {
+	if len(ss) == 0 {
+		return "(none)"
+	}
+	out := ""
+	for i, s := range ss {
+		if i > 0 {
+			out += " "
+		}
+		out += s
+	}
+	return out
+}
+
+func joinComma(ss []string) string {
+	out := ""
+	for i, s := range ss {
+		if i > 0 {
+			out += ", "
+		}
+		out += s
+	}
+	return out
 }
