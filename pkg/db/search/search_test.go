@@ -40,12 +40,13 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"(none)",
 				"Supersession chains:",
 				"5000802  [input:applied, covered]",
-				"└─ [microsoft-cvrf, KB-level] 5001330  [discovered, unapplied]",
+				"    Superseded by:",
+				"      └─ [microsoft-cvrf, KB-level] 5001330  [discovered, unapplied]",
 				"Result:",
 				"Covered:   5000802",
 				"Unapplied: 5001330",
 			},
-			wantNotContains: []string{"Release filter", "Data sources:"},
+			wantNotContains: []string{"Release filter", "Data sources:", "    Supersedes:"},
 		},
 		{
 			name: "applied input that is also unapplied input is flagged conflict",
@@ -75,6 +76,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 				},
 			},
 			wantContains: []string{
+				"    Superseded by:",
 				"[microsoft-cvrf, KB-level] 5001330",
 				"[microsoft-msuc, Update abc-123] 5001330",
 				"(→ see above)",
@@ -131,6 +133,59 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 		},
 		{
+			name: "newest input with Supersedes-only chain shows backward section",
+			exp: &microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"7000004"}},
+				Covered:   []string{"7000002", "7000003", "7000004"},
+				Unapplied: nil,
+				Edges: map[string][]microsoft.ExpandEdge{
+					"7000003": {{To: "7000004", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"7000002": {{To: "7000003", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+			},
+			wantContains: []string{
+				"7000004  [input:applied, covered]",
+				"    Supersedes:",
+				"      └─ [microsoft-cvrf, KB-level] 7000003  [discovered, covered]",
+				"          └─ [microsoft-cvrf, KB-level] 7000002  [discovered, covered]",
+			},
+			wantNotContains: []string{"    Superseded by:"},
+		},
+		{
+			name: "intermediate input renders both Superseded by and Supersedes sections",
+			exp: &microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"7000003"}},
+				Covered:   []string{"7000002", "7000003"},
+				Unapplied: []string{"7000004"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"7000003": {{To: "7000004", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"7000002": {{To: "7000003", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+			},
+			wantContains: []string{
+				"7000003  [input:applied, covered]",
+				"    Superseded by:",
+				"      └─ [microsoft-cvrf, KB-level] 7000004  [discovered, unapplied]",
+				"    Supersedes:",
+				"      └─ [microsoft-cvrf, KB-level] 7000002  [discovered, covered]",
+			},
+		},
+		{
+			name: "input KB unknown to DB renders as a leaf with no sections",
+			exp: &microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"9999999"}},
+				Covered:   []string{"9999999"},
+				Unapplied: nil,
+			},
+			wantContains: []string{
+				"9999999  [input:applied, covered]",
+			},
+			wantNotContains: []string{
+				"    Superseded by:",
+				"    Supersedes:",
+			},
+		},
+		{
 			name: "cycle in supersession is broken with see-above",
 			exp: &microsoft.ExpandResult{
 				Inputs:    microsoft.ExpandInputs{Applied: []string{"A"}},
@@ -143,7 +198,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 			wantContains: []string{
 				"A  [input:applied, covered]",
-				"└─ [microsoft-cvrf, KB-level] B  [discovered, covered]",
+				"      └─ [microsoft-cvrf, KB-level] B  [discovered, covered]",
 				"(→ see above)",
 			},
 		},

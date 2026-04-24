@@ -861,19 +861,61 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []s
 		roots = append(roots, kb)
 	}
 
+	// incoming is the reverse of exp.Edges: incoming[X] lists edges whose To
+	// is X, with To rewritten to point at the original "from" KB. Walking
+	// incoming from a root surfaces the older KBs that root supersedes
+	// (either via Supersedes on root, or via SupersededBy on those older
+	// KBs). Without this, an input KB that sits at the newer end of its
+	// chain would render with no children even though it covers older KBs.
+	incoming := make(map[string][]microsoft.ExpandEdge, len(exp.Edges))
+	for from, es := range exp.Edges {
+		for _, e := range es {
+			incoming[e.To] = append(incoming[e.To], microsoft.ExpandEdge{
+				To:       from,
+				Source:   e.Source,
+				Level:    e.Level,
+				UpdateID: e.UpdateID,
+			})
+		}
+	}
+
 	// emittedSubtree tracks nodes whose subtrees have already been printed
 	// in this run. The first occurrence of a KB renders fully; subsequent
-	// occurrences (across siblings or from later roots) are collapsed with
-	// "(→ see above)" to keep the tree readable in the presence of multiple
-	// data sources or supersession cycles.
+	// occurrences (across siblings, between forward/backward sections, or
+	// from later roots) are collapsed with "(→ see above)" to keep the
+	// tree readable in the presence of multiple data sources or
+	// supersession cycles.
 	emittedSubtree := make(map[string]struct{})
 	for _, root := range roots {
 		if _, err := fmt.Fprintf(w, "\n  %s  %s\n", root, classify(root)); err != nil {
 			return err
 		}
 		emittedSubtree[root] = struct{}{}
-		if err := writeKBExpandSubtree(w, exp, classify, root, "  ", emittedSubtree); err != nil {
-			return err
+
+		hasForward := len(exp.Edges[root]) > 0
+		hasBackward := len(incoming[root]) > 0
+
+		// When a root has neither direction (e.g., the input KB is unknown
+		// to the database), keep the output minimal: just the root line.
+		if !hasForward && !hasBackward {
+			continue
+		}
+
+		if hasForward {
+			if _, err := fmt.Fprintln(w, "    Superseded by:"); err != nil {
+				return err
+			}
+			if err := writeKBExpandSubtree(w, exp.Edges, classify, root, "      ", emittedSubtree); err != nil {
+				return err
+			}
+		}
+		if hasBackward {
+			if _, err := fmt.Fprintln(w, "    Supersedes:"); err != nil {
+				return err
+			}
+			if err := writeKBExpandSubtree(w, incoming, classify, root, "      ", emittedSubtree); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -931,8 +973,14 @@ func formatReleases(releases []string) string {
 	return "[" + joinComma(parts) + "]"
 }
 
-func writeKBExpandSubtree(w io.Writer, exp *microsoft.ExpandResult, classify func(string) string, from string, indent string, emittedSubtree map[string]struct{}) error {
-	edges := exp.Edges[from]
+// writeKBExpandSubtree walks the adjacency map from the given node and
+// writes each reachable edge as a tree branch. The adjacency map can be
+// the forward map (exp.Edges) for the "Superseded by" view or the reverse
+// map for the "Supersedes" view; the rendering is identical because the
+// edge metadata (source, level, update id) describes the same logical
+// relationship regardless of direction.
+func writeKBExpandSubtree(w io.Writer, adj map[string][]microsoft.ExpandEdge, classify func(string) string, from string, indent string, emittedSubtree map[string]struct{}) error {
+	edges := adj[from]
 	if len(edges) == 0 {
 		return nil
 	}
@@ -963,7 +1011,7 @@ func writeKBExpandSubtree(w io.Writer, exp *microsoft.ExpandResult, classify fun
 			return err
 		}
 		emittedSubtree[e.To] = struct{}{}
-		if err := writeKBExpandSubtree(w, exp, classify, e.To, nextIndent, emittedSubtree); err != nil {
+		if err := writeKBExpandSubtree(w, adj, classify, e.To, nextIndent, emittedSubtree); err != nil {
 			return err
 		}
 	}
