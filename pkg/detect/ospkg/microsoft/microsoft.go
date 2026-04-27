@@ -153,7 +153,9 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 	// build a reverse edge map (superseding KB → list of superseded KBs) for
 	// the coverage BFS. Walking both directions makes the graph discovery
 	// robust against incomplete SupersededBy data: even if old→new links are
-	// missing, new→old Supersedes links can bridge the gap.
+	// missing, new→old Supersedes links can bridge the gap. Edges are sourced
+	// from both KB-level fields (e.g. CVRF) and per-Update fields (e.g. MSUC,
+	// wsusscn2) to maximize coverage across data sources.
 	visited := make(map[string]struct{})
 	revEdges := make(map[string][]string)
 
@@ -203,6 +205,17 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 				revEdges[kbid] = append(revEdges[kbid], sub.KBID)
 				if err := walk(sub.KBID); err != nil {
 					return errors.Wrapf(err, "walk supersedes from KB %s to %s", kbid, sub.KBID)
+				}
+			}
+			for _, u := range kb.Updates {
+				for _, sub := range u.Supersedes {
+					if sub.KBID == "" {
+						continue
+					}
+					revEdges[kbid] = append(revEdges[kbid], sub.KBID)
+					if err := walk(sub.KBID); err != nil {
+						return errors.Wrapf(err, "walk supersedes from KB %s to %s (via update)", kbid, sub.KBID)
+					}
 				}
 			}
 		}

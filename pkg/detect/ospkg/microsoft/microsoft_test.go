@@ -658,6 +658,21 @@ func Test_classifyKBs(t *testing.T) {
 			wantCovered:   []string{"5000802", "5001330", "5003173", "5003637"},
 			wantUnapplied: nil,
 		},
+		{
+			name:    "per-update supersedes (MSUC) covers chain",
+			fixture: "testdata/fixtures/microsoft-update-supersedes",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:   []string{"8000003"},
+				unapplied: nil,
+			},
+			wantCovered:   []string{"8000001", "8000002", "8000003"},
+			wantUnapplied: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
