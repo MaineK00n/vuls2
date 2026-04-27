@@ -13,6 +13,9 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
+	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -45,6 +48,12 @@ const (
 // boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
 
 // boltdb: microsoft:kb:<KB ID> -> microsoftkbTypes.KB
+
+// boltdb: attack:<Attack ID> -> attackTypes.Attack
+
+// boltdb: capec:<CAPEC ID> -> capecTypes.CAPEC
+
+// boltdb: cwe:<CWE ID> -> cweTypes.CWE
 
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
@@ -210,6 +219,32 @@ func (c *Connection) Put(root string) error {
 			return nil
 		}); err != nil {
 			return errors.Wrap(err, "put microsoftkb batch")
+		}
+	}
+
+	for _, spec := range []struct {
+		dir string
+		put func(*bolt.Tx, string) error
+	}{
+		{dir: "attack", put: putAttackFile},
+		{dir: "capec", put: putCAPECFile},
+		{dir: "cwe", put: putCWEFile},
+	} {
+		paths, err := collectJSONPaths(filepath.Join(root, spec.dir))
+		if err != nil {
+			return errors.Wrapf(err, "collect %s paths", spec.dir)
+		}
+		for batch := range slices.Chunk(paths, batchSize) {
+			if err := c.conn.Update(func(tx *bolt.Tx) error {
+				for _, p := range batch {
+					if err := spec.put(tx, p); err != nil {
+						return errors.Wrapf(err, "put %s file %s", spec.dir, p)
+					}
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "put %s batch", spec.dir)
+			}
 		}
 	}
 
@@ -615,6 +650,183 @@ func putDataSourceFile(tx *bolt.Tx, path string) error {
 	}
 
 	return nil
+}
+
+func putAttackFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var a attackTypes.Attack
+	if err := json.UnmarshalRead(f, &a); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if a.ID == "" {
+		return nil
+	}
+
+	b, err := tx.CreateBucketIfNotExists([]byte("attack"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "attack")
+	}
+
+	bs, err := util.Marshal(a)
+	if err != nil {
+		return errors.Wrapf(err, "marshal attack %s", a.ID)
+	}
+
+	if err := b.Put([]byte(a.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("attack -> %s", a.ID))
+	}
+
+	return nil
+}
+
+func putCAPECFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var c capecTypes.CAPEC
+	if err := json.UnmarshalRead(f, &c); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if c.ID == "" {
+		return nil
+	}
+
+	b, err := tx.CreateBucketIfNotExists([]byte("capec"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "capec")
+	}
+
+	bs, err := util.Marshal(c)
+	if err != nil {
+		return errors.Wrapf(err, "marshal capec %s", c.ID)
+	}
+
+	if err := b.Put([]byte(c.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("capec -> %s", c.ID))
+	}
+
+	return nil
+}
+
+func putCWEFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var w cweTypes.CWE
+	if err := json.UnmarshalRead(f, &w); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if w.ID == "" {
+		return nil
+	}
+
+	b, err := tx.CreateBucketIfNotExists([]byte("cwe"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "cwe")
+	}
+
+	bs, err := util.Marshal(w)
+	if err != nil {
+		return errors.Wrapf(err, "marshal cwe %s", w.ID)
+	}
+
+	if err := b.Put([]byte(w.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("cwe -> %s", w.ID))
+	}
+
+	return nil
+}
+
+func (c *Connection) GetAttack(id string) (*attackTypes.Attack, error) {
+	if id == "" {
+		return nil, nil
+	}
+	var a attackTypes.Attack
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("attack"))
+		if b == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", id))
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", id))
+		}
+		if err := util.Unmarshal(bs, &a); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s", id))
+		}
+		return nil
+	}); err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+			return nil, err
+		}
+		return nil, errors.WithStack(err)
+	}
+	return &a, nil
+}
+
+func (c *Connection) GetCAPEC(id string) (*capecTypes.CAPEC, error) {
+	if id == "" {
+		return nil, nil
+	}
+	var p capecTypes.CAPEC
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("capec"))
+		if b == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
+		}
+		if err := util.Unmarshal(bs, &p); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("capec -> %s", id))
+		}
+		return nil
+	}); err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+			return nil, err
+		}
+		return nil, errors.WithStack(err)
+	}
+	return &p, nil
+}
+
+func (c *Connection) GetCWE(id string) (*cweTypes.CWE, error) {
+	if id == "" {
+		return nil, nil
+	}
+	var w cweTypes.CWE
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("cwe"))
+		if b == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
+		}
+		if err := util.Unmarshal(bs, &w); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("cwe -> %s", id))
+		}
+		return nil
+	}); err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+			return nil, err
+		}
+		return nil, errors.WithStack(err)
+	}
+	return &w, nil
 }
 
 func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, error) {

@@ -10,6 +10,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"gorm.io/gorm"
 
+	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
+	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -42,6 +45,9 @@ type Storage interface {
 	GetIndex(ecosystemTypes.Ecosystem, string) ([]dataTypes.RootID, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
 	GetMicrosoftKB(string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error)
+	GetAttack(string) (*attackTypes.Attack, error)
+	GetCAPEC(string) (*capecTypes.CAPEC, error)
+	GetCWE(string) (*cweTypes.CWE, error)
 	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (datasourceTypes.DataSource, error)
 
