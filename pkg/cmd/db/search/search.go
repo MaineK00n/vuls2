@@ -2,6 +2,7 @@ package search
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
@@ -361,10 +362,22 @@ func newKBExpandCmd() *cobra.Command {
 		$ vuls db search kb-expand --applied 5034441 --datasource microsoft-cvrf --explain
 		`),
 		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			// Drop empty entries up front. StringSlice splits on commas
+			// and keeps empty tokens, so `--applied ,5000802` and
+			// `--applied ""` both produce `""` elements that ExpandKBs
+			// would treat as inert. Normalising here makes the
+			// required-input check operate on effective IDs and avoids
+			// "no input"-style output when the user accidentally passed
+			// only empty entries.
+			options.applied = slices.DeleteFunc(options.applied, func(s string) bool { return s == "" })
+			options.unapplied = slices.DeleteFunc(options.unapplied, func(s string) bool { return s == "" })
 			if len(options.applied) == 0 && len(options.unapplied) == 0 {
-				return errors.New("at least one of --applied or --unapplied is required")
+				return errors.New("at least one of --applied or --unapplied with a non-empty KB ID is required")
 			}
+			return nil
+		},
+		RunE: func(_ *cobra.Command, _ []string) error {
 			ds := make([]sourceTypes.SourceID, 0, len(options.datasources))
 			for _, d := range options.datasources {
 				ds = append(ds, sourceTypes.SourceID(d))

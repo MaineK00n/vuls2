@@ -1,6 +1,7 @@
 package search
 
 import (
+	"cmp"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -639,26 +641,33 @@ func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...
 	return nil
 }
 
-// KBExpandResult is the JSON-serialisable form of a kb-expand run.
+// KBExpandResult is the JSON-serialisable summary of a kb-expand run.
+// It carries the classification (Covered / Unapplied / Conflicts) plus
+// the post-filter views, but intentionally omits the per-edge data-source
+// attribution and per-KB products that ExpandKBs collects; those are
+// rendered only by --explain, which gives chain-walking diagnostics a
+// human-friendly tree without expanding the JSON surface.
+//
+// Fields are ordered by lifecycle: inputs, then filter inputs, then the
+// covered/unapplied results paired with their post-filter views. The
+// covered_after_filter / *_dropped_by_filter fields are populated only
+// when Releases (and optionally DataSources) was supplied; the Releases
+// and DataSources fields carry the filter context.
 type KBExpandResult struct {
-	Inputs                      KBExpandInputs         `json:"inputs"`
-	DataSources                 []sourceTypes.SourceID `json:"datasources,omitempty"`
-	Covered                     []string               `json:"covered"`
-	Unapplied                   []string               `json:"unapplied"`
-	Conflicts                   []string               `json:"conflicts,omitempty"`
-	Releases                    []string               `json:"releases,omitempty"`
-	CoveredAfterReleaseFilter   []string               `json:"covered_after_release_filter,omitempty"`
-	UnappliedAfterReleaseFilter []string               `json:"unapplied_after_release_filter,omitempty"`
-	DroppedByRelease            *KBExpandDrop          `json:"dropped_by_release,omitempty"`
+	Inputs                   KBExpandInputs         `json:"inputs"`
+	Conflicts                []string               `json:"conflicts,omitempty"`
+	DataSources              []sourceTypes.SourceID `json:"datasources,omitempty"`
+	Releases                 []string               `json:"releases,omitempty"`
+	Covered                  []string               `json:"covered"`
+	CoveredAfterFilter       []string               `json:"covered_after_filter,omitempty"`
+	CoveredDroppedByFilter   []string               `json:"covered_dropped_by_filter,omitempty"`
+	Unapplied                []string               `json:"unapplied"`
+	UnappliedAfterFilter     []string               `json:"unapplied_after_filter,omitempty"`
+	UnappliedDroppedByFilter []string               `json:"unapplied_dropped_by_filter,omitempty"`
 }
 
 type KBExpandInputs struct {
 	Applied   []string `json:"applied,omitempty"`
-	Unapplied []string `json:"unapplied,omitempty"`
-}
-
-type KBExpandDrop struct {
-	Covered   []string `json:"covered,omitempty"`
 	Unapplied []string `json:"unapplied,omitempty"`
 }
 
@@ -691,10 +700,11 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 	}
 
 	s, err := (&session.Config{
-		Type:    options.dbtype,
-		Path:    options.dbpath,
-		Debug:   options.debug,
-		Options: options.storageopts,
+		Type:      options.dbtype,
+		Path:      options.dbpath,
+		Debug:     options.debug,
+		Options:   options.storageopts,
+		WithCache: true,
 	}).New()
 	if err != nil {
 		return errors.Wrap(err, "new db connection")
@@ -704,6 +714,8 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 		return errors.Wrap(err, "open db connection")
 	}
 	defer s.Storage().Close()
+
+	defer s.Cache().Close()
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
@@ -719,11 +731,7 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 	}
 
 	slog.Info("Expand Microsoft KB", "applied", req.Applied, "unapplied", req.Unapplied, "datasources", req.DataSources)
-	expandOpts := []microsoft.ExpandOption{}
-	if len(req.DataSources) > 0 {
-		expandOpts = append(expandOpts, microsoft.WithExpandDataSources(req.DataSources))
-	}
-	exp, err := microsoft.ExpandKBs(s.Storage(), req.Applied, req.Unapplied, expandOpts...)
+	exp, err := microsoft.ExpandKBs(s.Storage(), req.Applied, req.Unapplied, req.DataSources)
 	if err != nil {
 		return errors.Wrap(err, "expand microsoft kb")
 	}
@@ -733,14 +741,34 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 		coveredDropped, unappliedDropped []string
 	)
 	if len(req.Releases) > 0 {
-		coveredAfter, coveredDropped, err = microsoft.PartitionKBIDsByReleases(s.Storage(), exp.Covered, req.Releases, expandOpts...)
-		if err != nil {
-			return errors.Wrap(err, "partition covered KBs by release")
-		}
-		unappliedAfter, unappliedDropped, err = microsoft.PartitionKBIDsByReleases(s.Storage(), exp.Unapplied, req.Releases, expandOpts...)
-		if err != nil {
-			return errors.Wrap(err, "partition unapplied KBs by release")
-		}
+		coveredAfter, coveredDropped = microsoft.PartitionKBIDsByReleases(exp.Products, exp.Covered, req.Releases)
+		unappliedAfter, unappliedDropped = microsoft.PartitionKBIDsByReleases(exp.Products, exp.Unapplied, req.Releases)
+	}
+
+	// Sort once here so the JSON and tree outputs are deterministic.
+	// ExpandKBs returns slices in map-iteration order and
+	// PartitionKBIDsByReleases preserves input order, so sorting after
+	// Partition leaves the kept/dropped slices consistent with their
+	// already-sorted source. The per-node edge slices in exp.Edges are
+	// also sorted because multi-source edges (e.g. cvrf + msuc both
+	// reporting the same SupersededBy) would otherwise render in storage
+	// map-iteration order.
+	slices.Sort(exp.Covered)
+	slices.Sort(exp.Unapplied)
+	slices.Sort(exp.Conflicts)
+	slices.Sort(coveredAfter)
+	slices.Sort(unappliedAfter)
+	slices.Sort(coveredDropped)
+	slices.Sort(unappliedDropped)
+	for _, es := range exp.Edges {
+		slices.SortFunc(es, func(a, b microsoft.ExpandEdge) int {
+			return cmp.Or(
+				cmp.Compare(a.To, b.To),
+				cmp.Compare(string(a.Source), string(b.Source)),
+				cmp.Compare(int(a.Level), int(b.Level)),
+				cmp.Compare(a.UpdateID, b.UpdateID),
+			)
+		})
 	}
 
 	if req.Explain {
@@ -756,14 +784,10 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 	}
 	if len(req.Releases) > 0 {
 		out.Releases = req.Releases
-		out.CoveredAfterReleaseFilter = coveredAfter
-		out.UnappliedAfterReleaseFilter = unappliedAfter
-		if len(coveredDropped) > 0 || len(unappliedDropped) > 0 {
-			out.DroppedByRelease = &KBExpandDrop{
-				Covered:   coveredDropped,
-				Unapplied: unappliedDropped,
-			}
-		}
+		out.CoveredAfterFilter = coveredAfter
+		out.UnappliedAfterFilter = unappliedAfter
+		out.CoveredDroppedByFilter = coveredDropped
+		out.UnappliedDroppedByFilter = unappliedDropped
 	}
 	if err := json.MarshalWrite(os.Stdout, out); err != nil {
 		return errors.Wrap(err, "encode kb-expand result")
@@ -772,12 +796,34 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 }
 
 func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []sourceTypes.SourceID, releases []string, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped []string) error {
+	classify := makeKBExpandClassifier(exp)
+
+	if err := writeKBExpandInputs(w, exp.Inputs, datasources); err != nil {
+		return errors.Wrap(err, "write inputs section")
+	}
+	if err := writeKBExpandConflicts(w, exp.Conflicts); err != nil {
+		return errors.Wrap(err, "write conflicts section")
+	}
+	if err := writeKBExpandChains(w, exp, classify); err != nil {
+		return errors.Wrap(err, "write supersession chains section")
+	}
+	if err := writeKBExpandResult(w, exp); err != nil {
+		return errors.Wrap(err, "write result section")
+	}
+	if len(releases) > 0 {
+		if err := writeKBExpandFilter(w, releases, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped); err != nil {
+			return errors.Wrap(err, "write release filter section")
+		}
+	}
+	return nil
+}
+
+func makeKBExpandClassifier(exp *microsoft.ExpandResult) func(string) string {
 	appliedSet := toSet(exp.Inputs.Applied)
 	unappliedSet := toSet(exp.Inputs.Unapplied)
 	coveredSet := toSet(exp.Covered)
 	resultUnappliedSet := toSet(exp.Unapplied)
-
-	classify := func(kbid string) string {
+	return func(kbid string) string {
 		var tags []string
 		_, isAppliedInput := appliedSet[kbid]
 		_, isUnappliedInput := unappliedSet[kbid]
@@ -797,76 +843,64 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []s
 		if _, ok := resultUnappliedSet[kbid]; ok {
 			tags = append(tags, "unapplied")
 		}
-		return fmt.Sprintf("[%s]", joinComma(tags))
+		return fmt.Sprintf("[%s]", strings.Join(tags, ", "))
 	}
+}
 
-	if _, err := fmt.Fprintln(w, "Inputs:"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "  Applied:   %s\n", joinSpace(exp.Inputs.Applied)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "  Unapplied: %s\n", joinSpace(exp.Inputs.Unapplied)); err != nil {
-		return err
+func writeKBExpandInputs(w io.Writer, in microsoft.ExpandInputs, datasources []sourceTypes.SourceID) error {
+	if _, err := fmt.Fprintf(w, "Inputs:\n  Applied:   %s\n  Unapplied: %s\n", joinKBList(in.Applied), joinKBList(in.Unapplied)); err != nil {
+		return errors.Wrap(err, "write inputs header")
 	}
 	if len(datasources) > 0 {
 		dsStrs := make([]string, len(datasources))
 		for i, d := range datasources {
 			dsStrs[i] = string(d)
 		}
-		if _, err := fmt.Fprintf(w, "  Data sources: %s\n", joinSpace(dsStrs)); err != nil {
-			return err
+		if _, err := fmt.Fprintf(w, "  Data sources: %s\n", joinKBList(dsStrs)); err != nil {
+			return errors.Wrap(err, "write data sources")
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
-		return err
+		return errors.Wrap(err, "write inputs trailing newline")
 	}
+	return nil
+}
 
+func writeKBExpandConflicts(w io.Writer, conflicts []string) error {
 	if _, err := fmt.Fprintln(w, "Conflicts (in both Applied & Unapplied → treated as Unapplied):"); err != nil {
-		return err
+		return errors.Wrap(err, "write conflicts header")
 	}
-	if len(exp.Conflicts) == 0 {
+	if len(conflicts) == 0 {
 		if _, err := fmt.Fprintln(w, "  (none)"); err != nil {
-			return err
+			return errors.Wrap(err, "write empty conflicts marker")
 		}
 	} else {
-		for _, kb := range exp.Conflicts {
+		for _, kb := range conflicts {
 			if _, err := fmt.Fprintf(w, "  %s\n", kb); err != nil {
-				return err
+				return errors.Wrapf(err, "write conflict %s", kb)
 			}
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
-		return err
+		return errors.Wrap(err, "write conflicts trailing newline")
 	}
+	return nil
+}
 
+func writeKBExpandChains(w io.Writer, exp *microsoft.ExpandResult, classify func(string) string) error {
 	if _, err := fmt.Fprintln(w, "Supersession chains:"); err != nil {
-		return err
+		return errors.Wrap(err, "write chains header")
 	}
 
-	roots := make([]string, 0, len(exp.Inputs.Applied)+len(exp.Inputs.Unapplied))
-	rootSeen := make(map[string]struct{})
-	for _, kb := range exp.Inputs.Applied {
-		if _, ok := rootSeen[kb]; ok {
-			continue
-		}
-		rootSeen[kb] = struct{}{}
-		roots = append(roots, kb)
-	}
-	for _, kb := range exp.Inputs.Unapplied {
-		if _, ok := rootSeen[kb]; ok {
-			continue
-		}
-		rootSeen[kb] = struct{}{}
-		roots = append(roots, kb)
-	}
+	roots := dedupedRoots(exp.Inputs.Applied, exp.Inputs.Unapplied)
 
-	// incoming is the reverse of exp.Edges: incoming[X] lists edges whose To
-	// is X, with To rewritten to point at the original "from" KB. Walking
-	// incoming from a root surfaces the older KBs that root supersedes
-	// (either via Supersedes on root, or via SupersededBy on those older
-	// KBs). Without this, an input KB that sits at the newer end of its
-	// chain would render with no children even though it covers older KBs.
+	// incoming is the reverse of exp.Edges: incoming[X] lists edges whose
+	// To is X, with To rewritten to point at the original "from" KB.
+	// Walking incoming from a root surfaces the older KBs that root
+	// supersedes (either via Supersedes on root, or via SupersededBy on
+	// those older KBs). Without this, an input KB that sits at the newer
+	// end of its chain would render with no children even though it
+	// covers older KBs.
 	incoming := make(map[string][]microsoft.ExpandEdge, len(exp.Edges))
 	for from, es := range exp.Edges {
 		for _, e := range es {
@@ -878,6 +912,20 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []s
 			})
 		}
 	}
+	// The outer range over exp.Edges visits "from" keys in map-iteration
+	// order, so incoming[X] is appended in a non-deterministic order even
+	// though each exp.Edges[from] is already sorted. Sort each value slice
+	// to stabilise the "Supersedes:" section across runs.
+	for _, es := range incoming {
+		slices.SortFunc(es, func(a, b microsoft.ExpandEdge) int {
+			return cmp.Or(
+				cmp.Compare(a.To, b.To),
+				cmp.Compare(string(a.Source), string(b.Source)),
+				cmp.Compare(int(a.Level), int(b.Level)),
+				cmp.Compare(a.UpdateID, b.UpdateID),
+			)
+		})
+	}
 
 	// emittedSubtree tracks nodes whose subtrees have already been printed
 	// in this run. The first occurrence of a KB renders fully; subsequent
@@ -888,89 +936,76 @@ func printKBExpandTree(w io.Writer, exp *microsoft.ExpandResult, datasources []s
 	emittedSubtree := make(map[string]struct{})
 	for _, root := range roots {
 		if _, err := fmt.Fprintf(w, "\n  %s  %s\n", root, classify(root)); err != nil {
-			return err
+			return errors.Wrapf(err, "write root %s", root)
 		}
 		emittedSubtree[root] = struct{}{}
 
 		hasForward := len(exp.Edges[root]) > 0
 		hasBackward := len(incoming[root]) > 0
-
-		// When a root has neither direction (e.g., the input KB is unknown
-		// to the database), keep the output minimal: just the root line.
 		if !hasForward && !hasBackward {
 			continue
 		}
-
 		if hasForward {
 			if _, err := fmt.Fprintln(w, "    Superseded by:"); err != nil {
-				return err
+				return errors.Wrapf(err, "write Superseded by header for root %s", root)
 			}
 			if err := writeKBExpandSubtree(w, exp.Edges, classify, root, "      ", emittedSubtree); err != nil {
-				return err
+				return errors.Wrapf(err, "write Superseded by subtree for root %s", root)
 			}
 		}
 		if hasBackward {
 			if _, err := fmt.Fprintln(w, "    Supersedes:"); err != nil {
-				return err
+				return errors.Wrapf(err, "write Supersedes header for root %s", root)
 			}
 			if err := writeKBExpandSubtree(w, incoming, classify, root, "      ", emittedSubtree); err != nil {
-				return err
+				return errors.Wrapf(err, "write Supersedes subtree for root %s", root)
 			}
 		}
 	}
-
-	if _, err := fmt.Fprintln(w); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "Result:"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "  Covered:   %s\n", joinSpace(exp.Covered)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "  Unapplied: %s\n", joinSpace(exp.Unapplied)); err != nil {
-		return err
-	}
-
-	if len(releases) > 0 {
-		if _, err := fmt.Fprintln(w); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "Release filter (%s):\n", formatReleases(releases)); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "  Covered after filter:   %s\n", joinSpace(coveredAfter)); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "  Unapplied after filter: %s\n", joinSpace(unappliedAfter)); err != nil {
-			return err
-		}
-		dropped := append(append([]string{}, coveredDropped...), unappliedDropped...)
-		slices.Sort(dropped)
-		dropped = slices.Compact(dropped)
-		if len(dropped) == 0 {
-			if _, err := fmt.Fprintln(w, "  Dropped:                (none)"); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintf(w, "  Dropped:                %s\n", joinSpace(dropped)); err != nil {
-				return err
-			}
-		}
-	}
-
 	return nil
+}
+
+func writeKBExpandResult(w io.Writer, exp *microsoft.ExpandResult) error {
+	if _, err := fmt.Fprintf(w, "\nResult:\n  Covered:   %s\n  Unapplied: %s\n", joinKBList(exp.Covered), joinKBList(exp.Unapplied)); err != nil {
+		return errors.Wrap(err, "write result section")
+	}
+	return nil
+}
+
+func writeKBExpandFilter(w io.Writer, releases, coveredAfter, unappliedAfter, coveredDropped, unappliedDropped []string) error {
+	dropped := append(append([]string{}, coveredDropped...), unappliedDropped...)
+	slices.Sort(dropped)
+	dropped = slices.Compact(dropped)
+	if _, err := fmt.Fprintf(w, "\nRelease filter (%s):\n  Covered after filter:   %s\n  Unapplied after filter: %s\n  Dropped:                %s\n",
+		formatReleases(releases),
+		joinKBList(coveredAfter),
+		joinKBList(unappliedAfter),
+		joinKBList(dropped),
+	); err != nil {
+		return errors.Wrap(err, "write filter section")
+	}
+	return nil
+}
+
+func dedupedRoots(applied, unapplied []string) []string {
+	// applied/unapplied echo raw user input (Inputs.Applied/Unapplied), so
+	// drop empty entries here — ExpandKBs treats them as inert at walk
+	// time, and rendering a blank "Supersession chains:" root would be
+	// misleading.
+	roots := slices.DeleteFunc(slices.Concat(applied, unapplied), func(s string) bool { return s == "" })
+	slices.Sort(roots)
+	return slices.Compact(roots)
 }
 
 func formatReleases(releases []string) string {
 	if len(releases) == 1 {
 		return fmt.Sprintf("%q", releases[0])
 	}
-	parts := make([]string, len(releases))
+	quoted := make([]string, len(releases))
 	for i, r := range releases {
-		parts[i] = fmt.Sprintf("%q", r)
+		quoted[i] = fmt.Sprintf("%q", r)
 	}
-	return "[" + joinComma(parts) + "]"
+	return fmt.Sprintf("[%s]", strings.Join(quoted, ", "))
 }
 
 // writeKBExpandSubtree walks the adjacency map from the given node and
@@ -981,16 +1016,10 @@ func formatReleases(releases []string) string {
 // relationship regardless of direction.
 func writeKBExpandSubtree(w io.Writer, adj map[string][]microsoft.ExpandEdge, classify func(string) string, from string, indent string, emittedSubtree map[string]struct{}) error {
 	edges := adj[from]
-	if len(edges) == 0 {
-		return nil
-	}
 	for i, e := range edges {
-		last := i == len(edges)-1
-		branch := "├─"
-		nextIndent := indent + "│   "
-		if last {
-			branch = "└─"
-			nextIndent = indent + "    "
+		branch, nextIndent := "├─", fmt.Sprintf("%s│   ", indent)
+		if i == len(edges)-1 {
+			branch, nextIndent = "└─", fmt.Sprintf("%s    ", indent)
 		}
 		var srcLabel string
 		switch e.Level {
@@ -1003,16 +1032,16 @@ func writeKBExpandSubtree(w io.Writer, adj map[string][]microsoft.ExpandEdge, cl
 		}
 		if _, ok := emittedSubtree[e.To]; ok {
 			if _, err := fmt.Fprintf(w, "%s%s [%s] %s  (→ see above)\n", indent, branch, srcLabel, e.To); err != nil {
-				return err
+				return errors.Wrapf(err, "write subtree edge %s -> %s", from, e.To)
 			}
 			continue
 		}
 		if _, err := fmt.Fprintf(w, "%s%s [%s] %s  %s\n", indent, branch, srcLabel, e.To, classify(e.To)); err != nil {
-			return err
+			return errors.Wrapf(err, "write subtree edge %s -> %s", from, e.To)
 		}
 		emittedSubtree[e.To] = struct{}{}
 		if err := writeKBExpandSubtree(w, adj, classify, e.To, nextIndent, emittedSubtree); err != nil {
-			return err
+			return errors.Wrapf(err, "walk subtree under %s", e.To)
 		}
 	}
 	return nil
@@ -1026,27 +1055,13 @@ func toSet(ss []string) map[string]struct{} {
 	return m
 }
 
-func joinSpace(ss []string) string {
-	if len(ss) == 0 {
+func joinKBList(ss []string) string {
+	// Some callers pass raw Inputs.Applied/Unapplied which may contain
+	// "" entries (ExpandKBs skips them but echoes the input verbatim).
+	// Filter on a clone to avoid mutating the caller's slice.
+	filtered := slices.DeleteFunc(slices.Clone(ss), func(s string) bool { return s == "" })
+	if len(filtered) == 0 {
 		return "(none)"
 	}
-	out := ""
-	for i, s := range ss {
-		if i > 0 {
-			out += " "
-		}
-		out += s
-	}
-	return out
-}
-
-func joinComma(ss []string) string {
-	out := ""
-	for i, s := range ss {
-		if i > 0 {
-			out += ", "
-		}
-		out += s
-	}
-	return out
+	return strings.Join(filtered, " ")
 }

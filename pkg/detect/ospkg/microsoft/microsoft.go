@@ -25,16 +25,25 @@ import (
 // ExpandResult describes how an input set of Applied/Unapplied KBs is
 // expanded through Microsoft KB supersession chains for vulnerability
 // detection. It carries the inputs, the discovered edges (with data-source
-// attribution), and the final classification used by Detect.
+// attribution), the final classification used by Detect, and the products
+// observed for every visited KB (already restricted to the data-source
+// filter passed to ExpandKBs).
+//
+// Slices are returned in iteration order; callers that need a stable
+// ordering (e.g. for display or comparison) should sort them.
 type ExpandResult struct {
 	Inputs    ExpandInputs
 	Covered   []string
 	Unapplied []string
-	Visited   []string
 	// Edges maps a "from" KB ID (the superseded KB) to the list of edges
 	// pointing at superseding KBs, each annotated with the data source and
 	// whether the edge was reported at KB level or per-update level.
 	Edges map[string][]ExpandEdge
+	// Products maps every visited KB ID to the union of its products
+	// contributed by data sources allowed at expansion time. KBs that were
+	// looked up but not found in the database are absent from this map;
+	// PartitionKBIDsByReleases keeps such KBs to avoid false negatives.
+	Products map[string][]string
 	// Conflicts lists KBs that appeared in both the Applied and Unapplied
 	// inputs. Per the classifier policy, conflicts are treated as Unapplied.
 	Conflicts []string
@@ -70,36 +79,14 @@ type ExpandEdge struct {
 	UpdateID string
 }
 
-// ExpandOption configures KB-expansion helpers (ExpandKBs and
-// PartitionKBIDsByReleases). Options are additive; the zero set of options
-// matches the behaviour Detect uses.
-type ExpandOption func(*expandOptions)
-
-type expandOptions struct {
-	datasources []sourceTypes.SourceID
-}
-
-// WithExpandDataSources restricts KB-expansion (supersession walking and
-// product evaluation) to the given Microsoft data sources. When the list is
-// empty, all sources are considered. Edges and products contributed by a
-// source not in the list are ignored.
-func WithExpandDataSources(ds []sourceTypes.SourceID) ExpandOption {
-	return func(o *expandOptions) { o.datasources = ds }
-}
-
-func newExpandOptions(opts []ExpandOption) *expandOptions {
-	eo := &expandOptions{}
-	for _, o := range opts {
-		o(eo)
-	}
-	return eo
-}
-
-func (o *expandOptions) allowSource(id sourceTypes.SourceID) bool {
-	if len(o.datasources) == 0 {
+// allowMicrosoftKBSource reports whether a Microsoft KB data source should
+// contribute to KB-expansion. An empty datasources slice means "no filter"
+// and every source is allowed.
+func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.SourceID) bool {
+	if len(datasources) == 0 {
 		return true
 	}
-	return slices.Contains(o.datasources, id)
+	return slices.Contains(datasources, id)
 }
 
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
@@ -209,23 +196,21 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 		}
 	}
 
-	coveredKBs, unappliedKBs, err := classifyKBs(s, sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied)
+	exp, err := ExpandKBs(s, sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "classify KBs")
+		return nil, errors.Wrap(err, "expand KBs")
 	}
 
 	// Filter unapplied/covered KBs to only those whose products are relevant
 	// to this host. Without this filter, supersession chain walking can discover
 	// KBs for unrelated products (e.g., a Server 2012 KB reachable from a Win11
 	// chain), causing the KB criterion to match cross-product conditions.
-	coveredKBs, err = filterKBIDsByRelease(s, coveredKBs, sr.Release)
-	if err != nil {
-		return nil, errors.Wrap(err, "filter covered KBs by release")
+	var releases []string
+	if sr.Release != "" {
+		releases = []string{sr.Release}
 	}
-	unappliedKBs, err = filterKBIDsByRelease(s, unappliedKBs, sr.Release)
-	if err != nil {
-		return nil, errors.Wrap(err, "filter unapplied KBs by release")
-	}
+	coveredKBs, _ := PartitionKBIDsByReleases(exp.Products, exp.Covered, releases)
+	unappliedKBs, _ := PartitionKBIDsByReleases(exp.Products, exp.Unapplied, releases)
 
 	vcmProducts := slices.Collect(maps.Keys(vcm))
 
@@ -264,23 +249,14 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	return dm, nil
 }
 
-func classifyKBs(s session.Storage, applied []string, unapplied []string) (coveredKBs, unappliedKBs []string, _ error) {
-	r, err := ExpandKBs(s, applied, unapplied)
-	if err != nil {
-		return nil, nil, err
-	}
-	return r.Covered, r.Unapplied, nil
-}
-
 // ExpandKBs walks Microsoft KB supersession chains starting from the given
 // Applied and Unapplied inputs and returns the full classification result,
 // including per-edge data-source attribution for diagnostic use. The
 // classification logic is identical to what Detect uses internally.
 //
-// Options can restrict which Microsoft data sources contribute supersession
-// edges; see WithExpandDataSources.
-func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...ExpandOption) (*ExpandResult, error) {
-	eo := newExpandOptions(opts)
+// When datasources is non-empty, only edges and products contributed by
+// those Microsoft data sources are considered.
+func ExpandKBs(s session.Storage, applied []string, unapplied []string, datasources []sourceTypes.SourceID) (*ExpandResult, error) {
 	// Prefer unapplied when a KB appears in both lists because:
 	// 1. QueryHistory may record a past successful install (Operation=1, ResultCode=2) even after
 	//    the update was rolled back or never fully applied, causing a false "applied" entry.
@@ -288,10 +264,16 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 	//    sources (e.g. Get-HotFix) may also add them to applied, masking the pending reboot state.
 	appliedSet := make(map[string]struct{}, len(applied))
 	for _, kb := range applied {
+		if kb == "" {
+			continue
+		}
 		appliedSet[kb] = struct{}{}
 	}
 	removedFromApplied := make(map[string]struct{})
 	for _, kb := range unapplied {
+		if kb == "" {
+			continue
+		}
 		if _, ok := appliedSet[kb]; ok {
 			removedFromApplied[kb] = struct{}{}
 		}
@@ -308,14 +290,26 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 	// coverage across data sources.
 	visited := make(map[string]struct{})
 	edges := make(map[string][]ExpandEdge)
+	products := make(map[string]map[string]struct{})
+	type edgeKey struct {
+		from string
+		e    ExpandEdge
+	}
+	seenEdge := make(map[edgeKey]struct{})
 
 	addEdge := func(from string, e ExpandEdge) {
-		for _, existing := range edges[from] {
-			if existing == e {
-				return
-			}
+		k := edgeKey{from: from, e: e}
+		if _, ok := seenEdge[k]; ok {
+			return
 		}
+		seenEdge[k] = struct{}{}
 		edges[from] = append(edges[from], e)
+	}
+	addProduct := func(kbid, product string) {
+		if products[kbid] == nil {
+			products[kbid] = make(map[string]struct{})
+		}
+		products[kbid][product] = struct{}{}
 	}
 
 	var walk func(kbid string) error
@@ -332,10 +326,19 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 			}
 			return errors.Wrapf(err, "get microsoft kb %s", kbid)
 		}
+		// Mark this KB as known to the DB even if no allowed-source product
+		// follows, so PartitionKBIDsByReleases can distinguish "absent → keep"
+		// from "present but no allowed-source product → drop".
+		if products[kbid] == nil {
+			products[kbid] = make(map[string]struct{})
+		}
 
 		for srcID, kb := range m {
-			if !eo.allowSource(srcID) {
+			if !allowMicrosoftKBSource(datasources, srcID) {
 				continue
+			}
+			for _, p := range kb.Products {
+				addProduct(kbid, p)
 			}
 			// Forward direction: this KB is superseded by newer KBs.
 			for _, sup := range kb.SupersededBy {
@@ -388,26 +391,35 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 	}
 
 	for _, kbid := range applied {
+		if kbid == "" {
+			continue
+		}
 		if err := walk(kbid); err != nil {
 			return nil, errors.Wrapf(err, "walk supersession chain from applied KB: %s", kbid)
 		}
 	}
 	for _, kbid := range unapplied {
+		if kbid == "" {
+			continue
+		}
 		if err := walk(kbid); err != nil {
 			return nil, errors.Wrapf(err, "walk supersession chain from unapplied KB: %s", kbid)
 		}
 	}
 
 	// Build the reverse adjacency (superseding → list of superseded) used
-	// by the coverage BFS, deduped on the (from, to) pair.
+	// by the coverage BFS. addEdge dedupes by (from, edge), but multiple
+	// edges between the same (from, to) pair (e.g. different sources or
+	// KB-level vs Update-level) collapse to a single revAdj entry.
 	revAdj := make(map[string][]string)
+	revAdjSeen := make(map[[2]string]struct{})
 	for from, es := range edges {
-		seen := make(map[string]struct{}, len(es))
 		for _, e := range es {
-			if _, ok := seen[e.To]; ok {
+			k := [2]string{e.To, from}
+			if _, ok := revAdjSeen[k]; ok {
 				continue
 			}
-			seen[e.To] = struct{}{}
+			revAdjSeen[k] = struct{}{}
 			revAdj[e.To] = append(revAdj[e.To], from)
 		}
 	}
@@ -436,7 +448,7 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 	//   - not covered by any applied superseding KB, or
 	//   - removed from appliedSet by unapplied-preference (always treated as
 	//     unapplied regardless of coverage, to honour the scanner's signal).
-	var coveredKBs, unappliedKBs []string
+	var unappliedKBs []string
 	for kbid := range visited {
 		if _, ok := covered[kbid]; ok {
 			if _, ok := removedFromApplied[kbid]; !ok {
@@ -446,30 +458,21 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 		unappliedKBs = append(unappliedKBs, kbid)
 	}
 
-	for kbid := range covered {
-		coveredKBs = append(coveredKBs, kbid)
-	}
+	coveredKBs := slices.Collect(maps.Keys(covered))
 
-	visitedKBs := make([]string, 0, len(visited))
-	for kbid := range visited {
-		visitedKBs = append(visitedKBs, kbid)
-	}
-	slices.Sort(visitedKBs)
-	slices.Sort(coveredKBs)
-	slices.Sort(unappliedKBs)
+	conflicts := slices.Collect(maps.Keys(removedFromApplied))
 
-	conflicts := make([]string, 0, len(removedFromApplied))
-	for kbid := range removedFromApplied {
-		conflicts = append(conflicts, kbid)
+	productsList := make(map[string][]string, len(products))
+	for kbid, ps := range products {
+		productsList[kbid] = slices.Collect(maps.Keys(ps))
 	}
-	slices.Sort(conflicts)
 
 	return &ExpandResult{
 		Inputs:    ExpandInputs{Applied: applied, Unapplied: unapplied},
 		Covered:   coveredKBs,
 		Unapplied: unappliedKBs,
-		Visited:   visitedKBs,
 		Edges:     edges,
+		Products:  productsList,
 		Conflicts: conflicts,
 	}, nil
 }
@@ -481,12 +484,12 @@ func ExpandKBs(s session.Storage, applied []string, unapplied []string, opts ...
 // applied represent platforms host should-but-hasn't applied yet, and need
 // to be in vcm so KB criteria targeting those products can be evaluated.
 //
-// This is intentionally narrower than classifyKBs's bidirectional walk:
-// the backward Supersedes chain is excluded because following it from
-// applied or unapplied input pulls in old historical KBs (e.g. KB279328
-// for Internet Explorer 5.01 from 2001) whose products would otherwise
-// leak cross-era bulletins (MS01-MS09 Internet Explorer entries) into
-// modern hosts via the isKBCriterionApp allowlist.
+// This is intentionally narrower than ExpandKBs's bidirectional walk: the
+// backward Supersedes chain is excluded because following it from applied
+// or unapplied input pulls in old historical KBs (e.g. KB279328 for
+// Internet Explorer 5.01 from 2001) whose products would otherwise leak
+// cross-era bulletins (MS01-MS09 Internet Explorer entries) into modern
+// hosts via the isKBCriterionApp allowlist.
 func forwardSupersedersFromApplied(s session.Storage, applied []string) ([]string, error) {
 	// Seed visited and queue from a deduplicated, non-empty applied list so
 	// each starting KB is fetched at most once and downstream BFS treats
@@ -548,66 +551,42 @@ func forwardSupersedersFromApplied(s session.Storage, applied []string) ([]strin
 	return out, nil
 }
 
-// filterKBIDsByRelease removes KBs whose products are all irrelevant to
-// the given release. When release is empty, all KBs pass through unchanged.
-// KBs not found in the DB are kept to avoid false negatives.
-func filterKBIDsByRelease(s session.Storage, kbs []string, release string) ([]string, error) {
-	var releases []string
-	if release != "" {
-		releases = []string{release}
-	}
-	kept, _, err := PartitionKBIDsByReleases(s, kbs, releases)
-	return kept, err
-}
-
-// PartitionKBIDsByReleases splits kbs into those whose products are relevant
-// to any of the given releases (kept) and those whose products are unrelated
-// to all of them (dropped). When releases is empty, all KBs are kept. KBs
-// not found in the database are kept (to avoid false negatives) and are not
-// reported in dropped.
+// PartitionKBIDsByReleases splits kbs into those whose products (as cached
+// in products by ExpandKBs in ExpandResult.Products) overlap any of the
+// given releases (kept) and those whose products are unrelated to all of
+// them (dropped). When releases is empty, all KBs are kept. KBs absent
+// from products (KBs that ExpandKBs did not find in the database) are
+// kept to avoid false negatives, and are not reported in dropped.
 //
-// Options can restrict the data sources whose products are considered when
-// evaluating relevance; see WithExpandDataSources.
-func PartitionKBIDsByReleases(s session.Storage, kbs []string, releases []string, opts ...ExpandOption) (kept, dropped []string, _ error) {
+// The data source filter applied at expansion time is automatically
+// respected: ExpandResult.Products only contains products contributed by
+// data sources allowed when ExpandKBs was called.
+func PartitionKBIDsByReleases(products map[string][]string, kbs []string, releases []string) (kept, dropped []string) {
 	if len(releases) == 0 {
-		return kbs, nil, nil
+		return kbs, nil
 	}
-	eo := newExpandOptions(opts)
 
 	kept = make([]string, 0, len(kbs))
 	for _, kbid := range kbs {
-		m, err := s.GetMicrosoftKB(kbid)
-		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
-				kept = append(kept, kbid)
-				continue
-			}
-			return nil, nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
+		ps, ok := products[kbid]
+		if !ok {
+			kept = append(kept, kbid)
+			continue
 		}
-		if func() bool {
-			for srcID, kb := range m {
-				if !eo.allowSource(srcID) {
-					continue
-				}
-				if slices.ContainsFunc(kb.Products, func(p string) bool {
-					for _, r := range releases {
-						if filterMicrosoftKBProduct(p, r) {
-							return true
-						}
-					}
-					return false
-				}) {
+		if slices.ContainsFunc(ps, func(p string) bool {
+			for _, r := range releases {
+				if filterMicrosoftKBProduct(p, r) {
 					return true
 				}
 			}
 			return false
-		}() {
+		}) {
 			kept = append(kept, kbid)
 		} else {
 			dropped = append(dropped, kbid)
 		}
 	}
-	return kept, dropped, nil
+	return kept, dropped
 }
 
 func normalizeMicrosoftPackageName(name, release string) []string {
