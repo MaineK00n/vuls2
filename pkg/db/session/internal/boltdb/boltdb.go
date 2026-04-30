@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -48,7 +49,8 @@ const (
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
 type Config struct {
-	Path string
+	Path         string
+	PutBatchSize int
 
 	Options *bolt.Options
 }
@@ -136,124 +138,93 @@ func putMetadata(tx *bolt.Tx, metadata dbTypes.Metadata) error {
 	return nil
 }
 
+const defaultPutBatchSize = 1000
+
+// pkgIndex is the in-memory accumulation of <ecosystem>:index:<package> -> rootIDs
+// built up across data batches and flushed once at the end of Put. This avoids
+// the per-file read-modify-write of the on-disk index bucket, which is the
+// dominant cost when Put is split across many small transactions.
+type pkgIndex map[ecosystemTypes.Ecosystem]map[string]map[dataTypes.RootID]struct{}
+
+// Put walks the extracted data directory under root and stores all files into the database.
+// Writes are batched into transactions of up to Config.PutBatchSize files for memory efficiency.
+// If PutBatchSize is non-positive, the default (1000) is used.
+// Index entries are accumulated in memory across all data batches and flushed at the end,
+// so each indexed package is read-modify-written at most once per Put.
+// Atomicity across batches is not guaranteed; if an error occurs mid-way, the database may
+// contain partial data and should be re-created from scratch (db init + db add).
 func (c *Connection) Put(root string) error {
+	batchSize := c.Config.PutBatchSize
+	if batchSize <= 0 {
+		batchSize = defaultPutBatchSize
+	}
+
+	// Preflight datasource.json before mutating the DB so a missing or
+	// malformed file aborts early without leaving partial state.
+	ds, err := readDataSource(filepath.Join(root, "datasource.json"))
+	if err != nil {
+		return err
+	}
+
+	idx := make(pkgIndex)
+
+	dataPaths, err := collectJSONPaths(filepath.Join(root, "data"))
+	if err != nil {
+		return errors.Wrap(err, "collect data paths")
+	}
+	for batch := range slices.Chunk(dataPaths, batchSize) {
+		if err := c.conn.Update(func(tx *bolt.Tx) error {
+			for _, p := range batch {
+				if err := putDataFile(tx, p, idx); err != nil {
+					return errors.Wrapf(err, "put data file %s", p)
+				}
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "put data batch")
+		}
+	}
+
+	kbPaths, err := collectJSONPaths(filepath.Join(root, "microsoftkb"))
+	if err != nil {
+		return errors.Wrap(err, "collect microsoftkb paths")
+	}
+	for batch := range slices.Chunk(kbPaths, batchSize) {
+		if err := c.conn.Update(func(tx *bolt.Tx) error {
+			for _, p := range batch {
+				if err := putMicrosoftKBFile(tx, p); err != nil {
+					return errors.Wrapf(err, "put microsoftkb file %s", p)
+				}
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "put microsoftkb batch")
+		}
+	}
+
+	// Each ecosystem's index lives in its own B+tree sub-bucket, so process
+	// one ecosystem at a time. Package order is map-iteration order; sorting
+	// it was tested and made no measurable difference to total Put time.
+	for eco, byPkg := range idx {
+		pkgs := slices.Collect(maps.Keys(byPkg))
+		for batch := range slices.Chunk(pkgs, batchSize) {
+			if err := c.conn.Update(func(tx *bolt.Tx) error {
+				for _, pkg := range batch {
+					if err := putIndexEntry(tx, eco, pkg, byPkg[pkg]); err != nil {
+						return errors.Wrapf(err, "put index entry %s -> %s", eco, pkg)
+					}
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "put index batch")
+			}
+		}
+	}
+
+	// Write datasource and metadata in a final transaction.
+	// Metadata acts as a completion marker.
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := func() error {
-			dataDir := filepath.Join(root, "data")
-			if _, err := os.Stat(dataDir); err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return errors.Wrapf(err, "stat %s", dataDir)
-			}
-
-			if err := filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-
-				if d.IsDir() || filepath.Ext(path) != ".json" {
-					return nil
-				}
-
-				f, err := os.Open(path)
-				if err != nil {
-					return errors.Wrapf(err, "open %s", path)
-				}
-				defer f.Close()
-
-				var data dataTypes.Data
-				if err := json.UnmarshalRead(f, &data); err != nil {
-					return errors.Wrapf(err, "unmarshal %s", path)
-				}
-
-				if err := putDetection(tx, data); err != nil {
-					return errors.Wrap(err, "put detection")
-				}
-
-				if err := putAdvisory(tx, data); err != nil {
-					return errors.Wrap(err, "put advisory")
-				}
-
-				if err := putVulnerability(tx, data); err != nil {
-					return errors.Wrap(err, "put vulnerability")
-				}
-
-				if err := putRoot(tx, data); err != nil {
-					return errors.Wrap(err, "put root")
-				}
-
-				return nil
-			}); err != nil {
-				return errors.Wrapf(err, "walk %s", dataDir)
-			}
-
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "put vulnerability data")
-		}
-
-		if err := func() error {
-			microsoftkbDir := filepath.Join(root, "microsoftkb")
-			if _, err := os.Stat(microsoftkbDir); err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return errors.Wrapf(err, "stat %s", microsoftkbDir)
-			}
-
-			if err := filepath.WalkDir(microsoftkbDir, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-
-				if d.IsDir() || filepath.Ext(path) != ".json" {
-					return nil
-				}
-
-				f, err := os.Open(path)
-				if err != nil {
-					return errors.Wrapf(err, "open %s", path)
-				}
-				defer f.Close()
-
-				var kb microsoftkbTypes.KB
-				if err := json.UnmarshalRead(f, &kb); err != nil {
-					return errors.Wrapf(err, "unmarshal %s", path)
-				}
-
-				if err := putMicrosoftKB(tx, kb); err != nil {
-					return errors.Wrap(err, "put microsoft kb")
-				}
-
-				return nil
-			}); err != nil {
-				return errors.Wrapf(err, "walk %s", microsoftkbDir)
-			}
-
-			return nil
-		}(); err != nil {
-			return errors.Wrap(err, "put microsoft kb data")
-		}
-
-		if err := func() error {
-			f, err := os.Open(filepath.Join(root, "datasource.json"))
-			if err != nil {
-				return errors.Wrapf(err, "open %s", filepath.Join(root, "datasource.json"))
-			}
-			defer f.Close()
-
-			var ds datasourceTypes.DataSource
-			if err := json.UnmarshalRead(f, &ds); err != nil {
-				return errors.Wrapf(err, "unmarshal %s", filepath.Join(root, "datasource.json"))
-			}
-
-			if err := putDataSource(tx, ds); err != nil {
-				return errors.Wrap(err, "put data source")
-			}
-
-			return nil
-		}(); err != nil {
+		if err := putDataSource(tx, ds); err != nil {
 			return errors.Wrap(err, "put data source")
 		}
 
@@ -267,12 +238,81 @@ func (c *Connection) Put(root string) error {
 
 		return nil
 	}); err != nil {
-		return errors.WithStack(err)
+		return errors.Wrap(err, "put datasource and metadata")
 	}
+
 	return nil
 }
 
-func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
+func readDataSource(path string) (datasourceTypes.DataSource, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return datasourceTypes.DataSource{}, errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var ds datasourceTypes.DataSource
+	if err := json.UnmarshalRead(f, &ds); err != nil {
+		return datasourceTypes.DataSource{}, errors.Wrapf(err, "unmarshal %s", path)
+	}
+	return ds, nil
+}
+
+func collectJSONPaths(dir string) ([]string, error) {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, errors.Wrapf(err, "stat %s", dir)
+	}
+
+	var paths []string
+	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".json" {
+			paths = append(paths, path)
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.Wrapf(err, "walk %s", dir)
+	}
+	return paths, nil
+}
+
+func putDataFile(tx *bolt.Tx, path string, idx pkgIndex) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var data dataTypes.Data
+	if err := json.UnmarshalRead(f, &data); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+
+	if err := putDetection(tx, data, idx); err != nil {
+		return errors.Wrap(err, "put detection")
+	}
+
+	if err := putAdvisory(tx, data); err != nil {
+		return errors.Wrap(err, "put advisory")
+	}
+
+	if err := putVulnerability(tx, data); err != nil {
+		return errors.Wrap(err, "put vulnerability")
+	}
+
+	if err := putRoot(tx, data); err != nil {
+		return errors.Wrap(err, "put root")
+	}
+
+	return nil
+}
+
+func putDetection(tx *bolt.Tx, data dataTypes.Data, idx pkgIndex) error {
 	for _, d := range data.Detections {
 		eb, err := tx.CreateBucketIfNotExists([]byte(d.Ecosystem))
 		if err != nil {
@@ -301,11 +341,6 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 			return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
 		}
 
-		eib, err := eb.CreateBucketIfNotExists([]byte("index"))
-		if err != nil {
-			return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> index", d.Ecosystem))
-		}
-
 		var pkgs []string
 		for _, cond := range d.Conditions {
 			ps, err := util.WalkCriteria(cond.Criteria)
@@ -316,25 +351,18 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 		slices.Sort(pkgs)
 
+		byPkg, ok := idx[d.Ecosystem]
+		if !ok {
+			byPkg = make(map[string]map[dataTypes.RootID]struct{})
+			idx[d.Ecosystem] = byPkg
+		}
 		for _, p := range slices.Compact(pkgs) {
-			var rootIDs []dataTypes.RootID
-			if bs := eib.Get([]byte(p)); len(bs) > 0 {
-				if err := util.Unmarshal(bs, &rootIDs); err != nil {
-					return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
-				}
+			set, ok := byPkg[p]
+			if !ok {
+				set = make(map[dataTypes.RootID]struct{})
+				byPkg[p] = set
 			}
-			if !slices.Contains(rootIDs, data.ID) {
-				rootIDs = append(rootIDs, data.ID)
-			}
-
-			bs, err := util.Marshal(rootIDs)
-			if err != nil {
-				return errors.Wrap(err, "marshal root IDs")
-			}
-
-			if err := eib.Put([]byte(p), bs); err != nil {
-				return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> index -> %s", d.Ecosystem, p))
-			}
+			set[data.ID] = struct{}{}
 		}
 	}
 
@@ -410,6 +438,90 @@ func putVulnerability(tx *bolt.Tx, data dataTypes.Data) error {
 		}
 	}
 
+	return nil
+}
+
+func putMicrosoftKBFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var kb microsoftkbTypes.KB
+	if err := json.UnmarshalRead(f, &kb); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+
+	if err := putMicrosoftKB(tx, kb); err != nil {
+		return errors.Wrap(err, "put microsoft kb")
+	}
+
+	return nil
+}
+
+func putMicrosoftKB(tx *bolt.Tx, kb microsoftkbTypes.KB) error {
+	eb, err := tx.CreateBucketIfNotExists([]byte(ecosystemTypes.EcosystemTypeMicrosoft))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", ecosystemTypes.EcosystemTypeMicrosoft)
+	}
+
+	ekb, err := eb.CreateBucketIfNotExists([]byte("kb"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
+	}
+
+	m := make(map[sourceTypes.SourceID]microsoftkbTypes.KB)
+	if bs := ekb.Get([]byte(kb.KBID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
+		}
+	}
+	m[kb.DataSource.ID] = kb
+
+	bs, err := util.Marshal(m)
+	if err != nil {
+		return errors.Wrap(err, "marshal microsoft kb")
+	}
+
+	if err := ekb.Put([]byte(kb.KBID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
+	}
+
+	return nil
+}
+
+// putIndexEntry merges the in-memory rootID set for one (ecosystem, package)
+// with whatever is already on disk and writes the union back. Within a single
+// Put call this happens once per package; subsequent Put calls against the
+// same DB re-read and merge per call.
+func putIndexEntry(tx *bolt.Tx, eco ecosystemTypes.Ecosystem, pkg string, rids map[dataTypes.RootID]struct{}) error {
+	eb, err := tx.CreateBucketIfNotExists([]byte(eco))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", eco)
+	}
+	eib, err := eb.CreateBucketIfNotExists([]byte("index"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> index", eco))
+	}
+
+	var rootIDs []dataTypes.RootID
+	if bs := eib.Get([]byte(pkg)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &rootIDs); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", eco, pkg))
+		}
+	}
+	rootIDs = slices.AppendSeq(rootIDs, maps.Keys(rids))
+	slices.Sort(rootIDs)
+	rootIDs = slices.Compact(rootIDs)
+
+	bs, err := util.Marshal(rootIDs)
+	if err != nil {
+		return errors.Wrap(err, "marshal root IDs")
+	}
+	if err := eib.Put([]byte(pkg), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> index -> %s", eco, pkg))
+	}
 	return nil
 }
 
@@ -507,37 +619,6 @@ func putDataSource(tx *bolt.Tx, datasource datasourceTypes.DataSource) error {
 
 	if err := sb.Put([]byte(datasource.ID), bs); err != nil {
 		return errors.Wrapf(err, "put %q", fmt.Sprintf("datasource -> %q", datasource.ID))
-	}
-
-	return nil
-}
-
-func putMicrosoftKB(tx *bolt.Tx, kb microsoftkbTypes.KB) error {
-	eb, err := tx.CreateBucketIfNotExists([]byte(ecosystemTypes.EcosystemTypeMicrosoft))
-	if err != nil {
-		return errors.Wrapf(err, "create %q if not exists", ecosystemTypes.EcosystemTypeMicrosoft)
-	}
-
-	ekb, err := eb.CreateBucketIfNotExists([]byte("kb"))
-	if err != nil {
-		return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
-	}
-
-	m := make(map[sourceTypes.SourceID]microsoftkbTypes.KB)
-	if bs := ekb.Get([]byte(kb.KBID)); len(bs) > 0 {
-		if err := util.Unmarshal(bs, &m); err != nil {
-			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
-		}
-	}
-	m[kb.DataSource.ID] = kb
-
-	bs, err := util.Marshal(m)
-	if err != nil {
-		return errors.Wrap(err, "marshal microsoft kb")
-	}
-
-	if err := ekb.Put([]byte(kb.KBID), bs); err != nil {
-		return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> kb -> %s", ecosystemTypes.EcosystemTypeMicrosoft, kb.KBID))
 	}
 
 	return nil
@@ -690,7 +771,7 @@ func (c *Connection) GetIndex(ecosystem ecosystemTypes.Ecosystem, query string) 
 
 		eib := eb.Bucket([]byte("index"))
 		if eib == nil {
-			return errors.Errorf("%q is not exists", fmt.Sprintf("%s -> index", ecosystem))
+			return errors.Wrapf(dbTypes.ErrNotFoundIndex, "%q not found", fmt.Sprintf("%s -> index", ecosystem))
 		}
 
 		bs := eib.Get([]byte(query))
@@ -748,7 +829,7 @@ func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]micro
 
 		ekb := eb.Bucket([]byte("kb"))
 		if ekb == nil {
-			return errors.Errorf("%q not found", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
+			return errors.Wrapf(dbTypes.ErrNotFoundMicrosoftKB, "%q not found", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
 		}
 
 		bs := ekb.Get([]byte(kbid))

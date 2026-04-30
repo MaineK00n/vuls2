@@ -1,0 +1,62 @@
+{
+    "id": "ALSA-2019:4001",
+    "advisories": [
+        {
+            "content": {
+                "id": "ALSA-2019:4001"
+            },
+            "segments": [
+                {
+                    "ecosystem": "alma:8"
+                }
+            ]
+        }
+    ],
+    "vulnerabilities": [
+        {
+            "content": {
+                "id": "CVE-2019-1001"
+            },
+            "segments": [
+                {
+                    "ecosystem": "alma:8"
+                }
+            ]
+        }
+    ],
+    "detections": [
+        {
+            "ecosystem": "alma:8",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "OR",
+                        "criterions": [
+                            {
+                                "type": "version",
+                                "version": {
+                                    "vulnerable": true,
+                                    "package": {
+                                        "type": "binary",
+                                        "binary": {
+                                            "name": "libfoo",
+                                            "architectures": [
+                                                "x86_64"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "alma-errata",
+        "raws": [
+            "vuls-data-raw-alma-errata/8/ALSA/2019/ALSA-2019:4001.json"
+        ]
+    }
+}

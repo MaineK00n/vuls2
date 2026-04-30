@@ -259,7 +259,7 @@ func TestConnection_Put(t *testing.T) {
 		Config *boltdb.Config
 	}
 	type args struct {
-		root string
+		roots []string
 	}
 	tests := []struct {
 		name    string
@@ -274,7 +274,7 @@ func TestConnection_Put(t *testing.T) {
 				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
-				root: "testdata/fixtures/alma-small/alma-errata",
+				roots: []string{"testdata/fixtures/alma-small/alma-errata"},
 			},
 			want: map[string][]byte{
 				"metadata":              nil,
@@ -297,12 +297,85 @@ func TestConnection_Put(t *testing.T) {
 			},
 		},
 		{
+			name: "batch commit",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), PutBatchSize: 2},
+			},
+			args: args{
+				roots: []string{"testdata/fixtures/alma-batch/alma-errata"},
+			},
+			want: map[string][]byte{
+				"metadata":              nil,
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":         nil,
+				"vulnerability -> root": nil,
+				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:4001":         []byte(`{"id":"ALSA-2019:4001","advisories":["ALSA-2019:4001"],"vulnerabilities":["CVE-2019-1001"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:4002":         []byte(`{"id":"ALSA-2019:4002","advisories":["ALSA-2019:4002"],"vulnerabilities":["CVE-2019-1002"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> ALSA-2019:3708":     []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"ALSA-2019:3708"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:4001":     []byte(`{"alma-errata":{"ALSA-2019:4001":[{"content":{"id":"ALSA-2019:4001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:4002":     []byte(`{"alma-errata":{"ALSA-2019:4002":[{"content":{"id":"ALSA-2019:4002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2019-2510": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2510"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-2537": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2537"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-1001": []byte(`{"alma-errata":{"ALSA-2019:4001":[{"content":{"id":"CVE-2019-1001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-1002": []byte(`{"alma-errata":{"ALSA-2019:4002":[{"content":{"id":"CVE-2019-1002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"alma:8":                                      nil,
+				"alma:8 -> detection":                         nil,
+				"alma:8 -> detection -> ALSA-2019:3708":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"mariadb-devel:10.3::Judy","architectures":["i686"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:4001":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"libfoo","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:4002":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"libbar","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> index":                             nil,
+				"alma:8 -> index -> mariadb-devel:10.3::Judy": []byte(`["ALSA-2019:3708"]`),
+				"alma:8 -> index -> libfoo":                   []byte(`["ALSA-2019:4001"]`),
+				"alma:8 -> index -> libbar":                   []byte(`["ALSA-2019:4002"]`),
+				"datasource":                                  nil,
+				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+		},
+		{
+			name: "cross-batch index merge",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), PutBatchSize: 2},
+			},
+			args: args{
+				roots: []string{"testdata/fixtures/alma-batch-merge/alma-errata"},
+			},
+			want: map[string][]byte{
+				"metadata":              nil,
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":         nil,
+				"vulnerability -> root": nil,
+				"vulnerability -> root -> ALSA-2019:5001":         []byte(`{"id":"ALSA-2019:5001","advisories":["ALSA-2019:5001"],"vulnerabilities":["CVE-2019-5001"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:5002":         []byte(`{"id":"ALSA-2019:5002","advisories":["ALSA-2019:5002"],"vulnerabilities":["CVE-2019-5002"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> root -> ALSA-2019:5003":         []byte(`{"id":"ALSA-2019:5003","advisories":["ALSA-2019:5003"],"vulnerabilities":["CVE-2019-5003"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> ALSA-2019:5001":     []byte(`{"alma-errata":{"ALSA-2019:5001":[{"content":{"id":"ALSA-2019:5001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:5002":     []byte(`{"alma-errata":{"ALSA-2019:5002":[{"content":{"id":"ALSA-2019:5002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> advisory -> ALSA-2019:5003":     []byte(`{"alma-errata":{"ALSA-2019:5003":[{"content":{"id":"ALSA-2019:5003"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2019-5001": []byte(`{"alma-errata":{"ALSA-2019:5001":[{"content":{"id":"CVE-2019-5001"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-5002": []byte(`{"alma-errata":{"ALSA-2019:5002":[{"content":{"id":"CVE-2019-5002"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-5003": []byte(`{"alma-errata":{"ALSA-2019:5003":[{"content":{"id":"CVE-2019-5003"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"alma:8":                                nil,
+				"alma:8 -> detection":                   nil,
+				"alma:8 -> detection -> ALSA-2019:5001": []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:5002": []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> detection -> ALSA-2019:5003": []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"alma:8 -> index":                       nil,
+				"alma:8 -> index -> shared-pkg":         []byte(`["ALSA-2019:5001","ALSA-2019:5002","ALSA-2019:5003"]`),
+				"datasource":                            nil,
+				"datasource -> alma-errata":             []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+		},
+		{
 			name: "microsoft",
 			fields: fields{
 				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
-				root: "testdata/fixtures/microsoft-small/microsoft-bulletin",
+				roots: []string{"testdata/fixtures/microsoft-small/microsoft-bulletin"},
 			},
 			want: map[string][]byte{
 				"metadata":                                        nil,
@@ -336,7 +409,7 @@ func TestConnection_Put(t *testing.T) {
 				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
 			},
 			args: args{
-				root: "testdata/fixtures/microsoft-small/microsoft-msuc",
+				roots: []string{"testdata/fixtures/microsoft-small/microsoft-msuc"},
 			},
 			want: map[string][]byte{
 				"metadata":                       nil,
@@ -350,6 +423,44 @@ func TestConnection_Put(t *testing.T) {
 				"microsoft -> kb -> 5000854":     []byte(`{"microsoft-msuc":{"kb_id":"5000854","url":"https://support.microsoft.com/help/5000854","updates":[{"update_id":"a328f9a9-f5c2-4734-a4ae-d01785fb4711","title":"2021-03 Cumulative Update Preview for Windows Server 2019 for x64-based Systems (KB5000854)","architecture":"AMD64","classification":"Updates","products":["WindowsServer2019"],"superseded_by":[{"kb_id":"5001384","update_id":"41498488-597f-44ea-9c26-dbb65bec2ffa"}],"catalog_url":""}],"data_source":{"id":"microsoft-msuc","raws":["vuls-data-raw-microsoft-msuc/a328f9a9-f5c2-4734-a4ae-d01785fb4711.json"]}}}`),
 				"datasource":                     nil,
 				"datasource -> microsoft-msuc":   []byte(`{"id":"microsoft-msuc","name":"Microsoft Update Catalog","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-microsoft-msuc","commit":"0000000000000000000000000000000000000000","date":"2026-04-01T00:00:00Z"}]}`),
+			},
+		},
+		{
+			// Two consecutive Put calls (different data sources) write the same
+			// (ecosystem, package) key, so test:multi -> index -> shared-pkg must
+			// contain the union of rootIDs in sorted order.
+			name: "multi-source merge",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				roots: []string{
+					"testdata/fixtures/multi-put-merge/source-a",
+					"testdata/fixtures/multi-put-merge/source-b",
+				},
+			},
+			want: map[string][]byte{
+				"metadata":                                  nil,
+				"metadata -> db":                            fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":                             nil,
+				"vulnerability -> root":                     nil,
+				"vulnerability -> root -> ROOT-A":           []byte(`{"id":"ROOT-A","advisories":["ROOT-A"],"vulnerabilities":["CVE-A"],"ecosystems":["test:multi"],"data_sources":["source-a"]}`),
+				"vulnerability -> root -> ROOT-B":           []byte(`{"id":"ROOT-B","advisories":["ROOT-B"],"vulnerabilities":["CVE-B"],"ecosystems":["test:multi"],"data_sources":["source-b"]}`),
+				"vulnerability -> advisory":                 nil,
+				"vulnerability -> advisory -> ROOT-A":       []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"ROOT-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> advisory -> ROOT-B":       []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"ROOT-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> vulnerability":            nil,
+				"vulnerability -> vulnerability -> CVE-A":   []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"CVE-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-B":   []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"CVE-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"test:multi":                                nil,
+				"test:multi -> detection":                   nil,
+				"test:multi -> detection -> ROOT-A":         []byte(`{"source-a":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"test:multi -> detection -> ROOT-B":         []byte(`{"source-b":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"test:multi -> index":                       nil,
+				"test:multi -> index -> shared-pkg":         []byte(`["ROOT-A","ROOT-B"]`),
+				"datasource":                                nil,
+				"datasource -> source-a":                    []byte(`{"id":"source-a","name":"Source A","raw":[{"url":"ghcr.io/vulsio/source-a"}]}`),
+				"datasource -> source-b":                    []byte(`{"id":"source-b","name":"Source B","raw":[{"url":"ghcr.io/vulsio/source-b"}]}`),
 			},
 		},
 	}
@@ -368,8 +479,14 @@ func TestConnection_Put(t *testing.T) {
 				t.Fatalf("initialize db. error = %v", err)
 			}
 
-			if err := c.Put(tt.args.root); (err != nil) != tt.wantErr {
-				t.Errorf("Connection.Put() error = %v, wantErr %v", err, tt.wantErr)
+			var putErr error
+			for _, root := range tt.args.roots {
+				if putErr = c.Put(root); putErr != nil {
+					break
+				}
+			}
+			if (putErr != nil) != tt.wantErr {
+				t.Errorf("Connection.Put() error = %v, wantErr %v", putErr, tt.wantErr)
 			}
 
 			got, err := walkDB(c.Conn())
@@ -718,12 +835,12 @@ func TestConnection_GetIndex(t *testing.T) {
 		query     string
 	}
 	tests := []struct {
-		name    string
-		fixture string
-		fields  fields
-		args    args
-		want    []dataTypes.RootID
-		wantErr bool
+		name      string
+		fixture   string
+		fields    fields
+		args      args
+		want      []dataTypes.RootID
+		wantErrIs error
 	}{
 		{
 			name:    "ecosystem not found",
@@ -735,7 +852,19 @@ func TestConnection_GetIndex(t *testing.T) {
 				ecosystem: "ECOSYSTEM-NOT-EXISTS",
 				query:     "mariadb-devel:10.3::Judy",
 			},
-			wantErr: true,
+			wantErrIs: dbTypes.ErrNotFoundEcosystem,
+		},
+		{
+			name:    "index bucket not found",
+			fixture: "testdata/fixtures/none-exist",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				ecosystem: "test:none-exist",
+				query:     "anything",
+			},
+			wantErrIs: dbTypes.ErrNotFoundIndex,
 		},
 		{
 			name:    "query not found",
@@ -747,7 +876,7 @@ func TestConnection_GetIndex(t *testing.T) {
 				ecosystem: "alma:8",
 				query:     "PACKAGE-NOT-EXISTS",
 			},
-			wantErr: true,
+			wantErrIs: dbTypes.ErrNotFoundIndex,
 		},
 		{
 			name:    "happy",
@@ -783,8 +912,14 @@ func TestConnection_GetIndex(t *testing.T) {
 			defer c.Close()
 
 			got, err := c.GetIndex(tt.args.ecosystem, tt.args.query)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Connection.GetIndex() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErrIs != nil {
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Errorf("Connection.GetIndex() error = %v, want errors.Is %v", err, tt.wantErrIs)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Connection.GetIndex() unexpected error = %v", err)
 				return
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
@@ -1060,15 +1195,26 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 		kbid string
 	}
 	tests := []struct {
-		name    string
-		fixture string
-		fields  fields
-		args    args
-		want    map[sourceTypes.SourceID]microsoftkbTypes.KB
-		wantErr bool
+		name      string
+		fixture   string
+		fields    fields
+		args      args
+		want      map[sourceTypes.SourceID]microsoftkbTypes.KB
+		wantErrIs error
 	}{
 		{
-			name:    "not found",
+			name:    "ecosystem not found",
+			fixture: "testdata/fixtures/alma-small",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				kbid: "4012606",
+			},
+			wantErrIs: dbTypes.ErrNotFoundEcosystem,
+		},
+		{
+			name:    "kbid not found",
 			fixture: "testdata/fixtures/microsoft-small",
 			fields: fields{
 				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
@@ -1076,7 +1222,7 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 			args: args{
 				kbid: "KBID-NOT-EXISTS",
 			},
-			wantErr: true,
+			wantErrIs: dbTypes.ErrNotFoundMicrosoftKB,
 		},
 		{
 			name:    "happy",
@@ -1126,8 +1272,14 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 			defer c.Close()
 
 			got, err := c.GetMicrosoftKB(tt.args.kbid)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Connection.GetMicrosoftKB() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErrIs != nil {
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Errorf("Connection.GetMicrosoftKB() error = %v, want errors.Is %v", err, tt.wantErrIs)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Connection.GetMicrosoftKB() unexpected error = %v", err)
 				return
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {

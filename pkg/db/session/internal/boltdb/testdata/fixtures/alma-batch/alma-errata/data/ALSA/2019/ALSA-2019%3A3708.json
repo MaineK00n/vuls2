@@ -1,0 +1,72 @@
+{
+	"id": "ALSA-2019:3708",
+	"advisories": [
+		{
+			"content": {
+				"id": "ALSA-2019:3708"
+			},
+			"segments": [
+				{
+					"ecosystem": "alma:8"
+				}
+			]
+		}
+	],
+	"vulnerabilities": [
+		{
+			"content": {
+				"id": "CVE-2019-2510"
+			},
+			"segments": [
+				{
+					"ecosystem": "alma:8"
+				}
+			]
+		},
+		{
+			"content": {
+				"id": "CVE-2019-2537"
+			},
+			"segments": [
+				{
+					"ecosystem": "alma:8"
+				}
+			]
+		}
+	],
+	"detections": [
+		{
+			"ecosystem": "alma:8",
+			"conditions": [
+				{
+					"criteria": {
+						"operator": "OR",
+						"criterions": [
+							{
+								"type": "version",
+								"version": {
+									"vulnerable": true,
+									"package": {
+										"type": "binary",
+										"binary": {
+											"name": "mariadb-devel:10.3::Judy",
+											"architectures": [
+												"i686"
+											]
+										}
+									}
+								}
+							}
+						]
+					}
+				}
+			]
+		}
+	],
+	"data_source": {
+		"id": "alma-errata",
+		"raws": [
+			"vuls-data-raw-alma-errata/8/ALSA/2019/ALSA-2019:3708.json"
+		]
+	}
+}

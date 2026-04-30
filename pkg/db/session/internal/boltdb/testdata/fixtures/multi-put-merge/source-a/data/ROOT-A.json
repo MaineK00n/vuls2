@@ -1,0 +1,62 @@
+{
+    "id": "ROOT-A",
+    "advisories": [
+        {
+            "content": {
+                "id": "ROOT-A"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:multi"
+                }
+            ]
+        }
+    ],
+    "vulnerabilities": [
+        {
+            "content": {
+                "id": "CVE-A"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:multi"
+                }
+            ]
+        }
+    ],
+    "detections": [
+        {
+            "ecosystem": "test:multi",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "OR",
+                        "criterions": [
+                            {
+                                "type": "version",
+                                "version": {
+                                    "vulnerable": true,
+                                    "package": {
+                                        "type": "binary",
+                                        "binary": {
+                                            "name": "shared-pkg",
+                                            "architectures": [
+                                                "x86_64"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "source-a",
+        "raws": [
+            "source-a/ROOT-A.json"
+        ]
+    }
+}

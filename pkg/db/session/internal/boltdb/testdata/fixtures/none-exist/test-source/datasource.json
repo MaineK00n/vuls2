@@ -1,0 +1,9 @@
+{
+    "id": "test-source",
+    "name": "Test None-Exist Source",
+    "raw": [
+        {
+            "url": "ghcr.io/vulsio/test-source"
+        }
+    ]
+}

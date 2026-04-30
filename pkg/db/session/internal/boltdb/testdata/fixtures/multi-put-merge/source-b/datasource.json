@@ -1,0 +1,9 @@
+{
+    "id": "source-b",
+    "name": "Source B",
+    "raw": [
+        {
+            "url": "ghcr.io/vulsio/source-b"
+        }
+    ]
+}
