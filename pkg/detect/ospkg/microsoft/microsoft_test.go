@@ -409,6 +409,58 @@ func TestDetect(t *testing.T) {
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
 		{
+			name:    "detect bare cross-platform app KB criterion on Windows host",
+			fixture: "testdata/fixtures/microsoft-bare-app-kb",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
+					Release: "Windows 10 Version 21H2 for x64-based Systems",
+					MicrosoftKB: scanTypes.MicrosoftKB{
+						Unapplied: []string{"8800001"},
+					},
+				},
+				concurrency: 1,
+			},
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2024-88001": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Microsoft Office 2016 (32-bit edition)",
+															KBID:    "8800001",
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Microsoft Office 2016 (32-bit edition)"),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name:    "cross-product KB filtered: Win10 host does not detect Server 2012 condition",
 			fixture: "testdata/fixtures/microsoft-cross-product",
 			config: session.Config{
@@ -809,6 +861,20 @@ func Test_filterKBIDsByRelease(t *testing.T) {
 			},
 			want: []string{"9000002"},
 		},
+		{
+			name:    "bare cross-platform app KB kept across releases",
+			fixture: "testdata/fixtures/microsoft-cross-product",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				kbs:     []string{"9000003"},
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: []string{"9000003"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -926,14 +992,6 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "no suffix, non-matching product filtered",
-			args: args{
-				product: "Microsoft Edge (Chromium-based)",
-				release: "Windows 10 Version 1607 for x64-based Systems",
-			},
-			want: false,
-		},
-		{
 			name: "bare OS name matching release passes",
 			args: args{
 				product: "Windows 10 Version 21H2 for x64-based Systems",
@@ -948,6 +1006,470 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 				release: "Windows 10 Version 21H2 for x64-based Systems",
 			},
 			want: false,
+		},
+		{
+			name: "bare Windows 8.1 SKU matching release passes",
+			args: args{
+				product: "Windows 8.1 for x64-based Systems",
+				release: "Windows 8.1 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Server comma-separated SKU matches family token",
+			args: args{
+				product: "Windows Server, Version 1903 (Server Core installation)",
+				release: "Windows Server, Version 1903 (Server Core installation)",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Server comma-separated SKU cross-product filtered",
+			args: args{
+				product: "Windows Server, Version 1903 (Server Core installation)",
+				release: "Windows 11 Version 23H2 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare Azure Stack HCI OS matching release passes",
+			args: args{
+				product: "Azure Stack HCI OS 22H2",
+				release: "Azure Stack HCI OS 22H2",
+			},
+			want: true,
+		},
+		{
+			name: "bare Azure Stack HCI OS cross-product filtered",
+			args: args{
+				product: "Azure Stack HCI OS 22H2",
+				release: "Windows 11 Version 23H2 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare cross-platform Edge product passes",
+			args: args{
+				product: "Microsoft Edge (Chromium-based)",
+				release: "Windows 10 Version 1607 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare cross-platform Office product passes",
+			args: args{
+				product: "Microsoft Office 2016 (32-bit edition)",
+				release: "Windows 10 Version 21H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare cross-platform .NET product passes",
+			args: args{
+				product: ".NET 6.0",
+				release: "Windows 11 Version 23H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare cross-platform Azure File Sync product passes",
+			args: args{
+				product: "Azure File Sync v18.0",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Admin Center (cross-OS tool) passes",
+			args: args{
+				product: "Windows Admin Center",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Malicious Software Removal Tool passes",
+			args: args{
+				product: "Windows Malicious Software Removal Tool 64-bit",
+				release: "Windows 11 Version 23H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Update Assistant passes",
+			args: args{
+				product: "Windows Update Assistant",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Azure Pack passes",
+			args: args{
+				product: "Windows Azure Pack Rollup 13.1",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare microsoft-bulletin Windows XP product cross-product filtered",
+			args: args{
+				product: "Microsoft Windows XP Professional x64 Edition Service Pack 2",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows XP product matching release passes",
+			args: args{
+				product: "Microsoft Windows XP Professional x64 Edition Service Pack 2",
+				release: "Microsoft Windows XP Professional x64 Edition Service Pack 2",
+			},
+			want: true,
+		},
+		{
+			name: "bare microsoft-bulletin Server 2003 SP2 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Server 2003 Service Pack 2",
+				release: "Windows Server 2012 R2",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Server 2003 Itanium cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Server 2003 for Itanium-based Systems Service Pack 2",
+				release: "Windows 8.1 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows 2000 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows 2000 Service Pack 4",
+				release: "Windows Server 2008 for x64-based Systems Service Pack 2",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows XP SP3 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows XP Service Pack 3",
+				release: "Windows Server 2008 R2 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare versionless Windows RT cross-product filtered",
+			args: args{
+				product: "Windows RT",
+				release: "Windows 8.1 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare versionless Windows RT matching release passes",
+			args: args{
+				product: "Windows RT",
+				release: "Windows RT",
+			},
+			want: true,
+		},
+		{
+			name: "bare versionless Windows Vista cross-product filtered",
+			args: args{
+				product: "Windows Vista",
+				release: "Windows Server 2008 for x64-based Systems Service Pack 2",
+			},
+			want: false,
+		},
+		{
+			name: "bare versionless Windows Vista matching release passes",
+			args: args{
+				product: "Windows Vista",
+				release: "Windows Vista",
+			},
+			want: true,
+		},
+		{
+			name: "bare Microsoft Office (cross-platform with Microsoft prefix) passes",
+			args: args{
+				product: "Microsoft Office 2019 (64-bit edition)",
+				release: "Windows Server 2019",
+			},
+			want: true,
+		},
+		{
+			name: "bare Microsoft SharePoint Server (cross-platform) passes",
+			args: args{
+				product: "Microsoft SharePoint Server 2019",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Microsoft SQL Server (cross-platform) passes",
+			args: args{
+				product: "Microsoft SQL Server 2022 for x64-based Systems (GDR)",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Microsoft Exchange Server (cross-platform) passes",
+			args: args{
+				product: "Microsoft Exchange Server 2019 Cumulative Update 14",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Microsoft Dynamics (cross-platform) passes",
+			args: args{
+				product: "Microsoft Dynamics 365 Business Central 2024 Release Wave 2",
+				release: "Windows Server 2022",
+			},
+			want: true,
+		},
+		{
+			name: "bare Skype for Business (cross-platform) passes",
+			args: args{
+				product: "Skype for Business 2016 (64-bit)",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Small Business Server cross-product filtered",
+			args: args{
+				product: "Windows Small Business Server 2003 R2",
+				release: "Windows Server 2008 R2 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Home Server cross-product filtered",
+			args: args{
+				product: "Windows Home Server",
+				release: "Windows Server 2012",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows Me cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Me",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows NT4 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows NT4",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows NT Server 4.0 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows NT Server 4.0 Service Pack 6a",
+				release: "Windows Server 2008 R2 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Services for UNIX cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Services for UNIX 3.5",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare microsoft-bulletin Windows 98 cross-product filtered",
+			args: args{
+				product: "Microsoft Windows 98 Second Edition",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Media Player (cross-platform app) passes",
+			args: args{
+				product: "Windows Media Player 11",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: true,
+		},
+		{
+			name: "bare Windows Messenger (legacy EOL, NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Windows Messenger 4.7",
+				release: "Windows XP Service Pack 3",
+			},
+			want: false,
+		},
+		{
+			name: "bare Microsoft Windows SharePoint Services (cross-platform app) passes",
+			args: args{
+				product: "Microsoft Windows SharePoint Services 3.0 Service Pack 2 (32-bit version)",
+				release: "Windows Server 2008 R2 for x64-based Systems Service Pack 1",
+			},
+			want: true,
+		},
+		{
+			name: "bare versionless Microsoft Windows XP cross-product filtered",
+			args: args{
+				product: "Microsoft Windows XP",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare versionless Microsoft Windows Millennium Edition cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Millennium Edition",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Internet Information Services (allowlisted server) passes",
+			args: args{
+				product: "Internet Information Services 5.0",
+				release: "Windows Server 2008 for x64-based Systems Service Pack 2",
+			},
+			want: true,
+		},
+		{
+			name: "bare ISA Server (allowlisted server) passes",
+			args: args{
+				product: "Microsoft Internet Security and Acceleration Server 2000",
+				release: "Windows Server 2008 for x64-based Systems Service Pack 2",
+			},
+			want: true,
+		},
+		{
+			name: "bare Works Suite (allowlisted productivity legacy) passes",
+			args: args{
+				product: "Microsoft Works Suite 2004",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: true,
+		},
+		{
+			name: "bare 2007 Microsoft Office System (legacy naming) passes",
+			args: args{
+				product: "2007 Microsoft Office System Service Pack 3",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Internet Explorer (no Microsoft prefix) passes",
+			args: args{
+				product: "Internet Explorer 11",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Media Center TV Pack (NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Media Center TV Pack",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Microsoft Surface (NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Microsoft Surface Pro 4",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare Microsoft Virtual PC (NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Microsoft Virtual PC 2007",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Live OneCare (legacy EOL, NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Windows Live OneCare",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Essentials (legacy EOL, NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Windows Essentials 2012",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Windows Journal Viewer (legacy EOL, NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Windows Journal Viewer",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: false,
+		},
+		{
+			name: "bare Microsoft Windows Script Host (legacy, NOT in allowlist) cross-product filtered",
+			args: args{
+				product: "Microsoft Windows Script Host 5.5",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: false,
+		},
+		{
+			name: "bare Visual Studio (allowlisted dev) passes",
+			args: args{
+				product: "Microsoft Visual Studio 2015 Update 3",
+				release: "Windows 10 Version 22H2 for x64-based Systems",
+			},
+			want: true,
+		},
+		{
+			name: "bare Forefront (allowlisted) passes",
+			args: args{
+				product: "Microsoft Forefront UAG 2010",
+				release: "Windows Server 2008 R2 for x64-based Systems Service Pack 1",
+			},
+			want: true,
+		},
+		{
+			name: "bare BizTalk (allowlisted) passes",
+			args: args{
+				product: "Microsoft BizTalk Server 2020",
+				release: "Windows Server 2019",
+			},
+			want: true,
+		},
+		{
+			name: "bare Outlook Express (legacy variant via Outlook prefix) passes",
+			args: args{
+				product: "Outlook Express 5.5",
+				release: "Windows XP Service Pack 3",
+			},
+			want: true,
+		},
+		{
+			name: "bare MSXML Core Services (allowlisted runtime) passes",
+			args: args{
+				product: "MSXML 4.0 Service Pack 2",
+				release: "Windows 7 for x64-based Systems Service Pack 1",
+			},
+			want: true,
 		},
 		{
 			name: "matching release passes",

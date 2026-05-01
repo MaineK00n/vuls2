@@ -1,0 +1,13 @@
+{
+  "kb_id": "8800001",
+  "url": "https://support.microsoft.com/help/8800001",
+  "products": [
+    "Microsoft Office 2016 (32-bit edition)"
+  ],
+  "data_source": {
+    "id": "microsoft-cvrf",
+    "raws": [
+      "vuls-data-raw-microsoft-cvrf/test/CVE-2024-88001.json"
+    ]
+  }
+}

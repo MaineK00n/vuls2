@@ -352,18 +352,164 @@ var microsoftPackageNameRules = []normalizeRule{
 	},
 }
 
+// filterMicrosoftKBProduct decides whether a KB's product is relevant to
+// the given host release. Two cases:
+//
+//   - Suffix products ("... on <release>" / "... installed on <release>")
+//     are kept iff their suffix equals release (cross-product safety).
+//   - Bare products are kept iff either they name a cross-platform app
+//     that we actively want KB-criterion-based detection to evaluate
+//     (see isKBCriterionApp), or they exactly equal the host release.
+//     The default-filter direction means OS-named bare products must
+//     match release exactly, while niche/legacy app products that are
+//     unlikely to be installed are dropped — which prevents KB-criterion
+//     "covered" matches from contaminating detections via the
+//     supersession graph (e.g. Win7 host falsely flagging old "Media
+//     Center TV Pack" or "Microsoft Windows Script Host" bulletins).
+//
+// AcceptProducts (gated by scanner-observed installed packages and
+// applied / unapplied KB targets) is still the final arbiter for cases
+// where this filter passes a product through.
 func filterMicrosoftKBProduct(product, release string) bool {
 	if release == "" {
 		return true
 	}
-	suffix := extractOSSuffix(product)
-	if suffix == "" {
-		// Bare OS name (e.g. "Windows 10 Version 21H2 for x64-based Systems",
-		// "Windows Server 2012 R2"). Must match release exactly to avoid
-		// cross-product contamination from multi-product KBs.
-		return product == release
+	if suffix := extractOSSuffix(product); suffix != "" {
+		return suffix == release
 	}
-	return suffix == release
+	if isKBCriterionApp(product) {
+		return true
+	}
+	return product == release
+}
+
+// isKBCriterionApp reports whether a bare product (no " on " suffix) is
+// a cross-platform Microsoft application family that we want
+// KB-criterion-based detection to evaluate regardless of host OS
+// release. Products outside this allowlist are subject to strict
+// release-equality filtering — that is the desired behaviour for both
+// OS-named bare products (where release equality is the right test) and
+// for niche/legacy apps that are unlikely to be present on most scanned
+// hosts and would otherwise trigger false positives via the
+// supersession-graph "covered" path. Examples currently filtered:
+// "Media Center TV Pack for Windows Vista", "Microsoft Surface with
+// Windows RT", "Windows Virtual PC", "Windows Live OneCare",
+// "Windows Essentials", "Microsoft Windows Script Host".
+//
+// Note that several "Windows ..." prefixed product families are
+// intentionally allowlisted because Microsoft still ships
+// KB-criterion-based updates for them across multiple host releases —
+// e.g. Windows Defender, Windows Admin Center, Windows Malicious
+// Software Removal Tool, Windows Media Player, Internet Security and
+// Acceleration Server. Treat these as cross-platform apps, not as
+// host-OS products.
+//
+// Add an entry here when a Microsoft product family becomes a regular
+// target for KB-criterion-based detection (Patch Tuesday, monthly
+// security updates, or equivalent). Removing an entry strips silent
+// detection from that family.
+func isKBCriterionApp(product string) bool {
+	p := strings.TrimPrefix(product, "Microsoft ")
+
+	// Family allowlist. A product matches when, after the optional
+	// "Microsoft " trim, it equals the family token or starts with the
+	// token followed by " " / "," / ":" (covering naming variants like
+	// "Office 2016 (32-bit edition)" / "SharePoint Server, Version ..."
+	// / "Platform SDK Redistributable: GDI+").
+	appFamilies := []string{
+		// "Internet Explorer" is the only major Microsoft app without a
+		// "Microsoft " vendor prefix in the DB; trim above is a no-op for
+		// it, so listing the family here picks up "Internet Explorer 11"
+		// / "Internet Explorer 6.0" naturally.
+		"Internet Explorer",
+
+		// "2007 Microsoft Office System" is a Microsoft 2007-only
+		// marketing name where the family token is embedded in the middle
+		// of the product string. The 2010+ generation reverted to
+		// "Microsoft Office <year>", so this entry is closed and won't
+		// grow. Prefix matching is intentional here: it covers both the
+		// family itself and suite variants like
+		// "2007 Microsoft Office System Service Pack 3" — both should be
+		// evaluated against KB criteria.
+		"2007 Microsoft Office System",
+
+		// Office suite & individual apps.
+		"Office", "Word", "Excel", "PowerPoint", "Outlook", "Access",
+		"OneNote", "Publisher", "Visio", "Project", "InfoPath",
+		"FrontPage", "Live Meeting", "Communicator",
+
+		// SharePoint / collaboration.
+		"SharePoint", "Sharepoint",
+		"Windows SharePoint Services",
+		"Groove", "Groove Server",
+		"FAST Search Server",
+		"Business Productivity Servers",
+
+		// Mail / messaging / telephony.
+		"Exchange", "Lync", "Skype",
+
+		// Database servers and drivers.
+		"SQL Server",
+		"Data Access Components", "Data Engine",
+		"OLE DB Driver", "OLE DB Provider",
+		"Report Viewer Redistributable",
+
+		// Web / mainframe / commerce / management servers.
+		"Internet Information Services", "Internet Information Server",
+		"Internet Security and Acceleration Server",
+		"Host Integration Server",
+		"Commerce Server", "Content Management Server",
+		"Endpoint Configuration Manager",
+
+		// Developer tooling and runtimes.
+		"Visual Studio", "Visual Basic", "Visual C++", "Visual FoxPro",
+		".NET", "ASP.NET", "ASP.NET Core",
+		"Expression Web", "Expression Studio",
+		"Platform SDK Redistributable",
+
+		// Browsers and runtimes.
+		"Edge", "Silverlight",
+		"MSXML", "XML Core Services",
+
+		// Business / management products.
+		"Dynamics", "BizTalk", "Forefront", "System Center",
+
+		// Office productivity suite (legacy).
+		"Works", "Works Suite",
+
+		// File-format converters.
+		"Open XML File Format Converter",
+
+		// Azure-prefixed cross-platform apps.
+		"Azure File Sync", "Azure Pack",
+
+		// "Windows "-prefixed apps (NOT OS releases) that we still want
+		// KB-criterion-based detection to evaluate. Other "Windows "-
+		// prefixed legacy apps without ongoing security updates (Live
+		// OneCare, Essentials, Journal Viewer, Messenger, Script Host,
+		// Media Player on EOL'd Windows, ...) deliberately stay outside
+		// this list.
+		"Windows Defender",
+		"Windows Admin Center",
+		"Windows Update Assistant",
+		"Windows Malicious Software Removal Tool",
+		"Windows Azure Pack",
+		"Windows Media Player",
+	}
+	for _, fam := range appFamilies {
+		if p == fam {
+			return true
+		}
+		if len(p) > len(fam) {
+			switch p[len(fam)] {
+			case ' ', ',', ':':
+				if strings.HasPrefix(p, fam) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func extractOSSuffix(product string) string {
