@@ -1,0 +1,16 @@
+{
+  "kb_id": "5005003",
+  "url": "https://support.microsoft.com/help/5005003",
+  "updates": [
+    {
+      "update_id": "00000000-0000-0000-0000-000000005003",
+      "catalog_url": "https://catalog.update.microsoft.com/v7/site/Search.aspx?q=5005003"
+    }
+  ],
+  "data_source": {
+    "id": "microsoft-msuc",
+    "raws": [
+      "vuls-data-raw-microsoft-msuc/00000000-0000-0000-0000-000000005003.json"
+    ]
+  }
+}

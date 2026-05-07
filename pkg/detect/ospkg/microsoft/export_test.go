@@ -5,4 +5,5 @@ var (
 	FilterKBIDsByRelease          = filterKBIDsByRelease
 	NormalizeMicrosoftPackageName = normalizeMicrosoftPackageName
 	FilterMicrosoftKBProduct      = filterMicrosoftKBProduct
+	ForwardSupersedersFromApplied = forwardSupersedersFromApplied
 )

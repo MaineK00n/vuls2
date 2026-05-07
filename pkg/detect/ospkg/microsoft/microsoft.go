@@ -55,7 +55,60 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 		}
 	}
 
-	for _, kbid := range append(sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied...) {
+	// Register vcm products from applied + unapplied (input) plus the
+	// forward-only superseders of applied (KBs reachable via SupersededBy
+	// edges only). Forward expansion adds the products of newer KBs that
+	// host should apply but hasn't (e.g. a current Defender KB whose newer
+	// revision targets new platforms), without leaking products from the
+	// backward Supersedes chain (which would pull in stale era-mismatched
+	// products like IE 5.01 KBs on modern hosts via cross-product
+	// supersession edges). filterMicrosoftKBProduct still gates each
+	// product per-entry so cross-OS products picked up by the forward walk
+	// (e.g. a Win11 24H2 cumulative superseded by a Server 2025 one) do
+	// not leak into vcm.
+	//
+	// Seed the forward walk from Applied \ Unapplied to mirror
+	// classifyKBs' "prefer unapplied" rule: a KB reported as both applied
+	// and unapplied (pending reboot / rolled back) is treated as unapplied
+	// and therefore not used to expand the should-have-applied frontier.
+	unappliedSet := make(map[string]struct{}, len(sr.MicrosoftKB.Unapplied))
+	for _, kbid := range sr.MicrosoftKB.Unapplied {
+		if kbid == "" {
+			continue
+		}
+		unappliedSet[kbid] = struct{}{}
+	}
+	forwardSeeds := make([]string, 0, len(sr.MicrosoftKB.Applied))
+	for _, kbid := range sr.MicrosoftKB.Applied {
+		if kbid == "" {
+			continue
+		}
+		if _, ok := unappliedSet[kbid]; ok {
+			continue
+		}
+		forwardSeeds = append(forwardSeeds, kbid)
+	}
+	forwardKBs, err := forwardSupersedersFromApplied(s, forwardSeeds)
+	if err != nil {
+		return nil, errors.Wrap(err, "forward superseders from applied")
+	}
+
+	// Deduplicate before iterating: applied / unapplied / forwardKBs may
+	// share IDs (e.g. forwardKBs can intersect Unapplied), and a duplicate
+	// would trigger redundant GetMicrosoftKB lookups.
+	vcmKBSet := make(map[string]struct{}, len(sr.MicrosoftKB.Applied)+len(unappliedSet)+len(forwardKBs))
+	for _, kbid := range sr.MicrosoftKB.Applied {
+		if kbid != "" {
+			vcmKBSet[kbid] = struct{}{}
+		}
+	}
+	for kbid := range unappliedSet {
+		vcmKBSet[kbid] = struct{}{}
+	}
+	for _, kbid := range forwardKBs {
+		vcmKBSet[kbid] = struct{}{}
+	}
+	for kbid := range vcmKBSet {
 		m, err := s.GetMicrosoftKB(kbid)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
@@ -272,6 +325,80 @@ func classifyKBs(s session.Storage, applied []string, unapplied []string) (cover
 	}
 
 	return coveredKBs, unappliedKBs, nil
+}
+
+// forwardSupersedersFromApplied returns the KBs reachable from applied via
+// forward-only BFS through SupersededBy edges (both KB-level and per-Update),
+// excluding the applied seeds themselves. The result is intended for
+// expanding vcm product registration: products of newer KBs that supersede
+// applied represent platforms host should-but-hasn't applied yet, and need
+// to be in vcm so KB criteria targeting those products can be evaluated.
+//
+// This is intentionally narrower than classifyKBs's bidirectional walk:
+// the backward Supersedes chain is excluded because following it from
+// applied or unapplied input pulls in old historical KBs (e.g. KB279328
+// for Internet Explorer 5.01 from 2001) whose products would otherwise
+// leak cross-era bulletins (MS01-MS09 Internet Explorer entries) into
+// modern hosts via the isKBCriterionApp allowlist.
+func forwardSupersedersFromApplied(s session.Storage, applied []string) ([]string, error) {
+	// Seed visited and queue from a deduplicated, non-empty applied list so
+	// each starting KB is fetched at most once and downstream BFS treats
+	// duplicates as a single seed.
+	appliedSet := make(map[string]struct{}, len(applied))
+	queue := make([]string, 0, len(applied))
+	for _, kb := range applied {
+		if kb == "" {
+			continue
+		}
+		if _, ok := appliedSet[kb]; ok {
+			continue
+		}
+		appliedSet[kb] = struct{}{}
+		queue = append(queue, kb)
+	}
+	visited := maps.Clone(appliedSet)
+	for head := 0; head < len(queue); head++ {
+		cur := queue[head]
+		m, err := s.GetMicrosoftKB(cur)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
+				continue
+			}
+			return nil, errors.Wrapf(err, "get microsoft kb %s", cur)
+		}
+		for _, kb := range m {
+			for _, sup := range kb.SupersededBy {
+				if sup.KBID == "" {
+					continue
+				}
+				if _, ok := visited[sup.KBID]; ok {
+					continue
+				}
+				visited[sup.KBID] = struct{}{}
+				queue = append(queue, sup.KBID)
+			}
+			for _, u := range kb.Updates {
+				for _, sup := range u.SupersededBy {
+					if sup.KBID == "" {
+						continue
+					}
+					if _, ok := visited[sup.KBID]; ok {
+						continue
+					}
+					visited[sup.KBID] = struct{}{}
+					queue = append(queue, sup.KBID)
+				}
+			}
+		}
+	}
+	var out []string
+	for kb := range visited {
+		if _, ok := appliedSet[kb]; ok {
+			continue
+		}
+		out = append(out, kb)
+	}
+	return out, nil
 }
 
 // filterKBIDsByRelease removes KBs whose products are all irrelevant to

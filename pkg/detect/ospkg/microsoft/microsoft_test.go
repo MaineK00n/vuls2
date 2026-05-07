@@ -764,6 +764,135 @@ func Test_classifyKBs(t *testing.T) {
 	}
 }
 
+func Test_forwardSupersedersFromApplied(t *testing.T) {
+	type args struct {
+		applied []string
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    []string
+		wantErr error
+	}{
+		{
+			name:    "empty applied",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: nil},
+			want: nil,
+		},
+		{
+			name:    "applied at chain head: discovers forward chain",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: []string{"5000802"}},
+			want: []string{"5001330", "5003173", "5003637"},
+		},
+		{
+			name:    "applied at chain tail: nothing newer",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: []string{"5003637"}},
+			want: nil,
+		},
+		{
+			name:    "duplicate applied IDs: deduplicated",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: []string{"5000802", "5000802", "", "5000802"}},
+			want: []string{"5001330", "5003173", "5003637"},
+		},
+		{
+			name:    "applied not in DB: silently skipped",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: []string{"9999999"}},
+			want: nil,
+		},
+		{
+			name:    "applied in middle: returns only forward, no backward",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{applied: []string{"5001330"}},
+			want: []string{"5003173", "5003637"},
+		},
+		{
+			name:    "per-Update SupersededBy chain: traversed",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			// 5005001 / 5005002 / 5005003 are connected only via
+			// updates[].superseded_by (microsoft-msuc fixture). KB-level
+			// superseded_by is empty for all three, so a passing result
+			// confirms that the per-Update edge is followed.
+			args: args{applied: []string{"5005001"}},
+			want: []string{"5005002", "5005003"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			got, err := microsoft.ForwardSupersedersFromApplied(s.Storage(), tt.args.applied)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("forwardSupersedersFromApplied() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("forwardSupersedersFromApplied() expected error has not occurred")
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("forwardSupersedersFromApplied() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+					t.Errorf("forwardSupersedersFromApplied() (-expected +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
 func Test_filterKBIDsByRelease(t *testing.T) {
 	type args struct {
 		kbs     []string
