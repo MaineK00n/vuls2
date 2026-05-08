@@ -76,8 +76,9 @@ func TestSubtract(t *testing.T) {
 
 func TestComputeDiffs(t *testing.T) {
 	type args struct {
-		detections          map[string]detection.FileDiff
-		changeRateThreshold float64
+		detections                   map[string]detection.FileDiff
+		changeRateThreshold          float64
+		changeRateThresholdOverrides map[string]float64
 	}
 	tests := []struct {
 		name string
@@ -102,6 +103,7 @@ func TestComputeDiffs(t *testing.T) {
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 					ChangeRate:  0,
+					Threshold:   10,
 					Pass:        true,
 				},
 			},
@@ -130,6 +132,7 @@ func TestComputeDiffs(t *testing.T) {
 					Added:      []string{"CVE-2026-0011"},
 					Removed:    []string{"CVE-2026-0010"},
 					ChangeRate: 20,
+					Threshold:  25,
 					Pass:       true,
 				},
 			},
@@ -153,6 +156,7 @@ func TestComputeDiffs(t *testing.T) {
 					TargetIDs:   []string{"CVE-2026-0001"},
 					Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					ChangeRate:  75,
+					Threshold:   10,
 					Pass:        false,
 				},
 			},
@@ -176,6 +180,7 @@ func TestComputeDiffs(t *testing.T) {
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
 					Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
 					ChangeRate:  200,
+					Threshold:   10,
 					Pass:        false,
 				},
 			},
@@ -199,6 +204,7 @@ func TestComputeDiffs(t *testing.T) {
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 					Added:       []string{"CVE-2026-0001", "CVE-2026-0002"},
 					ChangeRate:  100,
+					Threshold:   10,
 					Pass:        false,
 				},
 			},
@@ -221,6 +227,7 @@ func TestComputeDiffs(t *testing.T) {
 					BaselineIDs: []string{},
 					TargetIDs:   []string{},
 					ChangeRate:  0,
+					Threshold:   10,
 					Pass:        true,
 				},
 			},
@@ -248,6 +255,7 @@ func TestComputeDiffs(t *testing.T) {
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 					ChangeRate:  0,
+					Threshold:   10,
 					Pass:        true,
 				},
 				"ubuntu_22.04": {
@@ -255,6 +263,7 @@ func TestComputeDiffs(t *testing.T) {
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 					Removed:     []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 					ChangeRate:  100,
+					Threshold:   10,
 					Pass:        false,
 				},
 			},
@@ -282,6 +291,7 @@ func TestComputeDiffs(t *testing.T) {
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 					ChangeRate:  0,
+					Threshold:   10,
 					Pass:        true,
 				},
 				"ubuntu_22.04": {
@@ -290,7 +300,73 @@ func TestComputeDiffs(t *testing.T) {
 					TargetIDs:   []string{"CVE-2026-0001"},
 					Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					ChangeRate:  75,
+					Threshold:   10,
 					Pass:        false,
+				},
+			},
+		},
+		{
+			name: "override lifts a single file above default threshold",
+			args: args{
+				detections: map[string]detection.FileDiff{
+					"debian_13": {
+						Name:        "debian_13",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					},
+					"redhat_9": {
+						Name:        "redhat_9",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						TargetIDs:   []string{"CVE-2026-0001"},
+					},
+				},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"debian_13": 80},
+			},
+			want: map[string]detection.FileDiff{
+				"debian_13": {
+					Name:                "debian_13",
+					BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
+					TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					Added:               []string{"CVE-2026-0003"},
+					ChangeRate:          50,
+					Threshold:           80,
+					ThresholdOverridden: true,
+					Pass:                true,
+				},
+				"redhat_9": {
+					Name:        "redhat_9",
+					BaselineIDs: []string{"CVE-2026-0001"},
+					TargetIDs:   []string{"CVE-2026-0001"},
+					ChangeRate:  0,
+					Threshold:   10,
+					Pass:        true,
+				},
+			},
+		},
+		{
+			name: "override below rate still fails",
+			args: args{
+				detections: map[string]detection.FileDiff{
+					"debian_13": {
+						Name:        "debian_13",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					},
+				},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"debian_13": 30},
+			},
+			want: map[string]detection.FileDiff{
+				"debian_13": {
+					Name:                "debian_13",
+					BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
+					TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					Added:               []string{"CVE-2026-0003"},
+					ChangeRate:          50,
+					Threshold:           30,
+					ThresholdOverridden: true,
+					Pass:                false,
 				},
 			},
 		},
@@ -298,7 +374,7 @@ func TestComputeDiffs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.ComputeDiffs(tt.args.detections, tt.args.changeRateThreshold)
+			got := detection.ComputeDiffs(tt.args.detections, tt.args.changeRateThreshold, tt.args.changeRateThresholdOverrides)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("ComputeDiffs() mismatch (-want +got):\n%s", diff)
 			}
@@ -326,6 +402,7 @@ func TestGenerateReport(t *testing.T) {
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 						ChangeRate:  0,
+						Threshold:   10,
 						Pass:        true,
 					},
 					"ubuntu_22.04": {
@@ -334,6 +411,7 @@ func TestGenerateReport(t *testing.T) {
 						TargetIDs:   []string{"CVE-2026-0001"},
 						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						ChangeRate:  75.0,
+						Threshold:   10,
 						Pass:        false,
 					},
 				},
@@ -344,12 +422,12 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: **FAIL** (Change Rate Threshold: 10.0%)
+**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Result |
-|------|----------|--------|-------|---------|-------------|--------|
-| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% | **FAIL** |
-| redhat_9 | 2 | 2 | 0 | 0 | 0.0% | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
+| redhat_9 | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 ## Details (FAIL files)
 
@@ -372,6 +450,7 @@ func TestGenerateReport(t *testing.T) {
 						BaselineIDs: []string{"CVE-2026-0001"},
 						TargetIDs:   []string{"CVE-2026-0001"},
 						ChangeRate:  0,
+						Threshold:   10,
 						Pass:        true,
 					},
 				},
@@ -382,11 +461,52 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: PASS (Change Rate Threshold: 10.0%)
+**Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Result |
-|------|----------|--------|-------|---------|-------------|--------|
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+
+`,
+		},
+		{
+			name: "override applied with footnote",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"debian_13": {
+						Name:                "debian_13",
+						BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						Added:               []string{"CVE-2026-0003"},
+						ChangeRate:          50,
+						Threshold:           80,
+						ThresholdOverridden: true,
+						Pass:                true,
+					},
+					"redhat_9": {
+						Name:        "redhat_9",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						TargetIDs:   []string{"CVE-2026-0001"},
+						ChangeRate:  0,
+						Threshold:   10,
+						Pass:        true,
+					},
+				},
+				changeRateThreshold: 10,
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: PASS (Default Change Rate Threshold: 10.0%)
+
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0%* | PASS |
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+
+` + "`*`" + ` = override applied
 
 `,
 		},

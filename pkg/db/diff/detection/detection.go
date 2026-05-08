@@ -19,10 +19,11 @@ import (
 )
 
 type options struct {
-	changeRateThreshold float64
-	debug               bool
-	writer              io.Writer
-	detectFunc          func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
+	changeRateThreshold          float64
+	changeRateThresholdOverrides map[string]float64
+	debug                        bool
+	writer                       io.Writer
+	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
 }
 
 type Option interface {
@@ -36,6 +37,20 @@ func (o changeRateThresholdOption) apply(opts *options) {
 }
 func WithChangeRateThreshold(r float64) Option {
 	return changeRateThresholdOption(r)
+}
+
+type changeRateThresholdOverridesOption map[string]float64
+
+func (o changeRateThresholdOverridesOption) apply(opts *options) {
+	opts.changeRateThresholdOverrides = map[string]float64(o)
+}
+
+// WithChangeRateThresholdOverrides supplies per-file overrides of the change
+// rate threshold. Keys are scan-result file basenames (without the `.json`
+// extension, e.g. "debian_13"); values are percentages. Missing keys fall
+// back to the default supplied via WithChangeRateThreshold.
+func WithChangeRateThresholdOverrides(m map[string]float64) Option {
+	return changeRateThresholdOverridesOption(m)
 }
 
 type debugOption bool
@@ -64,7 +79,13 @@ type FileDiff struct {
 	Added       []string
 	Removed     []string
 	ChangeRate  float64
-	Pass        bool
+
+	// Threshold actually applied to this file (post override resolution).
+	// ThresholdOverridden is true iff a per-file override matched.
+	Threshold           float64
+	ThresholdOverridden bool
+
+	Pass bool
 }
 
 // Diff compares detection results between baseline and target pairs of (binary, DB).
@@ -99,16 +120,46 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "detect")
 	}
 
-	diffm = computeDiffs(diffm, o.changeRateThreshold)
+	diffm = computeDiffs(diffm, o.changeRateThreshold, o.changeRateThresholdOverrides)
+
+	warnUnusedOverrides(o.changeRateThresholdOverrides, diffm)
 
 	pass, err := generateReport(o.writer, diffm, o.changeRateThreshold)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
 	if !pass {
-		return errors.Errorf("diff failed: change rate exceeded threshold (%.1f%%)", o.changeRateThreshold)
+		return errors.Errorf("diff failed: change rate exceeded threshold (default %.1f%%)", o.changeRateThreshold)
 	}
 	return nil
+}
+
+// resolveThreshold returns the threshold to apply to a given file, preferring
+// an override entry when present.
+func resolveThreshold(key string, def float64, overrides map[string]float64) (rate float64, overridden bool) {
+	if v, ok := overrides[key]; ok {
+		return v, true
+	}
+	return def, false
+}
+
+// warnUnusedOverrides logs a warning for each override key that did not match
+// any compared scan-result file. Catches typos / stale entries.
+func warnUnusedOverrides(overrides map[string]float64, diffm map[string]FileDiff) {
+	if len(overrides) == 0 {
+		return
+	}
+	used := make(map[string]bool, len(diffm))
+	for _, d := range diffm {
+		if d.ThresholdOverridden {
+			used[d.Name] = true
+		}
+	}
+	for k := range overrides {
+		if !used[k] {
+			slog.Warn("change-rate-threshold override key did not match any scan-result file", "key", k)
+		}
+	}
 }
 
 // listScanResults lists *.json files in the directory.
@@ -292,7 +343,7 @@ skipUpdate = true
 // therefore invisible. This is sufficient for regression detection (missing or
 // extra CVEs), but not for validating data source migrations where IDs stay
 // the same but metadata differs.
-func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64) map[string]FileDiff {
+func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64, overrides map[string]float64) map[string]FileDiff {
 	for name, d := range ds {
 		d.Added = subtract(d.TargetIDs, d.BaselineIDs)
 		d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
@@ -309,7 +360,8 @@ func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64) map[strin
 				return 0
 			}
 		}()
-		d.Pass = d.ChangeRate <= changeRateThreshold
+		d.Threshold, d.ThresholdOverridden = resolveThreshold(d.Name, changeRateThreshold, overrides)
+		d.Pass = d.ChangeRate <= d.Threshold
 
 		ds[name] = d
 	}

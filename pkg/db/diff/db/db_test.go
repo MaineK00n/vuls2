@@ -305,7 +305,7 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0)
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -319,9 +319,10 @@ func TestDiffEcosystem(t *testing.T) {
 
 func TestDiffBoltDB(t *testing.T) {
 	type args struct {
-		baselineFixtures    []string
-		targetFixtures      []string
-		changeRateThreshold float64
+		baselineFixtures             []string
+		targetFixtures               []string
+		changeRateThreshold          float64
+		changeRateThresholdOverrides map[string]float64
 	}
 	tests := []struct {
 		name    string
@@ -356,6 +357,41 @@ func TestDiffBoltDB(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			// target-replaced gives alma:8 a 200% detection change rate; with the
+			// default threshold 10% this normally fails.
+			name: "override lifts ecosystem above threshold",
+			args: args{
+				baselineFixtures:             []string{"testdata/fixtures/baseline"},
+				targetFixtures:               []string{"testdata/fixtures/target-replaced"},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"alma:8": 250},
+			},
+			wantErr: false,
+		},
+		{
+			// Override below the actual rate must still fail.
+			name: "override below rate still fails",
+			args: args{
+				baselineFixtures:             []string{"testdata/fixtures/baseline"},
+				targetFixtures:               []string{"testdata/fixtures/target-replaced"},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"alma:8": 100},
+			},
+			wantErr: true,
+		},
+		{
+			// An override targeting an ecosystem not present in baseline should be
+			// reported (logged) but must not change pass/fail of other ecosystems.
+			name: "unmatched override key does not affect outcome",
+			args: args{
+				baselineFixtures:             []string{"testdata/fixtures/baseline"},
+				targetFixtures:               []string{"testdata/fixtures/target-same"},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"unknown:99": 50},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -371,6 +407,7 @@ func TestDiffBoltDB(t *testing.T) {
 			gotErr := db.DiffBoltDB(
 				baselinePath, targetPath,
 				db.WithChangeRateThreshold(tt.args.changeRateThreshold),
+				db.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
 				db.WithWriter(&bytes.Buffer{}),
 			)
 
@@ -940,6 +977,7 @@ func TestGenerateReport(t *testing.T) {
 						TargetCriterions:    500,
 						MatchedCriterions:   500,
 						DetectionChangeRate: 0,
+						Threshold:           10,
 						Pass:                true,
 					},
 					{
@@ -952,6 +990,7 @@ func TestGenerateReport(t *testing.T) {
 						Removed:             []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
 						Changed:             []string{"CVE-2024-0004"},
 						DetectionChangeRate: 75.0,
+						Threshold:           10,
 						Pass:                false,
 					},
 				},
@@ -962,12 +1001,12 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: **FAIL** (Change Rate Threshold: 10.0%)
+**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-| ubuntu:22.04 | 75.0% | 0.0% | **FAIL** |
-| redhat:9 | 0.0% | 0.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| ubuntu:22.04 | 75.0% | 0.0% | 10.0% | **FAIL** |
+| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1005,6 +1044,7 @@ func TestGenerateReport(t *testing.T) {
 						TargetCriterions:    210,
 						MatchedCriterions:   200,
 						DetectionChangeRate: 4.8,
+						Threshold:           10,
 						Pass:                true,
 					},
 				},
@@ -1015,11 +1055,11 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: PASS (Change Rate Threshold: 10.0%)
+**Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-| alma:8 | 4.8% | 0.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| alma:8 | 4.8% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1044,6 +1084,7 @@ func TestGenerateReport(t *testing.T) {
 						AddedKBs:       []string{"KB5003"},
 						RemovedKBs:     []string{"KB4000"},
 						KBChangeRate:   140.0,
+						Threshold:      10,
 						Pass:           false,
 					},
 				},
@@ -1054,11 +1095,11 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: **FAIL** (Change Rate Threshold: 10.0%)
+**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-| microsoft | 0.0% | 140.0% | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| microsoft | 0.0% | 140.0% | 10.0% | **FAIL** |
 
 ## KB
 
@@ -1096,6 +1137,7 @@ func TestGenerateReport(t *testing.T) {
 						BaselineCriterions: 50,
 						TargetCriterions:   50,
 						MatchedCriterions:  50,
+						Threshold:          10,
 						Pass:               true,
 					},
 					{
@@ -1105,6 +1147,7 @@ func TestGenerateReport(t *testing.T) {
 						BaselineKBs:    5,
 						TargetKBs:      5,
 						MatchedKBs:     5,
+						Threshold:      10,
 						Pass:           true,
 					},
 				},
@@ -1115,12 +1158,12 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: PASS (Change Rate Threshold: 10.0%)
+**Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-| alma:8 | 0.0% | 0.0% | PASS |
-| microsoft | 0.0% | 0.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| alma:8 | 0.0% | 0.0% | 10.0% | PASS |
+| microsoft | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1159,6 +1202,7 @@ func TestGenerateReport(t *testing.T) {
 						ChangedKBs:          []string{"KB1", "KB2"},
 						DetectionChangeRate: 1.5,
 						KBChangeRate:        80.0,
+						Threshold:           10,
 						Pass:                false,
 					},
 				},
@@ -1169,11 +1213,11 @@ func TestGenerateReport(t *testing.T) {
 
 ## Summary
 
-**Result**: **FAIL** (Change Rate Threshold: 10.0%)
+**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-| mixed:1 | 1.5% | 80.0% | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| mixed:1 | 1.5% | 80.0% | 10.0% | **FAIL** |
 
 ## Detection
 
@@ -1195,6 +1239,59 @@ func TestGenerateReport(t *testing.T) {
 
 - KB1
 - KB2
+
+`,
+		},
+		{
+			name: "override applied with footnote",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem:           "ubuntu:26.04",
+						BaselineKeys:        100,
+						TargetKeys:          100,
+						BaselineCriterions:  500,
+						TargetCriterions:    500,
+						MatchedCriterions:   400,
+						Changed:             []string{"CVE-2026-9999"},
+						DetectionChangeRate: 40.0,
+						Threshold:           50,
+						ThresholdOverridden: true,
+						Pass:                true,
+					},
+					{
+						Ecosystem:          "redhat:9",
+						BaselineKeys:       50,
+						TargetKeys:         50,
+						BaselineCriterions: 200,
+						TargetCriterions:   200,
+						MatchedCriterions:  200,
+						Threshold:          10,
+						Pass:               true,
+					},
+				},
+				changeRateThreshold: 10,
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: PASS (Default Change Rate Threshold: 10.0%)
+
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| ubuntu:26.04 | 40.0% | 0.0% | 50.0%* | PASS |
+| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
+
+` + "`*`" + ` = override applied
+
+## Detection
+
+| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| ubuntu:26.04 | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 400 |
+| redhat:9 | 50 | 50 | 0 | 0 | 0 | 200 | 200 | 200 |
 
 `,
 		},

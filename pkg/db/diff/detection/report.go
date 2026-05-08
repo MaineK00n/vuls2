@@ -18,33 +18,44 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	}
 
 	diffs := slices.Collect(maps.Values(diffm))
+	// Sort: FAIL first, then by rate desc, then by name asc.
+	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
+	// FAIL rows first keeps triage focused on what actually blocks promotion.
 	slices.SortFunc(diffs, func(a, b FileDiff) int {
 		return cmp.Or(
+			cmp.Compare(boolToInt(a.Pass), boolToInt(b.Pass)),
 			cmp.Compare(b.ChangeRate, a.ChangeRate),
 			cmp.Compare(a.Name, b.Name),
 		)
 	})
 	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
+	anyOverridden := slices.ContainsFunc(diffs, func(d FileDiff) bool { return d.ThresholdOverridden })
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
 ## Summary
 
-**Result**: %s (Change Rate Threshold: %.1f%%)
+**Result**: %s (Default Change Rate Threshold: %.1f%%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Result |
-|------|----------|--------|-------|---------|-------------|--------|
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
 `, resultLabel(pass), changeRateThreshold); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s |\n",
-			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate, resultLabel(d.Pass)); err != nil {
+		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
+			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate,
+			thresholdLabel(d.Threshold, d.ThresholdOverridden), resultLabel(d.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
 
+	if anyOverridden {
+		if _, err := fmt.Fprintln(w, "\n`*` = override applied"); err != nil {
+			return false, errors.Wrap(err, "write override footnote")
+		}
+	}
 	if _, err := fmt.Fprintln(w); err != nil {
 		return false, errors.Wrap(err, "write separator")
 	}
@@ -88,6 +99,24 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// thresholdLabel renders a threshold value with a trailing "*" when an override
+// was applied, paired with a table footnote (`* = override applied`).
+func thresholdLabel(t float64, overridden bool) string {
+	if overridden {
+		return fmt.Sprintf("%.1f%%*", t)
+	}
+	return fmt.Sprintf("%.1f%%", t)
+}
+
+// boolToInt is a sort helper: false sorts before true, so passing it to
+// cmp.Compare(boolToInt(a), boolToInt(b)) puts FAIL rows ahead of PASS rows.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.

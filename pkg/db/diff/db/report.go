@@ -16,8 +16,12 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 		return true, errors.New("no ecosystems to compare")
 	}
 
+	// Sort: FAIL first, then by max(rate) desc, then by ecosystem asc.
+	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
+	// FAIL rows first keeps triage focused on what actually blocks promotion.
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
+			cmp.Compare(boolToInt(a.Pass), boolToInt(b.Pass)),
 			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
 				max(b.DetectionChangeRate, b.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
@@ -25,15 +29,16 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 	})
 
 	pass := !slices.ContainsFunc(diffs, func(r EcosystemDiff) bool { return !r.Pass })
+	anyOverridden := slices.ContainsFunc(diffs, func(r EcosystemDiff) bool { return r.ThresholdOverridden })
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: DB
 
 ## Summary
 
-**Result**: %s (Change Rate Threshold: %.1f%%)
+**Result**: %s (Default Change Rate Threshold: %.1f%%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
 `,
 		resultLabel(pass),
 		changeRateThreshold,
@@ -41,13 +46,19 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 		return false, errors.Wrap(err, "write header")
 	}
 	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %s |\n",
+		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %s | %s |\n",
 			d.Ecosystem,
 			d.DetectionChangeRate,
 			d.KBChangeRate,
+			thresholdLabel(d.Threshold, d.ThresholdOverridden),
 			resultLabel(d.Pass),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
+		}
+	}
+	if anyOverridden {
+		if _, err := fmt.Fprintln(w, "\n`*` = override applied"); err != nil {
+			return false, errors.Wrap(err, "write override footnote")
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
@@ -151,6 +162,24 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// thresholdLabel renders a threshold value with a trailing "*" when an override
+// was applied, paired with a table footnote (`* = override applied`).
+func thresholdLabel(t float64, overridden bool) string {
+	if overridden {
+		return fmt.Sprintf("%.1f%%*", t)
+	}
+	return fmt.Sprintf("%.1f%%", t)
+}
+
+// boolToInt is a sort helper: false sorts before true, so passing it to
+// cmp.Compare(boolToInt(a), boolToInt(b)) puts FAIL rows ahead of PASS rows.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
