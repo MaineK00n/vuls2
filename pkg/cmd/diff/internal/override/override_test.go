@@ -82,6 +82,21 @@ func TestParse(t *testing.T) {
 			entries: []string{"ubuntu:26.04=-5"},
 			wantErr: true,
 		},
+		{
+			name:    "NaN rate",
+			entries: []string{"ubuntu:26.04=NaN"},
+			wantErr: true,
+		},
+		{
+			name:    "+Inf rate",
+			entries: []string{"ubuntu:26.04=+Inf"},
+			wantErr: true,
+		},
+		{
+			name:    "-Inf rate",
+			entries: []string{"ubuntu:26.04=-Inf"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

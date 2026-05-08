@@ -5,6 +5,7 @@ package override
 
 import (
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,13 @@ func Parse(entries []string) (map[string]float64, error) {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parse rate %q (entry %q)", v, e)
+		}
+		// strconv.ParseFloat happily accepts "NaN" / "Inf"; both produce
+		// surprising downstream behavior (NaN: every comparison false,
+		// every diff FAILs even when within threshold; Inf: every diff
+		// PASSes regardless of rate). Refuse them up front.
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, errors.Errorf("non-finite rate not allowed: %q", e)
 		}
 		if f < 0 {
 			return nil, errors.Errorf("negative rate not allowed: %q", e)
