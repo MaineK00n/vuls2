@@ -174,8 +174,9 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 }
 
 // resolveThreshold returns the threshold to apply to a given ecosystem,
-// preferring an override entry when present.
-func resolveThreshold(key string, def float64, overrides map[string]float64) (rate float64, overridden bool) {
+// preferring an override entry when present. The second return value reports
+// whether the override map matched.
+func resolveThreshold(key string, def float64, overrides map[string]float64) (float64, bool) {
 	if v, ok := overrides[key]; ok {
 		return v, true
 	}

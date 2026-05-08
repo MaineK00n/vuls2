@@ -24,26 +24,26 @@ func Parse(entries []string) (map[string]float64, error) {
 	for _, e := range entries {
 		k, v, ok := strings.Cut(e, "=")
 		if !ok {
-			return nil, errors.Errorf("missing %q separator: %q", "=", e)
+			return nil, errors.Errorf("unexpected override entry. expected: %q, actual: %q", "<key>=<rate>", e)
 		}
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
 		if k == "" {
-			return nil, errors.Errorf("empty key: %q", e)
+			return nil, errors.Errorf("unexpected override key. expected: non-empty, actual: %q (entry: %q)", k, e)
 		}
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse rate %q (entry %q)", v, e)
+			return nil, errors.Wrapf(err, "unexpected override rate. expected: numeric, actual: %q (entry: %q)", v, e)
 		}
 		// strconv.ParseFloat happily accepts "NaN" / "Inf"; both produce
 		// surprising downstream behavior (NaN: every comparison false,
 		// every diff FAILs even when within threshold; Inf: every diff
 		// PASSes regardless of rate). Refuse them up front.
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, errors.Errorf("non-finite rate not allowed: %q", e)
+			return nil, errors.Errorf("unexpected override rate. expected: finite, actual: %v (entry: %q)", f, e)
 		}
 		if f < 0 {
-			return nil, errors.Errorf("negative rate not allowed: %q", e)
+			return nil, errors.Errorf("unexpected override rate. expected: >= 0, actual: %v (entry: %q)", f, e)
 		}
 		if _, dup := m[k]; dup {
 			slog.Warn("duplicate override key, last wins", "key", k, "rate", f)

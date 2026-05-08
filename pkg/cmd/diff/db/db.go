@@ -1,6 +1,7 @@
 package db
 
 import (
+	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -17,23 +18,31 @@ func NewCmd() *cobra.Command {
 		changeRateThreshold: 0,
 		debug:               false,
 	}
-	// Parsed in PreRunE so a malformed --change-rate-threshold-override aborts
-	// before opening any DB; RunE reads it back via this closure.
-	var overrides map[string]float64
-
 	cmd := &cobra.Command{
 		Use:   "db <baseline-db> <target-db>",
 		Short: "compare detection data directly between two vuls DBs",
-		Args:  cobra.ExactArgs(2),
-		PreRunE: func(_ *cobra.Command, _ []string) error {
-			m, err := override.Parse(options.changeRateThresholdOverrides)
+		Example: heredoc.Doc(`
+		# fail when any ecosystem drifts more than 10%
+		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
+
+		# relax ubuntu:26.04 (new-distro churn) and fedora:45 individually,
+		# keep every other ecosystem at the 10% default
+		$ vuls diff db ./baseline.db ./target.db \
+		    --change-rate-threshold 10 \
+		    --change-rate-threshold-override ubuntu:26.04=25 \
+		    --change-rate-threshold-override fedora:45=15
+
+		# comma-separated form is equivalent
+		$ vuls diff db ./baseline.db ./target.db \
+		    --change-rate-threshold 10 \
+		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
+		`),
+		Args: cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			overrides, err := override.Parse(options.changeRateThresholdOverrides)
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")
 			}
-			overrides = m
-			return nil
-		},
-		RunE: func(_ *cobra.Command, args []string) error {
 			return diffdb.DiffBoltDB(
 				args[0], args[1],
 				diffdb.WithChangeRateThreshold(options.changeRateThreshold),

@@ -3,6 +3,7 @@ package detection
 import (
 	"path/filepath"
 
+	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -20,14 +21,34 @@ func NewCmd() *cobra.Command {
 		debug:               false,
 	}
 
-	// Parsed in PreRunE so a malformed --change-rate-threshold-override aborts
-	// before any vuls0 invocation; RunE reads it back via this closure.
-	var overrides map[string]float64
-
 	cmd := &cobra.Command{
 		Use:   "detection <scan-results-dir> <baseline-db> <baseline-vuls0-binary> <target-db> <target-vuls0-binary>",
 		Short: "compare detection results between baseline and target (binary, DB) pairs",
-		Args:  cobra.ExactArgs(5),
+		Example: heredoc.Doc(`
+		# fail when any scan-result file drifts more than 5%
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0 \
+		    --change-rate-threshold 5
+
+		# relax debian_13 (new CVEs landed) without weakening the default
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0 \
+		    --change-rate-threshold 5 \
+		    --change-rate-threshold-override debian_13=8
+
+		# repeated and comma-separated forms are interchangeable
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0 \
+		    --change-rate-threshold 5 \
+		    --change-rate-threshold-override 'debian_13=8,ubuntu_2604=12'
+		`),
+		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			for i := range args {
 				abs, err := filepath.Abs(args[i])
@@ -36,14 +57,13 @@ func NewCmd() *cobra.Command {
 				}
 				args[i] = abs
 			}
-			m, err := override.Parse(options.changeRateThresholdOverrides)
-			if err != nil {
-				return errors.Wrap(err, "parse change-rate-threshold-override")
-			}
-			overrides = m
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
+			overrides, err := override.Parse(options.changeRateThresholdOverrides)
+			if err != nil {
+				return errors.Wrap(err, "parse change-rate-threshold-override")
+			}
 			return diffdetection.Diff(
 				args[0], args[1], args[2], args[3], args[4],
 				diffdetection.WithChangeRateThreshold(options.changeRateThreshold),

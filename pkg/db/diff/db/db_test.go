@@ -1003,10 +1003,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| ubuntu:22.04 | 75.0% | 0.0% | 10.0% | **FAIL** |
-| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| ubuntu:22.04 | 75.0% | 0.0% |  | **FAIL** |
+| redhat:9 | 0.0% | 0.0% |  | PASS |
 
 ## Detection
 
@@ -1057,9 +1057,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| alma:8 | 4.8% | 0.0% | 10.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| alma:8 | 4.8% | 0.0% |  | PASS |
 
 ## Detection
 
@@ -1097,9 +1097,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| microsoft | 0.0% | 140.0% | 10.0% | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| microsoft | 0.0% | 140.0% |  | **FAIL** |
 
 ## KB
 
@@ -1160,10 +1160,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| alma:8 | 0.0% | 0.0% | 10.0% | PASS |
-| microsoft | 0.0% | 0.0% | 10.0% | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| alma:8 | 0.0% | 0.0% |  | PASS |
+| microsoft | 0.0% | 0.0% |  | PASS |
 
 ## Detection
 
@@ -1215,9 +1215,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| mixed:1 | 1.5% | 80.0% | 10.0% | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| mixed:1 | 1.5% | 80.0% |  | **FAIL** |
 
 ## Detection
 
@@ -1243,7 +1243,7 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
-			name: "override applied with footnote",
+			name: "override applied",
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
@@ -1279,12 +1279,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| ubuntu:26.04 | 40.0% | 0.0% | 50.0%* | PASS |
-| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
-
-` + "`*`" + ` = override applied
+| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
+|-----------|-----------------------|----------------|----------|--------|
+| ubuntu:26.04 | 40.0% | 0.0% | 50.0% | PASS |
+| redhat:9 | 0.0% | 0.0% |  | PASS |
 
 ## Detection
 

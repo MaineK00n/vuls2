@@ -424,10 +424,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
-| redhat_9 | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
+|------|----------|--------|-------|---------|-------------|----------|--------|
+| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% |  | **FAIL** |
+| redhat_9 | 2 | 2 | 0 | 0 | 0.0% |  | PASS |
 
 ## Details (FAIL files)
 
@@ -463,14 +463,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
+|------|----------|--------|-------|---------|-------------|----------|--------|
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% |  | PASS |
 
 `,
 		},
 		{
-			name: "override applied with footnote",
+			name: "override applied",
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"debian_13": {
@@ -501,12 +501,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS (Default Change Rate Threshold: 10.0%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0%* | PASS |
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
-
-` + "`*`" + ` = override applied
+| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
+|------|----------|--------|-------|---------|-------------|----------|--------|
+| debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% |  | PASS |
 
 `,
 		},

@@ -29,7 +29,6 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 		)
 	})
 	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
-	anyOverridden := slices.ContainsFunc(diffs, func(d FileDiff) bool { return d.ThresholdOverridden })
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
@@ -37,8 +36,8 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 **Result**: %s (Default Change Rate Threshold: %.1f%%)
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
+| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
+|------|----------|--------|-------|---------|-------------|----------|--------|
 `, resultLabel(pass), changeRateThreshold); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
@@ -46,16 +45,11 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 	for _, d := range diffs {
 		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
 			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate,
-			thresholdLabel(d.Threshold, d.ThresholdOverridden), resultLabel(d.Pass)); err != nil {
+			overrideLabel(d.Threshold, d.ThresholdOverridden), resultLabel(d.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
 
-	if anyOverridden {
-		if _, err := fmt.Fprintln(w, "\n`*` = override applied"); err != nil {
-			return false, errors.Wrap(err, "write override footnote")
-		}
-	}
 	if _, err := fmt.Fprintln(w); err != nil {
 		return false, errors.Wrap(err, "write separator")
 	}
@@ -101,13 +95,15 @@ func resultLabel(pass bool) string {
 	return "**FAIL**"
 }
 
-// thresholdLabel renders a threshold value with a trailing "*" when an override
-// was applied, paired with a table footnote (`* = override applied`).
-func thresholdLabel(t float64, overridden bool) string {
+// overrideLabel renders the override threshold (e.g. "25.0%") for rows where
+// an override matched, and an empty cell otherwise. Default-threshold rows
+// stay blank because the default value is already shown in the summary
+// header — duplicating it per-row added noise without useful signal.
+func overrideLabel(t float64, overridden bool) string {
 	if overridden {
-		return fmt.Sprintf("%.1f%%*", t)
+		return fmt.Sprintf("%.1f%%", t)
 	}
-	return fmt.Sprintf("%.1f%%", t)
+	return ""
 }
 
 // boolToInt is a sort helper: false sorts before true, so passing it to
