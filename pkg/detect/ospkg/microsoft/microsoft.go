@@ -67,10 +67,13 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	// (e.g. a Win11 24H2 cumulative superseded by a Server 2025 one) do
 	// not leak into vcm.
 	//
-	// Seed the forward walk from Applied \ Unapplied to mirror
-	// classifyKBs' "prefer unapplied" rule: a KB reported as both applied
-	// and unapplied (pending reboot / rolled back) is treated as unapplied
-	// and therefore not used to expand the should-have-applied frontier.
+	// Seed the forward walk from Applied (without subtracting Unapplied).
+	// classifyKBs' prefer-unapplied rule narrows the coverage-BFS source so
+	// a dual-status KB doesn't credit itself as proof of patching; the vcm
+	// forward walk has the opposite goal (track the should-have-applied
+	// frontier products), so dual-status KBs should still expand the
+	// frontier. filterMicrosoftKBProduct + AcceptProducts gate at evaluation
+	// time so over-registered products are handled safely.
 	unappliedSet := make(map[string]struct{}, len(sr.MicrosoftKB.Unapplied))
 	for _, kbid := range sr.MicrosoftKB.Unapplied {
 		if kbid == "" {
@@ -81,9 +84,6 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	forwardSeeds := make([]string, 0, len(sr.MicrosoftKB.Applied))
 	for _, kbid := range sr.MicrosoftKB.Applied {
 		if kbid == "" {
-			continue
-		}
-		if _, ok := unappliedSet[kbid]; ok {
 			continue
 		}
 		forwardSeeds = append(forwardSeeds, kbid)
