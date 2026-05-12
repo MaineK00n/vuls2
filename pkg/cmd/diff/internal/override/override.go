@@ -15,7 +15,7 @@ import (
 // Parse converts a slice of "<key>=<rate>" entries into a map. Whitespace
 // around the key and rate is tolerated. Duplicate keys are accepted with the
 // last value winning and a warning logged. Returns an error for malformed
-// entries (missing "=", empty key, non-numeric rate, negative rate).
+// entries (missing "=", empty key, non-numeric / non-finite / negative rate).
 func Parse(entries []string) (map[string]float64, error) {
 	if len(entries) == 0 {
 		return nil, nil
