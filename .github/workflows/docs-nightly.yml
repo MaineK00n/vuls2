@@ -7,13 +7,14 @@ on:
     branches:
       - nightly
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   deploy:
     name: Deploy the nightly documentation
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6

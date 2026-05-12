@@ -9,13 +9,14 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   binary:
     name: Release Binary
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GOEXPERIMENT: jsonv2
     steps:
@@ -51,6 +52,8 @@ jobs:
   docs:
     name: Release Docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Set Tag
         run: |

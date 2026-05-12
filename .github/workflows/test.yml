@@ -3,13 +3,14 @@ name: Test
 on:
   pull_request:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       GOEXPERIMENT: jsonv2
     steps:
