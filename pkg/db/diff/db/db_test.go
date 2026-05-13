@@ -418,6 +418,37 @@ func TestDiffBoltDB(t *testing.T) {
 	}
 }
 
+// TestWithChangeRateThresholdOverridesDefensiveCopy verifies the Option
+// snapshots the caller's map: mutating the original after WithFoo(m) returns
+// must not change subsequent diff behavior.
+func TestWithChangeRateThresholdOverridesDefensiveCopy(t *testing.T) {
+	baselinePath := filepath.Join(t.TempDir(), "vuls.db")
+	if err := populateDB(baselinePath, "testdata/fixtures/baseline"); err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(t.TempDir(), "vuls.db")
+	if err := populateDB(targetPath, "testdata/fixtures/target-replaced"); err != nil {
+		t.Fatal(err)
+	}
+
+	// target-replaced gives alma:8 a 200% detection change rate. With override
+	// {"alma:8": 250} the diff should PASS — and stay PASS even if the caller
+	// later mutates the same map down to a value that would fail.
+	overrides := map[string]float64{"alma:8": 250}
+	opt := db.WithChangeRateThresholdOverrides(overrides)
+	overrides["alma:8"] = 1 // post-Option mutation: must not leak into the Option's snapshot
+
+	gotErr := db.DiffBoltDB(
+		baselinePath, targetPath,
+		db.WithChangeRateThreshold(10),
+		opt,
+		db.WithWriter(&bytes.Buffer{}),
+	)
+	if gotErr != nil {
+		t.Fatalf("DiffBoltDB() returned error %v; expected PASS — caller-side mutation must not affect the Option snapshot", gotErr)
+	}
+}
+
 func TestCompareCriterions(t *testing.T) {
 	type args struct {
 		baseline string
