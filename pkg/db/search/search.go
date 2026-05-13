@@ -1026,9 +1026,6 @@ func writeKBExpandChains(w io.Writer, exp *microsoft.ExpandResult, classify func
 				bwd = append(bwd, n)
 			}
 		}
-		if len(fwd) == 0 && len(bwd) == 0 {
-			continue
-		}
 		if len(fwd) > 0 {
 			if _, err := fmt.Fprintln(w, "    Superseded by:"); err != nil {
 				return errors.Wrapf(err, "write Superseded by header for root %s", root)
