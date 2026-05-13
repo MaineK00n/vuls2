@@ -129,7 +129,10 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "generate report")
 	}
 	if !pass {
-		return errors.Errorf("diff failed: change rate exceeded threshold (default %.1f%%)", o.changeRateThreshold)
+		// Resolved per-file threshold (default vs override) is rendered in
+		// the report's Override column, so the exit error stays threshold-free
+		// to avoid implying the default was the one that tripped.
+		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one scan-result file; see report for details")
 	}
 	return nil
 }

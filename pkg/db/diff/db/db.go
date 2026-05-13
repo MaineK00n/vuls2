@@ -168,7 +168,10 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if !pass {
-		return errors.Errorf("diff failed: detection and/or KB change rate exceeded threshold (default %.1f%%)", o.changeRateThreshold)
+		// Resolved per-ecosystem threshold (default vs override) is rendered in
+		// the report's Override column, so the exit error stays threshold-free
+		// to avoid implying the default was the one that tripped.
+		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one ecosystem; see report for details")
 	}
 	return nil
 }
