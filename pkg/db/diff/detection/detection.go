@@ -122,8 +122,6 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 	diffm = computeDiffs(diffm, o.changeRateThreshold, o.changeRateThresholdOverrides)
 
-	warnUnusedOverrides(o.changeRateThresholdOverrides, diffm)
-
 	pass, err := generateReport(o.writer, diffm, o.changeRateThreshold)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
@@ -145,27 +143,6 @@ func resolveThreshold(key string, def float64, overrides map[string]float64) (fl
 		return v, true
 	}
 	return def, false
-}
-
-// warnUnusedOverrides logs a warning for each override key that did not match
-// any compared scan-result file. Catches typos / stale entries. The "used"
-// set is keyed by the canonical diffm map key rather than FileDiff.Name so
-// the warning is independent of whether callers populate Name consistently.
-func warnUnusedOverrides(overrides map[string]float64, diffm map[string]FileDiff) {
-	if len(overrides) == 0 {
-		return
-	}
-	used := make(map[string]bool, len(diffm))
-	for name, d := range diffm {
-		if d.ThresholdOverridden {
-			used[name] = true
-		}
-	}
-	for k := range overrides {
-		if !used[k] {
-			slog.Warn("change-rate-threshold override key did not match any scan-result file", "key", k)
-		}
-	}
 }
 
 // listScanResults lists *.json files in the directory.

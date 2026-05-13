@@ -160,8 +160,6 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		return errors.Wrap(err, "compute diffs")
 	}
 
-	warnUnusedOverrides(o.changeRateThresholdOverrides, results)
-
 	pass, err := generateReport(o.writer, results, o.changeRateThreshold)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
@@ -184,26 +182,6 @@ func resolveThreshold(key string, def float64, overrides map[string]float64) (fl
 		return v, true
 	}
 	return def, false
-}
-
-// warnUnusedOverrides logs a warning for each override key that did not match
-// any compared ecosystem. Catches typos and stale entries before they silently
-// rot in the workflow file.
-func warnUnusedOverrides(overrides map[string]float64, results []EcosystemDiff) {
-	if len(overrides) == 0 {
-		return
-	}
-	used := make(map[string]bool, len(results))
-	for _, d := range results {
-		if d.ThresholdOverridden {
-			used[string(d.Ecosystem)] = true
-		}
-	}
-	for k := range overrides {
-		if !used[k] {
-			slog.Warn("change-rate-threshold override key did not match any ecosystem", "key", k)
-		}
-	}
 }
 
 func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64) ([]EcosystemDiff, error) {
