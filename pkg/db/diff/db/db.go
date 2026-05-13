@@ -54,18 +54,8 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 // change rate threshold. Keys are ecosystem identifiers (e.g. "ubuntu:26.04");
 // values are percentages. Missing keys fall back to the default supplied via
 // WithChangeRateThreshold. A nil or empty map preserves prior behavior.
-//
-// The provided map is defensively copied; callers may mutate or reuse `m`
-// after this call returns without affecting an in-flight or subsequent diff.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
-	if len(m) == 0 {
-		return changeRateThresholdOverridesOption(nil)
-	}
-	cp := make(map[string]float64, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return changeRateThresholdOverridesOption(cp)
+	return changeRateThresholdOverridesOption(m)
 }
 
 type writerOption struct{ w io.Writer }
