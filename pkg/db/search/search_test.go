@@ -262,6 +262,34 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 		},
 		{
+			// Defensive: if microsoft.ExpandKBs ever emits an Update-level
+			// edge whose UpdateID is empty (current MSUC/wsusscn2 data
+			// always populate it, but vuls-data-update could in principle
+			// produce malformed records), the explain label must still
+			// reflect that the attestation came from Update-level data
+			// rather than silently dropping the level info.
+			name: "Update-level edge with empty UpdateID renders Update-level placeholder",
+			args: args{
+				exp: &microsoft.ExpandResult{
+					Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+					Covered:   []string{"5000802"},
+					Unapplied: []string{"5001330"},
+					Edges: map[string][]microsoft.ExpandEdge{
+						"5000802": {
+							{To: "5001330", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: ""},
+						},
+					},
+				},
+			},
+			wantContains: []string{
+				"[microsoft-msuc, Update-level, superseded by] 5001330  [discovered, unapplied]",
+			},
+			wantNotContains: []string{
+				"[microsoft-msuc, superseded by] 5001330",
+				"[microsoft-msuc, Updates ",
+			},
+		},
+		{
 			// Mixed-direction discovery: an applied root (R) supersedes a
 			// shared older KB (S). S is also superseded by a parallel newer
 			// KB (P) on a different product line, which itself is superseded

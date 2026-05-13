@@ -903,7 +903,8 @@ type directedNeighbor struct {
 	Source    sourceTypes.SourceID
 	Newer     bool
 	HasKB     bool     // true when at least one KB-level edge contributes
-	UpdateIDs []string // sorted, deduplicated Update IDs (empty when no Update-level edge)
+	HasUpdate bool     // true when at least one Update-level edge contributes (UpdateIDs may still be empty if all UpdateIDs were missing)
+	UpdateIDs []string // sorted, deduplicated Update IDs (empty when no Update-level edge or all such edges had empty UpdateID)
 }
 
 // buildKBExpandNeighbors merges exp.Edges and its reverse into one adjacency
@@ -921,21 +922,31 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 	}
 	type groupAgg struct {
 		hasKB     bool
-		updateIDs map[string]struct{}
+		hasUpdate bool
+		updateIDs map[string]struct{} // lazily allocated when a non-empty UpdateID is added
 	}
 	groups := make(map[groupKey]*groupAgg)
 	addContribution := func(from, to string, source sourceTypes.SourceID, level microsoft.ExpandEdgeLevel, updateID string, newer bool) {
 		k := groupKey{From: from, To: to, Source: source, Newer: newer}
 		g, ok := groups[k]
 		if !ok {
-			g = &groupAgg{updateIDs: make(map[string]struct{})}
+			g = &groupAgg{}
 			groups[k] = g
 		}
 		switch level {
 		case microsoft.ExpandEdgeLevelKB:
 			g.hasKB = true
 		case microsoft.ExpandEdgeLevelUpdate:
+			// Record Update-level contribution even when UpdateID is empty
+			// so the explain label still reflects "this was an Update-level
+			// attestation". In current data sources MSUC and wsusscn2 always
+			// populate UpdateID, so the placeholder branch is purely
+			// defensive.
+			g.hasUpdate = true
 			if updateID != "" {
+				if g.updateIDs == nil {
+					g.updateIDs = make(map[string]struct{})
+				}
 				g.updateIDs[updateID] = struct{}{}
 			}
 		}
@@ -959,6 +970,7 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 			Source:    k.Source,
 			Newer:     k.Newer,
 			HasKB:     g.hasKB,
+			HasUpdate: g.hasUpdate,
 			UpdateIDs: ids,
 		})
 	}
@@ -1082,9 +1094,10 @@ func formatReleases(releases []string) string {
 
 // writeKBExpandSubtree renders edges as tree branches and recursively walks
 // neighbors of each target, descending bidirectionally through the unified
-// adjacency. Each edge label includes a "newer" / "older" direction tag so
-// that mixed-direction chains (a backward step followed by a forward step,
-// or vice versa) remain self-describing in a single tree.
+// adjacency. Each edge label includes a "superseded by" / "supersedes"
+// direction tag (with the parent as implicit subject) so mixed-direction
+// chains (a backward step followed by a forward step, or vice versa) remain
+// self-describing in a single tree.
 //
 // When recursing into a child, edges back to the immediate parent are
 // skipped to suppress noisy "(→ see above)" lines for the parent at every
@@ -1113,8 +1126,15 @@ func writeKBExpandSubtree(w io.Writer, neighbors map[string][]directedNeighbor, 
 		if e.HasKB {
 			levelParts = append(levelParts, "KB-level")
 		}
-		if len(e.UpdateIDs) > 0 {
-			levelParts = append(levelParts, "Updates "+strings.Join(e.UpdateIDs, ", "))
+		if e.HasUpdate {
+			if len(e.UpdateIDs) > 0 {
+				levelParts = append(levelParts, "Updates "+strings.Join(e.UpdateIDs, ", "))
+			} else {
+				// Update-level edge contributed but no UpdateID was
+				// available (defensive: current Microsoft data sources
+				// always populate UpdateID).
+				levelParts = append(levelParts, "Update-level")
+			}
 		}
 		var srcLabel string
 		if len(levelParts) > 0 {
