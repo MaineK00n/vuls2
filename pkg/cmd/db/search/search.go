@@ -2,6 +2,7 @@ package search
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
@@ -31,6 +32,7 @@ func NewCmd() *cobra.Command {
 		newPackageCmd(),
 		newKBInfoCmd(),
 		newKBVulnCmd(),
+		newKBExpandCmd(),
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
@@ -328,6 +330,84 @@ func newKBVulnCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&options.filterOpts.datasources, "datasource", "", options.filterOpts.datasources, "filter by datasource (e.g., redhat-vex, ubuntu-cve-tracker)")
 	cmd.Flags().StringSliceVarP(&options.filterOpts.rootIDs, "root-id", "", options.filterOpts.rootIDs, "filter by root ID (e.g., CVE-2024-4367)")
 
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newKBExpandCmd() *cobra.Command {
+	options := struct {
+		dbtype      utilflag.DBType
+		dbpath      string
+		applied     []string
+		unapplied   []string
+		releases    []string
+		datasources []string
+		explain     bool
+		debug       bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "kb-expand",
+		Short: "expand input Microsoft KBs into covered/unapplied via supersession chains",
+		Example: heredoc.Doc(`
+		$ vuls db search kb-expand --applied 5034441,5034122 --unapplied 5036893
+		$ vuls db search kb-expand --applied 5034441 --explain
+		$ vuls db search kb-expand --applied 5034441 --release "Windows 10 Version 22H2 for x64-based Systems" --explain
+		$ vuls db search kb-expand --applied 5034441 --release "Windows 10 Version 22H2 for x64-based Systems" --release "Windows 11 Version 23H2 for x64-based Systems"
+		$ vuls db search kb-expand --applied 5034441 --datasource microsoft-cvrf --explain
+		`),
+		Args: cobra.NoArgs,
+		PreRunE: func(_ *cobra.Command, _ []string) error {
+			// Drop empty entries up front. StringSlice splits on commas
+			// and keeps empty tokens, so `--applied ,5000802` and
+			// `--applied ""` both produce `""` elements that ExpandKBs
+			// would treat as inert. Normalising here makes the
+			// required-input check operate on effective IDs and avoids
+			// "no input"-style output when the user accidentally passed
+			// only empty entries.
+			options.applied = slices.DeleteFunc(options.applied, func(s string) bool { return s == "" })
+			options.unapplied = slices.DeleteFunc(options.unapplied, func(s string) bool { return s == "" })
+			if len(options.applied) == 0 && len(options.unapplied) == 0 {
+				return errors.New("at least one of --applied or --unapplied with a non-empty KB ID is required")
+			}
+			return nil
+		},
+		RunE: func(_ *cobra.Command, _ []string) error {
+			ds := make([]sourceTypes.SourceID, 0, len(options.datasources))
+			for _, d := range options.datasources {
+				ds = append(ds, sourceTypes.SourceID(d))
+			}
+			req := db.KBExpandRequest{
+				Applied:     options.applied,
+				Unapplied:   options.unapplied,
+				Releases:    options.releases,
+				DataSources: ds,
+				Explain:     options.explain,
+			}
+			if err := db.SearchKBExpand(req,
+				db.WithDBType(options.dbtype.String()),
+				db.WithDBPath(options.dbpath),
+				db.WithDebug(options.debug),
+			); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().StringSliceVarP(&options.applied, "applied", "", options.applied, "applied KB IDs (comma-separated or repeat the flag)")
+	cmd.Flags().StringSliceVarP(&options.unapplied, "unapplied", "", options.unapplied, "unapplied KB IDs (comma-separated or repeat the flag)")
+	cmd.Flags().StringSliceVarP(&options.releases, "release", "", options.releases, "host release(s) (e.g., \"Windows 10 Version 22H2 for x64-based Systems\"); KBs relevant to any of the given releases are kept (comma-separated or repeat the flag)")
+	cmd.Flags().StringSliceVarP(&options.datasources, "datasource", "", options.datasources, "restrict supersession walking and product evaluation to the given Microsoft data sources (e.g., microsoft-cvrf, microsoft-msuc, microsoft-bulletin)")
+	cmd.Flags().BoolVarP(&options.explain, "explain", "", options.explain, "render the supersession chains as a tree with data-source attribution instead of JSON")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

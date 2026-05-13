@@ -578,20 +578,18 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func Test_classifyKBs(t *testing.T) {
+func TestExpandKBs(t *testing.T) {
 	type args struct {
-		_         session.Storage
-		applied   []string
-		unapplied []string
+		applied     []string
+		unapplied   []string
+		datasources []sourceTypes.SourceID
 	}
 	tests := []struct {
-		name        string
-		fixture     string
-		config      session.Config
-		args        args
-		wantCovered   []string
-		wantUnapplied []string
-		wantErr       error
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    microsoft.ExpandResult
 	}{
 		{
 			name:    "no input",
@@ -605,8 +603,56 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   nil,
 				unapplied: nil,
 			},
-			wantCovered:   nil,
-			wantUnapplied: nil,
+			want: microsoft.ExpandResult{
+				Edges:    map[string][]microsoft.ExpandEdge{},
+				Products: map[string][]string{},
+			},
+		},
+		{
+			// Empty KB IDs must be skipped at every entry point (appliedSet
+			// seeding, unapplied conflict handling, and the walk loops) so
+			// they cannot leak into visited / Covered / Unapplied. The raw
+			// input slices are still echoed verbatim in Inputs.
+			name:    "empty KB IDs in input are skipped",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:   []string{"", "5000802"},
+				unapplied: []string{""},
+			},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"", "5000802"}, Unapplied: []string{""}},
+				Covered:   []string{"5000802"},
+				Unapplied: []string{"5001330", "5003173", "5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "applied only, discover unapplied via supersession",
@@ -619,8 +665,38 @@ func Test_classifyKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802"},
 			},
-			wantCovered:   []string{"5000802"},
-			wantUnapplied: []string{"5001330", "5003173", "5003637"},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+				Covered:   []string{"5000802"},
+				Unapplied: []string{"5001330", "5003173", "5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				// 5003637 is referenced by 5003173.SupersededBy but is not
+				// in the fixture, so it appears in Unapplied but is absent
+				// from Products.
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "unapplied with chain",
@@ -634,8 +710,34 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   []string{},
 				unapplied: []string{"5000802"},
 			},
-			wantCovered:   nil,
-			wantUnapplied: []string{"5000802", "5001330", "5003173", "5003637"},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{}, Unapplied: []string{"5000802"}},
+				Unapplied: []string{"5000802", "5001330", "5003173", "5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "latest superseding KB not applied remains unapplied",
@@ -648,8 +750,35 @@ func Test_classifyKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802", "5001330", "5003173"},
 			},
-			wantCovered:   []string{"5000802", "5001330", "5003173"},
-			wantUnapplied: []string{"5003637"},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802", "5001330", "5003173"}},
+				Covered:   []string{"5000802", "5001330", "5003173"},
+				Unapplied: []string{"5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "intermediate KB covered by applied superseding KB",
@@ -662,8 +791,35 @@ func Test_classifyKBs(t *testing.T) {
 			args: args{
 				applied: []string{"5000802", "5003173"},
 			},
-			wantCovered:   []string{"5000802", "5001330", "5003173"},
-			wantUnapplied: []string{"5003637"},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802", "5003173"}},
+				Covered:   []string{"5000802", "5001330", "5003173"},
+				Unapplied: []string{"5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "KB in both applied and unapplied prefers unapplied",
@@ -677,8 +833,36 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   []string{"5000802", "5001330"},
 				unapplied: []string{"5000802"},
 			},
-			wantCovered:   []string{"5000802", "5001330"},
-			wantUnapplied: []string{"5000802", "5003173", "5003637"},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802", "5001330"}, Unapplied: []string{"5000802"}},
+				Covered:   []string{"5000802", "5001330"},
+				Unapplied: []string{"5000802", "5003173", "5003637"},
+				Conflicts: []string{"5000802"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "supersedes bridges gap in superseded_by chain",
@@ -692,8 +876,21 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   []string{"7000004"},
 				unapplied: []string{"7000001"},
 			},
-			wantCovered:   []string{"7000001", "7000002", "7000003", "7000004"},
-			wantUnapplied: nil,
+			want: microsoft.ExpandResult{
+				Inputs:  microsoft.ExpandInputs{Applied: []string{"7000004"}, Unapplied: []string{"7000001"}},
+				Covered: []string{"7000001", "7000002", "7000003", "7000004"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"7000001": {{To: "7000002", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"7000002": {{To: "7000003", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"7000003": {{To: "7000004", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"7000001": {"Windows 10 Version 2004 for x64-based Systems"},
+					"7000002": {"Windows 10 Version 2004 for x64-based Systems"},
+					"7000003": {"Windows 10 Version 2004 for x64-based Systems"},
+					"7000004": {"Windows 10 Version 2004 for x64-based Systems"},
+				},
+			},
 		},
 		{
 			name:    "superseded_by chain to applied KB covers all without supersedes field",
@@ -707,8 +904,131 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   []string{"5003637"},
 				unapplied: []string{"5000802"},
 			},
-			wantCovered:   []string{"5000802", "5001330", "5003173", "5003637"},
-			wantUnapplied: nil,
+			want: microsoft.ExpandResult{
+				Inputs:  microsoft.ExpandInputs{Applied: []string{"5003637"}, Unapplied: []string{"5000802"}},
+				Covered: []string{"5000802", "5001330", "5003173", "5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
+		},
+		{
+			name:    "no datasource filter walks every source's chain",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied: []string{"4012606"},
+			},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"4012606"}},
+				Covered:   []string{"4012606"},
+				Unapplied: []string{"4013429"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"4012606": {{To: "4013429", Source: "microsoft-bulletin", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"4012606": {
+						"Internet Explorer 11 on Windows 10 for x64-based Systems",
+						"Microsoft Edge on Windows 10 for x64-based Systems",
+						"Microsoft XML Core Services 3.0 on Windows 10 for x64-based Systems",
+						"Windows 10 for x64-based Systems",
+					},
+					"4013429": {
+						"Windows 10 for x64-based Systems",
+					},
+				},
+			},
+		},
+		{
+			name:    "datasource filter excluding the input KB's source stops the walk",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:     []string{"4012606"},
+				datasources: []sourceTypes.SourceID{"microsoft-cvrf"},
+			},
+			want: microsoft.ExpandResult{
+				Inputs:  microsoft.ExpandInputs{Applied: []string{"4012606"}},
+				Covered: []string{"4012606"},
+				Edges:   map[string][]microsoft.ExpandEdge{},
+				// 4012606 is in DB (microsoft-bulletin only) so it gets a
+				// Products entry, but no allowed-source product follows the
+				// datasource filter, so the slice is empty.
+				Products: map[string][]string{
+					"4012606": nil,
+				},
+			},
+		},
+		{
+			name:    "datasource filter matching the chain's source preserves it",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				applied:     []string{"5000802"},
+				datasources: []sourceTypes.SourceID{"microsoft-cvrf"},
+			},
+			want: microsoft.ExpandResult{
+				Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+				Covered:   []string{"5000802"},
+				Unapplied: []string{"5001330", "5003173", "5003637"},
+				Edges: map[string][]microsoft.ExpandEdge{
+					"5000802": {{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5001330": {{To: "5003173", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+					"5003173": {{To: "5003637", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB}},
+				},
+				Products: map[string][]string{
+					"5000802": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Internet Explorer 11 on Windows 10 Version 20H2 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 2004 for x64-based Systems",
+						"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 20H2 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5001330": {
+						"Internet Explorer 11 on Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+					"5003173": {
+						"Windows 10 Version 2004 for x64-based Systems",
+						"Windows 10 Version 20H2 for x64-based Systems",
+					},
+				},
+			},
 		},
 		{
 			name:    "per-update supersedes (MSUC) covers chain",
@@ -722,8 +1042,24 @@ func Test_classifyKBs(t *testing.T) {
 				applied:   []string{"8000003"},
 				unapplied: nil,
 			},
-			wantCovered:   []string{"8000001", "8000002", "8000003"},
-			wantUnapplied: nil,
+			want: microsoft.ExpandResult{
+				Inputs:  microsoft.ExpandInputs{Applied: []string{"8000003"}},
+				Covered: []string{"8000001", "8000002", "8000003"},
+				// 8000001/8000002/8000003 are connected via per-Update
+				// Supersedes chains in microsoft-msuc only.
+				Edges: map[string][]microsoft.ExpandEdge{
+					"8000001": {{To: "8000002", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "00000000-0000-0000-0000-000000008002"}},
+					"8000002": {{To: "8000003", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "00000000-0000-0000-0000-000000008003"}},
+				},
+				// Top-level kb.Products is empty for these fixtures (only
+				// per-update products are set), so the entries are present
+				// (KBs are in DB) but with empty product lists.
+				Products: map[string][]string{
+					"8000001": nil,
+					"8000002": nil,
+					"8000003": nil,
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -742,23 +1078,27 @@ func Test_classifyKBs(t *testing.T) {
 			}
 			defer s.Storage().Close()
 
-			gotCovered, gotUnapplied, err := microsoft.ClassifyKBs(s.Storage(), tt.args.applied, tt.args.unapplied)
-			switch {
-			case tt.wantErr == nil && err != nil:
-				t.Errorf("classifyKBs() unexpected error: %v", err)
-			case tt.wantErr != nil && err == nil:
-				t.Errorf("classifyKBs() expected error has not occurred")
-			case tt.wantErr != nil && err != nil:
-				if tt.wantErr.Error() != err.Error() {
-					t.Errorf("classifyKBs() error mismatch: want %v, got %v", tt.wantErr, err)
-				}
-			default:
-				if diff := cmp.Diff(tt.wantCovered, gotCovered, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-					t.Errorf("classifyKBs() covered (-expected +got):\n%s", diff)
-				}
-				if diff := cmp.Diff(tt.wantUnapplied, gotUnapplied, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-					t.Errorf("classifyKBs() unapplied (-expected +got):\n%s", diff)
-				}
+			got, err := microsoft.ExpandKBs(s.Storage(), tt.args.applied, tt.args.unapplied, tt.args.datasources)
+			if err != nil {
+				t.Fatalf("ExpandKBs() unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tt.want, *got,
+				cmpopts.SortSlices(func(a, b string) bool { return a < b }),
+				cmpopts.SortSlices(func(a, b microsoft.ExpandEdge) bool {
+					if a.To != b.To {
+						return a.To < b.To
+					}
+					if a.Source != b.Source {
+						return a.Source < b.Source
+					}
+					if a.Level != b.Level {
+						return a.Level < b.Level
+					}
+					return a.UpdateID < b.UpdateID
+				}),
+			); diff != "" {
+				t.Errorf("ExpandKBs() (-expected +got):\n%s", diff)
 			}
 		})
 	}
@@ -887,153 +1227,6 @@ func Test_forwardSupersedersFromApplied(t *testing.T) {
 			default:
 				if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 					t.Errorf("forwardSupersedersFromApplied() (-expected +got):\n%s", diff)
-				}
-			}
-		})
-	}
-}
-
-func Test_filterKBIDsByRelease(t *testing.T) {
-	type args struct {
-		kbs     []string
-		release string
-	}
-	tests := []struct {
-		name    string
-		fixture string
-		config  session.Config
-		args    args
-		want    []string
-		wantErr error
-	}{
-		{
-			name:    "no input",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     nil,
-				release: "Windows 10 Version 21H2 for x64-based Systems",
-			},
-			want: []string{},
-		},
-		{
-			name:    "filters out cross-product KB for different release",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9000001", "9000002"},
-				release: "Windows Server 2012 R2",
-			},
-			want: []string{"9000001"},
-		},
-		{
-			name:    "keeps KB matching host release",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9000001", "9000002"},
-				release: "Windows 10 Version 21H2 for x64-based Systems",
-			},
-			want: []string{"9000001", "9000002"},
-		},
-		{
-			name:    "KB not found in DB is kept",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9999999", "9000001"},
-				release: "Windows 10 Version 21H2 for x64-based Systems",
-			},
-			want: []string{"9999999", "9000001"},
-		},
-		{
-			name:    "empty release keeps all KBs",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9000001", "9000002"},
-				release: "",
-			},
-			want: []string{"9000001", "9000002"},
-		},
-		{
-			name:    "ARM64 release filters out x64-only KB",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9000001", "9000002"},
-				release: "Windows 10 Version 21H2 for ARM64-based Systems",
-			},
-			want: []string{"9000002"},
-		},
-		{
-			name:    "bare cross-platform app KB kept across releases",
-			fixture: "testdata/fixtures/microsoft-cross-product",
-			config: session.Config{
-				Type:    "boltdb",
-				Path:    filepath.Join(t.TempDir(), "vuls.db"),
-				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
-			},
-			args: args{
-				kbs:     []string{"9000003"},
-				release: "Windows 10 Version 21H2 for x64-based Systems",
-			},
-			want: []string{"9000003"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
-				t.Fatalf("populate db. error = %v", err)
-			}
-
-			s, err := tt.config.New()
-			if err != nil {
-				t.Fatalf("new session. error = %v", err)
-			}
-
-			if err := s.Storage().Open(); err != nil {
-				t.Fatalf("open db connection. error = %v", err)
-			}
-			defer s.Storage().Close()
-
-			got, err := microsoft.FilterKBIDsByRelease(s.Storage(), tt.args.kbs, tt.args.release)
-			switch {
-			case tt.wantErr == nil && err != nil:
-				t.Errorf("filterKBIDsByRelease() unexpected error: %v", err)
-			case tt.wantErr != nil && err == nil:
-				t.Errorf("filterKBIDsByRelease() expected error has not occurred")
-			case tt.wantErr != nil && err != nil:
-				if tt.wantErr.Error() != err.Error() {
-					t.Errorf("filterKBIDsByRelease() error mismatch: want %v, got %v", tt.wantErr, err)
-				}
-			default:
-				if diff := cmp.Diff(tt.want, got); diff != "" {
-					t.Errorf("filterKBIDsByRelease() (-expected +got):\n%s", diff)
 				}
 			}
 		})
@@ -1653,6 +1846,157 @@ func Test_filterMicrosoftKBProduct(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := microsoft.FilterMicrosoftKBProduct(tt.args.product, tt.args.release); got != tt.want {
 				t.Errorf("filterMicrosoftKBProduct() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPartitionKBIDsByReleases(t *testing.T) {
+	// PartitionKBIDsByReleases is a pure function over the products map
+	// produced by ExpandKBs, so the fixtures here are hand-written — no DB
+	// needed.
+	type args struct {
+		products map[string][]string
+		kbs      []string
+		releases []string
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantKept    []string
+		wantDropped []string
+	}{
+		{
+			name: "empty releases keeps everything",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows 10 Version 21H2 for x64-based Systems"},
+					"9000002": {"Windows Server 2012 R2"},
+				},
+				kbs:      []string{"9000001", "9000002"},
+				releases: nil,
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name: "single release matches both KBs",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows 10 Version 21H2 for x64-based Systems"},
+					"9000002": {"Windows 10 Version 21H2 for x64-based Systems"},
+				},
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 10 Version 21H2 for x64-based Systems"},
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name: "single release matches only one KB",
+			args: args{
+				products: map[string][]string{
+					"9000001": {
+						"Windows 10 Version 21H2 for x64-based Systems",
+						"Windows Server 2012 R2",
+					},
+					"9000002": {"Windows 10 Version 21H2 for x64-based Systems"},
+				},
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows Server 2012 R2"},
+			},
+			wantKept:    []string{"9000001"},
+			wantDropped: []string{"9000002"},
+		},
+		{
+			name: "ARM64 release drops x64-only KB",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows 10 Version 21H2 for x64-based Systems"},
+					"9000002": {
+						"Windows 10 Version 21H2 for ARM64-based Systems",
+						"Windows 10 Version 21H2 for x64-based Systems",
+					},
+				},
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 10 Version 21H2 for ARM64-based Systems"},
+			},
+			wantKept:    []string{"9000002"},
+			wantDropped: []string{"9000001"},
+		},
+		{
+			name: "two releases keep both KBs via union semantics",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows Server 2012 R2"},
+					"9000002": {"Windows 10 Version 21H2 for ARM64-based Systems"},
+				},
+				kbs: []string{"9000001", "9000002"},
+				releases: []string{
+					"Windows Server 2012 R2",
+					"Windows 10 Version 21H2 for ARM64-based Systems",
+				},
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+		{
+			name: "release that matches none drops everything",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows 10 Version 21H2 for x64-based Systems"},
+					"9000002": {"Windows 10 Version 21H2 for x64-based Systems"},
+				},
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 11 Version 23H2 for x64-based Systems"},
+			},
+			wantKept:    []string{},
+			wantDropped: []string{"9000001", "9000002"},
+		},
+		{
+			name: "KB absent from products is kept",
+			args: args{
+				products: map[string][]string{
+					"9000001": {"Windows 10 Version 21H2 for x64-based Systems"},
+				},
+				kbs:      []string{"9999999", "9000001"},
+				releases: []string{"Windows 10 Version 21H2 for x64-based Systems"},
+			},
+			wantKept:    []string{"9999999", "9000001"},
+			wantDropped: nil,
+		},
+		{
+			name: "KB present but with empty product list is dropped",
+			args: args{
+				products: map[string][]string{
+					"9000001": {},
+				},
+				kbs:      []string{"9000001"},
+				releases: []string{"Windows 10 Version 21H2 for x64-based Systems"},
+			},
+			wantKept:    []string{},
+			wantDropped: []string{"9000001"},
+		},
+		{
+			name: "nil products keeps every KB",
+			args: args{
+				products: nil,
+				kbs:      []string{"9000001", "9000002"},
+				releases: []string{"Windows 10 Version 21H2 for x64-based Systems"},
+			},
+			wantKept:    []string{"9000001", "9000002"},
+			wantDropped: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKept, gotDropped := microsoft.PartitionKBIDsByReleases(tt.args.products, tt.args.kbs, tt.args.releases)
+			if diff := cmp.Diff(tt.wantKept, gotKept); diff != "" {
+				t.Errorf("PartitionKBIDsByReleases() kept (-expected +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantDropped, gotDropped); diff != "" {
+				t.Errorf("PartitionKBIDsByReleases() dropped (-expected +got):\n%s", diff)
 			}
 		})
 	}
