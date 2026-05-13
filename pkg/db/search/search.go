@@ -985,8 +985,9 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 						return -1
 					case !a.Newer && b.Newer:
 						return 1
+					default:
+						return 0
 					}
-					return 0
 				}(),
 				cmp.Compare(a.To, b.To),
 				cmp.Compare(string(a.Source), string(b.Source)),
