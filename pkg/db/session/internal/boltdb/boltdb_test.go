@@ -440,27 +440,27 @@ func TestConnection_Put(t *testing.T) {
 				},
 			},
 			want: map[string][]byte{
-				"metadata":                                  nil,
-				"metadata -> db":                            fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
-				"vulnerability":                             nil,
-				"vulnerability -> root":                     nil,
-				"vulnerability -> root -> ROOT-A":           []byte(`{"id":"ROOT-A","advisories":["ROOT-A"],"vulnerabilities":["CVE-A"],"ecosystems":["test:multi"],"data_sources":["source-a"]}`),
-				"vulnerability -> root -> ROOT-B":           []byte(`{"id":"ROOT-B","advisories":["ROOT-B"],"vulnerabilities":["CVE-B"],"ecosystems":["test:multi"],"data_sources":["source-b"]}`),
-				"vulnerability -> advisory":                 nil,
-				"vulnerability -> advisory -> ROOT-A":       []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"ROOT-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
-				"vulnerability -> advisory -> ROOT-B":       []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"ROOT-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
-				"vulnerability -> vulnerability":            nil,
-				"vulnerability -> vulnerability -> CVE-A":   []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"CVE-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
-				"vulnerability -> vulnerability -> CVE-B":   []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"CVE-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
-				"test:multi":                                nil,
-				"test:multi -> detection":                   nil,
-				"test:multi -> detection -> ROOT-A":         []byte(`{"source-a":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
-				"test:multi -> detection -> ROOT-B":         []byte(`{"source-b":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
-				"test:multi -> index":                       nil,
-				"test:multi -> index -> shared-pkg":         []byte(`["ROOT-A","ROOT-B"]`),
-				"datasource":                                nil,
-				"datasource -> source-a":                    []byte(`{"id":"source-a","name":"Source A","raw":[{"url":"ghcr.io/vulsio/source-a"}]}`),
-				"datasource -> source-b":                    []byte(`{"id":"source-b","name":"Source B","raw":[{"url":"ghcr.io/vulsio/source-b"}]}`),
+				"metadata":                                nil,
+				"metadata -> db":                          fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":                           nil,
+				"vulnerability -> root":                   nil,
+				"vulnerability -> root -> ROOT-A":         []byte(`{"id":"ROOT-A","advisories":["ROOT-A"],"vulnerabilities":["CVE-A"],"ecosystems":["test:multi"],"data_sources":["source-a"]}`),
+				"vulnerability -> root -> ROOT-B":         []byte(`{"id":"ROOT-B","advisories":["ROOT-B"],"vulnerabilities":["CVE-B"],"ecosystems":["test:multi"],"data_sources":["source-b"]}`),
+				"vulnerability -> advisory":               nil,
+				"vulnerability -> advisory -> ROOT-A":     []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"ROOT-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> advisory -> ROOT-B":     []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"ROOT-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> vulnerability":          nil,
+				"vulnerability -> vulnerability -> CVE-A": []byte(`{"source-a":{"ROOT-A":[{"content":{"id":"CVE-A"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-B": []byte(`{"source-b":{"ROOT-B":[{"content":{"id":"CVE-B"},"segments":[{"ecosystem":"test:multi"}]}]}}`),
+				"test:multi":                              nil,
+				"test:multi -> detection":                 nil,
+				"test:multi -> detection -> ROOT-A":       []byte(`{"source-a":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"test:multi -> detection -> ROOT-B":       []byte(`{"source-b":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"shared-pkg","architectures":["x86_64"]}}}}]}}]}`),
+				"test:multi -> index":                     nil,
+				"test:multi -> index -> shared-pkg":       []byte(`["ROOT-A","ROOT-B"]`),
+				"datasource":                              nil,
+				"datasource -> source-a":                  []byte(`{"id":"source-a","name":"Source A","raw":[{"url":"ghcr.io/vulsio/source-a"}]}`),
+				"datasource -> source-b":                  []byte(`{"id":"source-b","name":"Source B","raw":[{"url":"ghcr.io/vulsio/source-b"}]}`),
 			},
 		},
 	}
@@ -835,12 +835,12 @@ func TestConnection_GetIndex(t *testing.T) {
 		query     string
 	}
 	tests := []struct {
-		name      string
-		fixture   string
-		fields    fields
-		args      args
-		want      []dataTypes.RootID
-		wantErrIs error
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    []dataTypes.RootID
+		wantErr error
 	}{
 		{
 			name:    "ecosystem not found",
@@ -852,7 +852,7 @@ func TestConnection_GetIndex(t *testing.T) {
 				ecosystem: "ECOSYSTEM-NOT-EXISTS",
 				query:     "mariadb-devel:10.3::Judy",
 			},
-			wantErrIs: dbTypes.ErrNotFoundEcosystem,
+			wantErr: dbTypes.ErrNotFoundEcosystem,
 		},
 		{
 			name:    "query not found",
@@ -864,7 +864,7 @@ func TestConnection_GetIndex(t *testing.T) {
 				ecosystem: "alma:8",
 				query:     "PACKAGE-NOT-EXISTS",
 			},
-			wantErrIs: dbTypes.ErrNotFoundIndex,
+			wantErr: dbTypes.ErrNotFoundIndex,
 		},
 		{
 			name:    "happy",
@@ -900,9 +900,9 @@ func TestConnection_GetIndex(t *testing.T) {
 			defer c.Close()
 
 			got, err := c.GetIndex(tt.args.ecosystem, tt.args.query)
-			if tt.wantErrIs != nil {
-				if !errors.Is(err, tt.wantErrIs) {
-					t.Errorf("Connection.GetIndex() error = %v, want errors.Is %v", err, tt.wantErrIs)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("Connection.GetIndex() error = %v, want errors.Is %v", err, tt.wantErr)
 				}
 				return
 			}
@@ -1183,12 +1183,12 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 		kbid string
 	}
 	tests := []struct {
-		name      string
-		fixture   string
-		fields    fields
-		args      args
-		want      map[sourceTypes.SourceID]microsoftkbTypes.KB
-		wantErrIs error
+		name    string
+		fixture string
+		fields  fields
+		args    args
+		want    map[sourceTypes.SourceID]microsoftkbTypes.KB
+		wantErr error
 	}{
 		{
 			name:    "ecosystem not found",
@@ -1199,7 +1199,7 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 			args: args{
 				kbid: "4012606",
 			},
-			wantErrIs: dbTypes.ErrNotFoundEcosystem,
+			wantErr: dbTypes.ErrNotFoundEcosystem,
 		},
 		{
 			name:    "kbid not found",
@@ -1210,7 +1210,7 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 			args: args{
 				kbid: "KBID-NOT-EXISTS",
 			},
-			wantErrIs: dbTypes.ErrNotFoundMicrosoftKB,
+			wantErr: dbTypes.ErrNotFoundMicrosoftKB,
 		},
 		{
 			name:    "happy",
@@ -1260,9 +1260,9 @@ func TestConnection_GetMicrosoftKB(t *testing.T) {
 			defer c.Close()
 
 			got, err := c.GetMicrosoftKB(tt.args.kbid)
-			if tt.wantErrIs != nil {
-				if !errors.Is(err, tt.wantErrIs) {
-					t.Errorf("Connection.GetMicrosoftKB() error = %v, want errors.Is %v", err, tt.wantErrIs)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("Connection.GetMicrosoftKB() error = %v, want errors.Is %v", err, tt.wantErr)
 				}
 				return
 			}

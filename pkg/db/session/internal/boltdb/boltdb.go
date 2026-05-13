@@ -216,7 +216,7 @@ func (c *Connection) Put(root string) error {
 	// Write datasource and metadata in a final transaction.
 	// Metadata acts as a completion marker.
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := putDataSource(tx, root); err != nil {
+		if err := putDataSource(tx, filepath.Join(root, "datasource.json")); err != nil {
 			return errors.Wrap(err, "put data source")
 		}
 
@@ -336,18 +336,14 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data, idx pkgIndex) error {
 		}
 		slices.Sort(pkgs)
 
-		byPkg, ok := idx[d.Ecosystem]
-		if !ok {
-			byPkg = make(map[string]map[dataTypes.RootID]struct{})
-			idx[d.Ecosystem] = byPkg
+		if _, ok := idx[d.Ecosystem]; !ok {
+			idx[d.Ecosystem] = make(map[string]map[dataTypes.RootID]struct{})
 		}
 		for _, p := range slices.Compact(pkgs) {
-			set, ok := byPkg[p]
-			if !ok {
-				set = make(map[dataTypes.RootID]struct{})
-				byPkg[p] = set
+			if _, ok := idx[d.Ecosystem][p]; !ok {
+				idx[d.Ecosystem][p] = make(map[dataTypes.RootID]struct{})
 			}
-			set[data.ID] = struct{}{}
+			idx[d.Ecosystem][p][data.ID] = struct{}{}
 		}
 	}
 
@@ -587,8 +583,7 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
-func putDataSource(tx *bolt.Tx, root string) error {
-	path := filepath.Join(root, "datasource.json")
+func putDataSource(tx *bolt.Tx, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return errors.Wrapf(err, "open %s", path)
