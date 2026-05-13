@@ -178,23 +178,6 @@ func (c *Connection) Put(root string) error {
 		}
 	}
 
-	kbPaths, err := collectJSONPaths(filepath.Join(root, "microsoftkb"))
-	if err != nil {
-		return errors.Wrap(err, "collect microsoftkb paths")
-	}
-	for batch := range slices.Chunk(kbPaths, batchSize) {
-		if err := c.conn.Update(func(tx *bolt.Tx) error {
-			for _, p := range batch {
-				if err := putMicrosoftKBFile(tx, p); err != nil {
-					return errors.Wrapf(err, "put microsoftkb file %s", p)
-				}
-			}
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "put microsoftkb batch")
-		}
-	}
-
 	// Each ecosystem's index lives in its own B+tree sub-bucket, so process
 	// one ecosystem at a time. Package order is map-iteration order; sorting
 	// it was tested and made no measurable difference to total Put time.
@@ -210,6 +193,23 @@ func (c *Connection) Put(root string) error {
 			}); err != nil {
 				return errors.Wrap(err, "put index batch")
 			}
+		}
+	}
+
+	kbPaths, err := collectJSONPaths(filepath.Join(root, "microsoftkb"))
+	if err != nil {
+		return errors.Wrap(err, "collect microsoftkb paths")
+	}
+	for batch := range slices.Chunk(kbPaths, batchSize) {
+		if err := c.conn.Update(func(tx *bolt.Tx) error {
+			for _, p := range batch {
+				if err := putMicrosoftKBFile(tx, p); err != nil {
+					return errors.Wrapf(err, "put microsoftkb file %s", p)
+				}
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "put microsoftkb batch")
 		}
 	}
 
