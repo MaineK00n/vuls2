@@ -206,8 +206,7 @@ func (c *Connection) Put(root string) error {
 	// one ecosystem at a time. Package order is map-iteration order; sorting
 	// it was tested and made no measurable difference to total Put time.
 	for eco, byPkg := range idx {
-		pkgs := slices.Collect(maps.Keys(byPkg))
-		for batch := range slices.Chunk(pkgs, batchSize) {
+		for batch := range slices.Chunk(slices.Collect(maps.Keys(byPkg)), batchSize) {
 			if err := c.conn.Update(func(tx *bolt.Tx) error {
 				for _, pkg := range batch {
 					if err := putIndexEntry(tx, eco, pkg, byPkg[pkg]); err != nil {
@@ -260,7 +259,7 @@ func readDataSource(path string) (datasourceTypes.DataSource, error) {
 
 func collectJSONPaths(dir string) ([]string, error) {
 	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, errors.Wrapf(err, "stat %s", dir)
