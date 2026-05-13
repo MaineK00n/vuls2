@@ -855,18 +855,6 @@ func TestConnection_GetIndex(t *testing.T) {
 			wantErrIs: dbTypes.ErrNotFoundEcosystem,
 		},
 		{
-			name:    "index bucket not found",
-			fixture: "testdata/fixtures/none-exist",
-			fields: fields{
-				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
-			},
-			args: args{
-				ecosystem: "test:none-exist",
-				query:     "anything",
-			},
-			wantErrIs: dbTypes.ErrNotFoundIndex,
-		},
-		{
 			name:    "query not found",
 			fixture: "testdata/fixtures/alma-small",
 			fields: fields{

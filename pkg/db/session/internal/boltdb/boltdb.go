@@ -159,13 +159,6 @@ func (c *Connection) Put(root string) error {
 		batchSize = defaultPutBatchSize
 	}
 
-	// Preflight datasource.json before mutating the DB so a missing or
-	// malformed file aborts early without leaving partial state.
-	ds, err := readDataSource(filepath.Join(root, "datasource.json"))
-	if err != nil {
-		return err
-	}
-
 	idx := make(pkgIndex)
 
 	dataPaths, err := collectJSONPaths(filepath.Join(root, "data"))
@@ -222,6 +215,10 @@ func (c *Connection) Put(root string) error {
 
 	// Write datasource and metadata in a final transaction.
 	// Metadata acts as a completion marker.
+	ds, err := readDataSource(filepath.Join(root, "datasource.json"))
+	if err != nil {
+		return errors.Wrap(err, "read datasource")
+	}
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
 		if err := putDataSource(tx, ds); err != nil {
 			return errors.Wrap(err, "put data source")
@@ -338,6 +335,13 @@ func putDetection(tx *bolt.Tx, data dataTypes.Data, idx pkgIndex) error {
 
 		if err := edb.Put([]byte(data.ID), bs); err != nil {
 			return errors.Wrapf(err, "put %q", fmt.Sprintf("%s -> detection -> %s", d.Ecosystem, data.ID))
+		}
+
+		// Eagerly create the index sub-bucket per detection so that ecosystems
+		// with detections but no packages (e.g. criteria of only `none_exist`)
+		// still have an empty index bucket.
+		if _, err := eb.CreateBucketIfNotExists([]byte("index")); err != nil {
+			return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> index", d.Ecosystem))
 		}
 
 		var pkgs []string
@@ -770,7 +774,7 @@ func (c *Connection) GetIndex(ecosystem ecosystemTypes.Ecosystem, query string) 
 
 		eib := eb.Bucket([]byte("index"))
 		if eib == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundIndex, "%q not found", fmt.Sprintf("%s -> index", ecosystem))
+			return errors.Errorf("%q is not exists", fmt.Sprintf("%s -> index", ecosystem))
 		}
 
 		bs := eib.Get([]byte(query))
@@ -828,7 +832,7 @@ func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]micro
 
 		ekb := eb.Bucket([]byte("kb"))
 		if ekb == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundMicrosoftKB, "%q not found", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
+			return errors.Errorf("%q not found", fmt.Sprintf("%s -> kb", ecosystemTypes.EcosystemTypeMicrosoft))
 		}
 
 		bs := ekb.Get([]byte(kbid))
