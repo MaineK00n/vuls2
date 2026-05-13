@@ -978,13 +978,16 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 	// that previous releases established for the root.
 	for _, ns := range neighbors {
 		slices.SortFunc(ns, func(a, b directedNeighbor) int {
-			switch {
-			case a.Newer && !b.Newer:
-				return -1
-			case !a.Newer && b.Newer:
-				return 1
-			}
 			return cmp.Or(
+				func() int {
+					switch {
+					case a.Newer && !b.Newer:
+						return -1
+					case !a.Newer && b.Newer:
+						return 1
+					}
+					return 0
+				}(),
 				cmp.Compare(a.To, b.To),
 				cmp.Compare(string(a.Source), string(b.Source)),
 			)
