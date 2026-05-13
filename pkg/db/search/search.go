@@ -925,14 +925,10 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 		hasUpdate bool
 		updateIDs map[string]struct{} // lazily allocated when a non-empty UpdateID is added
 	}
-	groups := make(map[groupKey]*groupAgg)
+	groups := make(map[groupKey]groupAgg)
 	addContribution := func(from, to string, source sourceTypes.SourceID, level microsoft.ExpandEdgeLevel, updateID string, newer bool) {
 		k := groupKey{From: from, To: to, Source: source, Newer: newer}
-		g, ok := groups[k]
-		if !ok {
-			g = &groupAgg{}
-			groups[k] = g
-		}
+		g := groups[k]
 		switch level {
 		case microsoft.ExpandEdgeLevelKB:
 			g.hasKB = true
@@ -950,6 +946,7 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 				g.updateIDs[updateID] = struct{}{}
 			}
 		}
+		groups[k] = g
 	}
 	for from, es := range edges {
 		for _, e := range es {
