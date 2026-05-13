@@ -21,7 +21,16 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 	// FAIL rows first keeps triage focused on what actually blocks promotion.
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
-			cmp.Compare(boolToInt(a.Pass), boolToInt(b.Pass)),
+			func() int {
+				switch {
+				case !a.Pass && b.Pass:
+					return -1
+				case a.Pass && !b.Pass:
+					return +1
+				default:
+					return 0
+				}
+			}(),
 			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
 				max(b.DetectionChangeRate, b.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
@@ -167,15 +176,6 @@ func overrideLabel(t float64, overridden bool) string {
 		return fmt.Sprintf("%.1f%%", t)
 	}
 	return ""
-}
-
-// boolToInt is a sort helper: false sorts before true, so passing it to
-// cmp.Compare(boolToInt(a), boolToInt(b)) puts FAIL rows ahead of PASS rows.
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
