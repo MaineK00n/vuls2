@@ -148,15 +148,17 @@ func resolveThreshold(key string, def float64, overrides map[string]float64) (fl
 }
 
 // warnUnusedOverrides logs a warning for each override key that did not match
-// any compared scan-result file. Catches typos / stale entries.
+// any compared scan-result file. Catches typos / stale entries. The "used"
+// set is keyed by the canonical diffm map key rather than FileDiff.Name so
+// the warning is independent of whether callers populate Name consistently.
 func warnUnusedOverrides(overrides map[string]float64, diffm map[string]FileDiff) {
 	if len(overrides) == 0 {
 		return
 	}
 	used := make(map[string]bool, len(diffm))
-	for _, d := range diffm {
+	for name, d := range diffm {
 		if d.ThresholdOverridden {
-			used[d.Name] = true
+			used[name] = true
 		}
 	}
 	for k := range overrides {
@@ -364,7 +366,11 @@ func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64, overrides
 				return 0
 			}
 		}()
-		d.Threshold, d.ThresholdOverridden = resolveThreshold(d.Name, changeRateThreshold, overrides)
+		// Resolve via the canonical map key, not d.Name — the two should
+		// always match in practice but coupling resolution to the key keeps
+		// override lookups consistent with how warnUnusedOverrides reports
+		// "unused" entries.
+		d.Threshold, d.ThresholdOverridden = resolveThreshold(name, changeRateThreshold, overrides)
 		d.Pass = d.ChangeRate <= d.Threshold
 
 		ds[name] = d
