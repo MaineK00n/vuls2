@@ -1128,7 +1128,7 @@ func writeKBExpandSubtree(w io.Writer, neighbors map[string][]directedNeighbor, 
 		}
 		if e.HasUpdate {
 			if len(e.UpdateIDs) > 0 {
-				levelParts = append(levelParts, "Updates "+strings.Join(e.UpdateIDs, ", "))
+				levelParts = append(levelParts, fmt.Sprintf("Updates %s", strings.Join(e.UpdateIDs, ", ")))
 			} else {
 				// Update-level edge contributed but no UpdateID was
 				// available (defensive: current Microsoft data sources
