@@ -216,7 +216,7 @@ func (c *Connection) Put(root string) error {
 	// Write datasource and metadata in a final transaction.
 	// Metadata acts as a completion marker.
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := putDataSource(tx, filepath.Join(root, "datasource.json")); err != nil {
+		if err := putDataSourceFile(tx, filepath.Join(root, "datasource.json")); err != nil {
 			return errors.Wrap(err, "put data source")
 		}
 
@@ -584,7 +584,7 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
-func putDataSource(tx *bolt.Tx, path string) error {
+func putDataSourceFile(tx *bolt.Tx, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return errors.Wrapf(err, "open %s", path)
