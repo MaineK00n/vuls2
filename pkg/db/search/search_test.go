@@ -46,7 +46,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"Supersession chains:",
 				"5000802  [input:applied, covered]",
 				"    Superseded by:",
-				"      └─ [microsoft-cvrf, KB-level] 5001330  [discovered, unapplied]",
+				"      └─ [microsoft-cvrf, KB-level, superseded by] 5001330  [discovered, unapplied]",
 				"Result:",
 				"Covered:   5000802",
 				"Unapplied: 5001330",
@@ -86,8 +86,8 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 			wantContains: []string{
 				"    Superseded by:",
-				"[microsoft-cvrf, KB-level] 5001330",
-				"[microsoft-msuc, Update abc-123] 5001330",
+				"[microsoft-cvrf, KB-level, superseded by] 5001330",
+				"[microsoft-msuc, Updates abc-123, superseded by] 5001330",
 				"(→ see above)",
 			},
 		},
@@ -163,8 +163,8 @@ func TestPrintKBExpandTree(t *testing.T) {
 			wantContains: []string{
 				"7000004  [input:applied, covered]",
 				"    Supersedes:",
-				"      └─ [microsoft-cvrf, KB-level] 7000003  [discovered, covered]",
-				"          └─ [microsoft-cvrf, KB-level] 7000002  [discovered, covered]",
+				"      └─ [microsoft-cvrf, KB-level, supersedes] 7000003  [discovered, covered]",
+				"          └─ [microsoft-cvrf, KB-level, supersedes] 7000002  [discovered, covered]",
 			},
 			wantNotContains: []string{"    Superseded by:"},
 		},
@@ -184,9 +184,9 @@ func TestPrintKBExpandTree(t *testing.T) {
 			wantContains: []string{
 				"7000003  [input:applied, covered]",
 				"    Superseded by:",
-				"      └─ [microsoft-cvrf, KB-level] 7000004  [discovered, unapplied]",
+				"      └─ [microsoft-cvrf, KB-level, superseded by] 7000004  [discovered, unapplied]",
 				"    Supersedes:",
-				"      └─ [microsoft-cvrf, KB-level] 7000002  [discovered, covered]",
+				"      └─ [microsoft-cvrf, KB-level, supersedes] 7000002  [discovered, covered]",
 			},
 		},
 		{
@@ -221,8 +221,79 @@ func TestPrintKBExpandTree(t *testing.T) {
 			},
 			wantContains: []string{
 				"A  [input:applied, covered]",
-				"      └─ [microsoft-cvrf, KB-level] B  [discovered, covered]",
-				"(→ see above)",
+				"      └─ [microsoft-cvrf, KB-level, superseded by] B  [discovered, covered]",
+				"      └─ [microsoft-cvrf, KB-level, supersedes] B  (→ see above)",
+			},
+		},
+		{
+			// Multiple Update-level attestations from the same source to
+			// the same target (e.g. several MSUC Update entries each
+			// documenting "5000802 SupersededBy 5001330") collapse into a
+			// single line that lists all UpdateIDs in deterministic order.
+			// A KB-level attestation from the same source joins via
+			// "KB-level + Updates ..." so the data sources stay grouped.
+			name: "multiple Update attestations from one source are consolidated",
+			args: args{
+				exp: &microsoft.ExpandResult{
+					Inputs:    microsoft.ExpandInputs{Applied: []string{"5000802"}},
+					Covered:   []string{"5000802"},
+					Unapplied: []string{"5001330"},
+					Edges: map[string][]microsoft.ExpandEdge{
+						"5000802": {
+							{To: "5001330", Source: "microsoft-cvrf", Level: microsoft.ExpandEdgeLevelKB},
+							{To: "5001330", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelKB},
+							{To: "5001330", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "def-456"},
+							{To: "5001330", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "abc-123"},
+							{To: "5001330", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "abc-123"},
+						},
+					},
+				},
+			},
+			wantContains: []string{
+				"[microsoft-cvrf, KB-level, superseded by] 5001330  [discovered, unapplied]",
+				"[microsoft-msuc, KB-level + Updates abc-123, def-456, superseded by] 5001330",
+			},
+			wantNotContains: []string{
+				"[microsoft-msuc, Update abc-123,",
+				"[microsoft-msuc, Update def-456,",
+				// no separate Updates-only line — KB-level merged into the
+				// same msuc label
+				"[microsoft-msuc, Updates abc-123, def-456, superseded by]",
+			},
+		},
+		{
+			// Mixed-direction discovery: an applied root (R) supersedes a
+			// shared older KB (S). S is also superseded by a parallel newer
+			// KB (P) on a different product line, which itself is superseded
+			// by P2. The bidirectional ExpandKBs walk reaches P and P2 via
+			// "backward to S, then forward to P, then forward to P2"; the
+			// explain tree must surface them so the user can trace where
+			// P/P2 in Unapplied came from. This case mirrors the production
+			// 5083769 → 5044284 → 5082063 → 5091157 chain (Win11 root and
+			// Server 24H2 parallel line sharing 5044284 as ancestor).
+			name: "mixed-direction chain surfaces parallel newer KBs",
+			args: args{
+				exp: &microsoft.ExpandResult{
+					Inputs:    microsoft.ExpandInputs{Applied: []string{"R"}},
+					Covered:   []string{"R", "S"},
+					Unapplied: []string{"P", "P2"},
+					Edges: map[string][]microsoft.ExpandEdge{
+						"S": {
+							{To: "R", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "ud-r"},
+							{To: "P", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelUpdate, UpdateID: "ud-p"},
+						},
+						"P": {
+							{To: "P2", Source: "microsoft-msuc", Level: microsoft.ExpandEdgeLevelKB},
+						},
+					},
+				},
+			},
+			wantContains: []string{
+				"R  [input:applied, covered]",
+				"    Supersedes:",
+				"      └─ [microsoft-msuc, Updates ud-r, supersedes] S  [discovered, covered]",
+				"          └─ [microsoft-msuc, Updates ud-p, superseded by] P  [discovered, unapplied]",
+				"              └─ [microsoft-msuc, KB-level, superseded by] P2  [discovered, unapplied]",
 			},
 		},
 		{
@@ -245,7 +316,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"Applied:   5000802",
 				"Unapplied: (none)",
 				"5000802  [input:applied, covered]",
-				"      └─ [microsoft-cvrf, KB-level] 5001330  [discovered, unapplied]",
+				"      └─ [microsoft-cvrf, KB-level, superseded by] 5001330  [discovered, unapplied]",
 			},
 			wantNotContains: []string{
 				"Applied:   \n",      // no stray leading/trailing space from "" entry
