@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -960,10 +961,7 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 	// that become backward "from" keys), not against len(groups).
 	neighbors := make(map[string][]directedNeighbor, 2*len(edges))
 	for k, g := range groups {
-		ids := make([]string, 0, len(g.updateIDs))
-		for id := range g.updateIDs {
-			ids = append(ids, id)
-		}
+		ids := slices.Collect(maps.Keys(g.updateIDs))
 		slices.Sort(ids)
 		neighbors[k.From] = append(neighbors[k.From], directedNeighbor{
 			To:        k.To,
