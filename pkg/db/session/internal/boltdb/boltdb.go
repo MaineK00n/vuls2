@@ -185,7 +185,7 @@ func (c *Connection) Put(root string) error {
 		for batch := range slices.Chunk(slices.Collect(maps.Keys(byPkg)), batchSize) {
 			if err := c.conn.Update(func(tx *bolt.Tx) error {
 				for _, pkg := range batch {
-					if err := putIndexEntry(tx, eco, pkg, byPkg[pkg]); err != nil {
+					if err := putIndexEntry(tx, eco, pkg, slices.Collect(maps.Keys(byPkg[pkg]))); err != nil {
 						return errors.Wrapf(err, "put index entry %s -> %s", eco, pkg)
 					}
 				}
@@ -476,7 +476,7 @@ func putMicrosoftKB(tx *bolt.Tx, kb microsoftkbTypes.KB) error {
 // with whatever is already on disk and writes the union back. Within a single
 // Put call this happens once per package; subsequent Put calls against the
 // same DB re-read and merge per call.
-func putIndexEntry(tx *bolt.Tx, eco ecosystemTypes.Ecosystem, pkg string, rids map[dataTypes.RootID]struct{}) error {
+func putIndexEntry(tx *bolt.Tx, eco ecosystemTypes.Ecosystem, pkg string, rids []dataTypes.RootID) error {
 	eb, err := tx.CreateBucketIfNotExists([]byte(eco))
 	if err != nil {
 		return errors.Wrapf(err, "create %q if not exists", eco)
@@ -486,13 +486,14 @@ func putIndexEntry(tx *bolt.Tx, eco ecosystemTypes.Ecosystem, pkg string, rids m
 		return errors.Wrapf(err, "create %q if not exists", fmt.Sprintf("%s -> index", eco))
 	}
 
-	var rootIDs []dataTypes.RootID
+	rootIDs := rids
 	if bs := eib.Get([]byte(pkg)); len(bs) > 0 {
-		if err := util.Unmarshal(bs, &rootIDs); err != nil {
+		var existing []dataTypes.RootID
+		if err := util.Unmarshal(bs, &existing); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("%s -> index -> %s", eco, pkg))
 		}
+		rootIDs = append(rootIDs, existing...)
 	}
-	rootIDs = slices.AppendSeq(rootIDs, maps.Keys(rids))
 	slices.Sort(rootIDs)
 	rootIDs = slices.Compact(rootIDs)
 
