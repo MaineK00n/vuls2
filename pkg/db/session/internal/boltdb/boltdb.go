@@ -215,12 +215,8 @@ func (c *Connection) Put(root string) error {
 
 	// Write datasource and metadata in a final transaction.
 	// Metadata acts as a completion marker.
-	ds, err := readDataSource(filepath.Join(root, "datasource.json"))
-	if err != nil {
-		return errors.Wrap(err, "read datasource")
-	}
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := putDataSource(tx, ds); err != nil {
+		if err := putDataSource(tx, root); err != nil {
 			return errors.Wrap(err, "put data source")
 		}
 
@@ -238,20 +234,6 @@ func (c *Connection) Put(root string) error {
 	}
 
 	return nil
-}
-
-func readDataSource(path string) (datasourceTypes.DataSource, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return datasourceTypes.DataSource{}, errors.Wrapf(err, "open %s", path)
-	}
-	defer f.Close()
-
-	var ds datasourceTypes.DataSource
-	if err := json.UnmarshalRead(f, &ds); err != nil {
-		return datasourceTypes.DataSource{}, errors.Wrapf(err, "unmarshal %s", path)
-	}
-	return ds, nil
 }
 
 func collectJSONPaths(dir string) ([]string, error) {
@@ -605,7 +587,19 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
-func putDataSource(tx *bolt.Tx, datasource datasourceTypes.DataSource) error {
+func putDataSource(tx *bolt.Tx, root string) error {
+	path := filepath.Join(root, "datasource.json")
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var datasource datasourceTypes.DataSource
+	if err := json.UnmarshalRead(f, &datasource); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+
 	sb := tx.Bucket([]byte("datasource"))
 	if sb == nil {
 		return errors.Errorf("%q is not exists", "datasource")
