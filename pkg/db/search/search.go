@@ -958,7 +958,10 @@ func buildKBExpandNeighbors(edges map[string][]microsoft.ExpandEdge) map[string]
 		}
 	}
 
-	neighbors := make(map[string][]directedNeighbor, len(groups))
+	// The map is keyed by KB ID, not by edge tuple, so size it against the
+	// number of distinct nodes (forward "from" keys plus their "to" targets
+	// that become backward "from" keys), not against len(groups).
+	neighbors := make(map[string][]directedNeighbor, 2*len(edges))
 	for k, g := range groups {
 		ids := make([]string, 0, len(g.updateIDs))
 		for id := range g.updateIDs {
@@ -1153,7 +1156,7 @@ func writeKBExpandSubtree(w io.Writer, neighbors map[string][]directedNeighbor, 
 		}
 		emittedSubtree[e.To] = struct{}{}
 
-		var childEdges []directedNeighbor
+		childEdges := make([]directedNeighbor, 0, len(neighbors[e.To]))
 		for _, n := range neighbors[e.To] {
 			if n.To == parent {
 				continue
