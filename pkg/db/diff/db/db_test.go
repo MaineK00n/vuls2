@@ -381,8 +381,8 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// An override targeting an ecosystem not present in baseline should be
-			// reported (logged) but must not change pass/fail of other ecosystems.
+			// An override targeting an ecosystem not present in baseline must
+			// not change pass/fail of other ecosystems.
 			name: "unmatched override key does not affect outcome",
 			args: args{
 				baselineFixtures:             []string{"testdata/fixtures/baseline"},
