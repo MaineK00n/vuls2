@@ -74,335 +74,168 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
-func TestComputeDiffs(t *testing.T) {
+func TestDiffDetection(t *testing.T) {
 	type args struct {
-		detections                   map[string]detection.FileDiff
-		changeRateThreshold          float64
-		changeRateThresholdOverrides map[string]float64
+		d         detection.FileDiff
+		threshold float64
 	}
 	tests := []struct {
 		name string
 		args args
-		want map[string]detection.FileDiff
+		want detection.FileDiff
 	}{
 		{
 			name: "no change",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
+				d: detection.FileDiff{
 					Name:        "redhat_9",
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
 				},
+				threshold: 10,
+			},
+			want: detection.FileDiff{
+				Name:        "redhat_9",
+				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+				ChangeRate:  0,
+				Threshold:   10,
+				Pass:        true,
 			},
 		},
 		{
 			name: "small change within limit",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name: "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
-						TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
-					},
-				},
-				changeRateThreshold: 25,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
+				d: detection.FileDiff{
 					Name: "redhat_9",
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
 					TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
-					Added:      []string{"CVE-2026-0011"},
-					Removed:    []string{"CVE-2026-0010"},
-					ChangeRate: 20,
-					Threshold:  25,
-					Pass:       true,
 				},
+				threshold: 25,
+			},
+			want: detection.FileDiff{
+				Name: "redhat_9",
+				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
+				TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
+				Added:      []string{"CVE-2026-0011"},
+				Removed:    []string{"CVE-2026-0010"},
+				ChangeRate: 20,
+				Threshold:  25,
+				Pass:       true,
 			},
 		},
 		{
-			name: "large change exceeds limit",
+			name: "large removal exceeds limit",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"ubuntu_22.04": {
-						Name:        "ubuntu_22.04",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"ubuntu_22.04": {
+				d: detection.FileDiff{
 					Name:        "ubuntu_22.04",
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					TargetIDs:   []string{"CVE-2026-0001"},
-					Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-					ChangeRate:  75,
-					Threshold:   10,
-					Pass:        false,
 				},
+				threshold: 10,
+			},
+			want: detection.FileDiff{
+				Name:        "ubuntu_22.04",
+				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+				TargetIDs:   []string{"CVE-2026-0001"},
+				Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+				ChangeRate:  75,
+				Threshold:   10,
+				Pass:        false,
 			},
 		},
 		{
 			name: "large addition exceeds limit",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"ubuntu_22.04": {
-						Name:        "ubuntu_22.04",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"ubuntu_22.04": {
+				d: detection.FileDiff{
 					Name:        "ubuntu_22.04",
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
-					Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
-					ChangeRate:  200,
-					Threshold:   10,
-					Pass:        false,
 				},
+				threshold: 10,
+			},
+			want: detection.FileDiff{
+				Name:        "ubuntu_22.04",
+				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+				Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+				ChangeRate:  200,
+				Threshold:   10,
+				Pass:        false,
 			},
 		},
 		{
 			name: "empty baseline triggers 100% change",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
+				d: detection.FileDiff{
 					Name:        "redhat_9",
 					BaselineIDs: []string{},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					Added:       []string{"CVE-2026-0001", "CVE-2026-0002"},
-					ChangeRate:  100,
-					Threshold:   10,
-					Pass:        false,
 				},
+				threshold: 10,
+			},
+			want: detection.FileDiff{
+				Name:        "redhat_9",
+				BaselineIDs: []string{},
+				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+				Added:       []string{"CVE-2026-0001", "CVE-2026-0002"},
+				ChangeRate:  100,
+				Threshold:   10,
+				Pass:        false,
 			},
 		},
 		{
 			name: "both empty avoids zero division",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{},
-						TargetIDs:   []string{},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
+				d: detection.FileDiff{
 					Name:        "redhat_9",
 					BaselineIDs: []string{},
 					TargetIDs:   []string{},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
 				},
+				threshold: 10,
+			},
+			want: detection.FileDiff{
+				Name:        "redhat_9",
+				BaselineIDs: []string{},
+				TargetIDs:   []string{},
+				ChangeRate:  0,
+				Threshold:   10,
+				Pass:        true,
 			},
 		},
 		{
-			name: "target all removed",
+			// Caller-resolved override-style threshold (higher than default)
+			// is applied verbatim and lifts the row above its rate.
+			name: "high threshold lets a moderate rate pass",
 			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					},
-					"ubuntu_22.04": {
-						Name:        "ubuntu_22.04",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-						TargetIDs:   nil,
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
-					Name:        "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
-				},
-				"ubuntu_22.04": {
-					Name:        "ubuntu_22.04",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					Removed:     []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					ChangeRate:  100,
-					Threshold:   10,
-					Pass:        false,
-				},
-			},
-		},
-		{
-			name: "multiple files mixed",
-			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					},
-					"ubuntu_22.04": {
-						Name:        "ubuntu_22.04",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-					},
-				},
-				changeRateThreshold: 10,
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
-					Name:        "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
-				},
-				"ubuntu_22.04": {
-					Name:        "ubuntu_22.04",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-					TargetIDs:   []string{"CVE-2026-0001"},
-					Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-					ChangeRate:  75,
-					Threshold:   10,
-					Pass:        false,
-				},
-			},
-		},
-		{
-			name: "override lifts a single file above default threshold",
-			args: args{
-				detections: map[string]detection.FileDiff{
-					"debian_13": {
-						Name:        "debian_13",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					},
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-					},
-				},
-				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"debian_13": 80},
-			},
-			want: map[string]detection.FileDiff{
-				"debian_13": {
+				d: detection.FileDiff{
 					Name:        "debian_13",
 					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					Added:       []string{"CVE-2026-0003"},
-					ChangeRate:  50,
-					Threshold:   80,
-					Pass:        true,
 				},
-				"redhat_9": {
-					Name:        "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001"},
-					TargetIDs:   []string{"CVE-2026-0001"},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
-				},
+				threshold: 80,
 			},
-		},
-		{
-			name: "override below rate still fails",
-			args: args{
-				detections: map[string]detection.FileDiff{
-					"debian_13": {
-						Name:        "debian_13",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					},
-				},
-				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"debian_13": 30},
-			},
-			want: map[string]detection.FileDiff{
-				"debian_13": {
-					Name:        "debian_13",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					Added:       []string{"CVE-2026-0003"},
-					ChangeRate:  50,
-					Threshold:   30,
-					Pass:        false,
-				},
-			},
-		},
-		{
-			// An override key that matches no file in the diffm must fall
-			// through cleanly: every file still resolves to the default
-			// threshold and pass/fail is unchanged. Locks the
-			// `if v, ok := overrides[name]; ok` miss branch in computeDiffs.
-			name: "unmatched override key does not affect outcome",
-			args: args{
-				detections: map[string]detection.FileDiff{
-					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					},
-				},
-				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"unknown_99": 50},
-			},
-			want: map[string]detection.FileDiff{
-				"redhat_9": {
-					Name:        "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-					ChangeRate:  0,
-					Threshold:   10,
-					Pass:        true,
-				},
+			want: detection.FileDiff{
+				Name:        "debian_13",
+				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+				Added:       []string{"CVE-2026-0003"},
+				ChangeRate:  50,
+				Threshold:   80,
+				Pass:        true,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.ComputeDiffs(tt.args.detections, tt.args.changeRateThreshold, tt.args.changeRateThresholdOverrides)
+			got := detection.DiffDetection(tt.args.d, tt.args.threshold)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("ComputeDiffs() mismatch (-want +got):\n%s", diff)
+				t.Errorf("DiffDetection() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -687,19 +520,33 @@ func TestDiff(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Locks WithChangeRateThresholdOverrides forwarding from Diff
-			// down to computeDiffs. ubuntu_2204 in fakeDetect produces a
-			// 66.7% change rate (baseline 3 IDs, target 1, two removed),
-			// which would FAIL the 10% default. The "ubuntu_2204=70"
-			// override lifts only that file above its rate so the whole
-			// Diff returns nil. If Diff stops forwarding the option, the
-			// override has no effect and ubuntu_2204 fails again.
+			// Locks WithChangeRateThresholdOverrides forwarding through the
+			// inline resolve+diffDetection loop in Diff. ubuntu_2204 in
+			// fakeDetect produces a 66.7% change rate (baseline 3 IDs,
+			// target 1, two removed) which would FAIL the 10% default. The
+			// "ubuntu_2204=70" override lifts only that file above its rate
+			// so the whole Diff returns nil. If Diff stops forwarding the
+			// option, the override has no effect and ubuntu_2204 fails again.
 			name: "override forwarded through to per-file resolution",
 			args: args{
 				dir:                          scanDir,
 				detectFunc:                   fakeDetect,
 				changeRateThreshold:          10,
 				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204": 70},
+			},
+			wantErr: false,
+		},
+		{
+			// An override entry that matches no file in the diffm must fall
+			// through cleanly: every file still resolves to the default
+			// threshold. Locks the `if v, ok := overrides[name]; ok` miss
+			// branch in Diff's inline resolve loop.
+			name: "unmatched override key does not affect outcome",
+			args: args{
+				dir:                          scanDir,
+				detectFunc:                   fakeDetect,
+				changeRateThreshold:          100, // both files pass at default
+				changeRateThresholdOverrides: map[string]float64{"unknown_99": 1},
 			},
 			wantErr: false,
 		},

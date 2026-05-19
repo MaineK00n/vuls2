@@ -118,7 +118,16 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "detect")
 	}
 
-	diffm = computeDiffs(diffm, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	for name, d := range diffm {
+		// Resolve via the canonical map key, not d.Name — the two should
+		// always match in practice but coupling resolution to the key keeps
+		// override lookups consistent across the codebase.
+		threshold := o.changeRateThreshold
+		if v, ok := o.changeRateThresholdOverrides[name]; ok {
+			threshold = v
+		}
+		diffm[name] = diffDetection(d, threshold)
+	}
 
 	pass, err := generateReport(o.writer, diffm)
 	if err != nil {
@@ -314,38 +323,28 @@ skipUpdate = true
 // therefore invisible. This is sufficient for regression detection (missing or
 // extra CVEs), but not for validating data source migrations where IDs stay
 // the same but metadata differs.
-func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64, overrides map[string]float64) map[string]FileDiff {
-	for name, d := range ds {
-		d.Added = subtract(d.TargetIDs, d.BaselineIDs)
-		d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
+// diffDetection fills in the diff fields of a single FileDiff against the
+// supplied resolved threshold. Override resolution is the caller's
+// responsibility. Parallels `diffEcosystem` on the db side.
+func diffDetection(d FileDiff, threshold float64) FileDiff {
+	d.Added = subtract(d.TargetIDs, d.BaselineIDs)
+	d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
 
-		// changeRate can exceed 100% when additions outnumber baseline entries.
-		// This is intentional — capping at 100 would hide the magnitude of large additions.
-		d.ChangeRate = func() float64 {
-			switch {
-			case len(d.BaselineIDs) > 0:
-				return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
-			case len(d.Added)+len(d.Removed) > 0:
-				return 100
-			default:
-				return 0
-			}
-		}()
-		// Resolve via the canonical map key, not d.Name — the two should
-		// always match in practice but coupling resolution to the key keeps
-		// override lookups consistent across the codebase.
-		d.Threshold = func() float64 {
-			if v, ok := overrides[name]; ok {
-				return v
-			}
-			return changeRateThreshold
-		}()
-		d.Pass = d.ChangeRate <= d.Threshold
-
-		ds[name] = d
-	}
-
-	return ds
+	// changeRate can exceed 100% when additions outnumber baseline entries.
+	// This is intentional — capping at 100 would hide the magnitude of large additions.
+	d.ChangeRate = func() float64 {
+		switch {
+		case len(d.BaselineIDs) > 0:
+			return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
+		case len(d.Added)+len(d.Removed) > 0:
+			return 100
+		default:
+			return 0
+		}
+	}()
+	d.Threshold = threshold
+	d.Pass = d.ChangeRate <= threshold
+	return d
 }
 
 // subtract returns elements in a that are not in b (i.e. a \ b).

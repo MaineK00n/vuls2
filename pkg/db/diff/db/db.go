@@ -193,10 +193,16 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 	// New ecosystems in the target are feature additions, not regressions,
 	// so they are intentionally excluded from change rate calculation.
 	for _, eco := range baselineEcos {
+		// Resolve the per-ecosystem threshold here so diffEcosystem stays a
+		// pure per-target function that doesn't need the overrides map.
+		threshold := changeRateThreshold
+		if v, ok := overrides[string(eco)]; ok {
+			threshold = v
+		}
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, changeRateThreshold, overrides)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, threshold)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -259,7 +265,9 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently. Either sub-bucket may be absent.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, changeRateThreshold float64, overrides map[string]float64) (EcosystemDiff, error) {
+// Override resolution is the caller's responsibility — this function applies
+// `threshold` verbatim.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
@@ -297,13 +305,8 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 
 	diff.DetectionChangeRate = changeRate(diff.BaselineCriterions, diff.TargetCriterions, diff.MatchedCriterions)
 	diff.KBChangeRate = changeRate(diff.BaselineKBs, diff.TargetKBs, diff.MatchedKBs)
-	diff.Threshold = func() float64 {
-		if v, ok := overrides[string(ecosystem)]; ok {
-			return v
-		}
-		return changeRateThreshold
-	}()
-	diff.Pass = diff.DetectionChangeRate <= diff.Threshold && diff.KBChangeRate <= diff.Threshold
+	diff.Threshold = threshold
+	diff.Pass = diff.DetectionChangeRate <= threshold && diff.KBChangeRate <= threshold
 	return diff, nil
 }
 

@@ -305,7 +305,7 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0, nil)
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
