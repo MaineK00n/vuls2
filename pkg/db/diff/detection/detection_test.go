@@ -368,6 +368,34 @@ func TestComputeDiffs(t *testing.T) {
 				},
 			},
 		},
+		{
+			// An override key that matches no file in the diffm must fall
+			// through cleanly: every file still resolves to the default
+			// threshold and pass/fail is unchanged. Locks the
+			// `if v, ok := overrides[name]; ok` miss branch in computeDiffs.
+			name: "unmatched override key does not affect outcome",
+			args: args{
+				detections: map[string]detection.FileDiff{
+					"redhat_9": {
+						Name:        "redhat_9",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+					},
+				},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"unknown_99": 50},
+			},
+			want: map[string]detection.FileDiff{
+				"redhat_9": {
+					Name:        "redhat_9",
+					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+					ChangeRate:  0,
+					Threshold:   10,
+					Pass:        true,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -498,6 +526,61 @@ func TestGenerateReport(t *testing.T) {
 |------|----------|--------|-------|---------|-------------|-----------|--------|
 | debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
 | redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+
+`,
+		},
+		{
+			// Locks the FAIL-first sort tier: a PASS row with a higher change
+			// rate (held passing by an override) must sort below a FAIL row
+			// whose rate is lower. Pure rate-desc sort would put alpha first.
+			name: "FAIL row sorts above higher-rate PASS row",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"alpha": {
+						Name:        "alpha",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:  250,
+						Threshold:   300,
+						Pass:        true,
+					},
+					"beta": {
+						Name:        "beta",
+						BaselineIDs: []string{"CVE-2026-1001", "CVE-2026-1002"},
+						TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
+						Added:       []string{"CVE-2026-1003"},
+						Removed:     []string{"CVE-2026-1002"},
+						ChangeRate:  100,
+						Threshold:   0,
+						Pass:        false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: **FAIL**
+
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| beta | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
+| alpha | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
+
+## Details (FAIL files)
+
+### beta (100.0%)
+
+#### Added IDs (1)
+
+- CVE-2026-1003
+
+#### Removed IDs (1)
+
+- CVE-2026-1002
 
 `,
 		},

@@ -1285,6 +1285,68 @@ func TestGenerateReport(t *testing.T) {
 
 `,
 		},
+		{
+			// Locks the FAIL-first sort tier: a PASS row with a higher rate
+			// (held passing by an override) must still sort below a FAIL row
+			// whose rate is lower. Pure rate-desc sort would put alpha:1 first.
+			name: "FAIL row sorts above higher-rate PASS row",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem:           "alpha:1",
+						BaselineKeys:        100,
+						TargetKeys:          100,
+						BaselineCriterions:  500,
+						TargetCriterions:    500,
+						MatchedCriterions:   200,
+						Changed:             []string{"CVE-2026-AAAA"},
+						DetectionChangeRate: 120,
+						Threshold:           150,
+						Pass:                true,
+					},
+					{
+						Ecosystem:           "beta:2",
+						BaselineKeys:        50,
+						TargetKeys:          50,
+						BaselineCriterions:  200,
+						TargetCriterions:    200,
+						MatchedCriterions:   195,
+						Changed:             []string{"CVE-2026-BBBB"},
+						DetectionChangeRate: 5,
+						Threshold:           0,
+						Pass:                false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: **FAIL**
+
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| beta:2 | 5.0% | 0.0% | 0.0% | **FAIL** |
+| alpha:1 | 120.0% | 0.0% | 150.0% | PASS |
+
+## Detection
+
+| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| beta:2 | 50 | 50 | 0 | 0 | 1 | 200 | 200 | 195 |
+| alpha:1 | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 200 |
+
+## Details (FAIL ecosystems)
+
+### beta:2 (5.0%)
+
+#### Changed Root IDs (1)
+
+- CVE-2026-BBBB
+
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
