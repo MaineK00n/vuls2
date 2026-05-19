@@ -81,9 +81,7 @@ type FileDiff struct {
 	ChangeRate  float64
 
 	// Threshold actually applied to this file (post override resolution).
-	// ThresholdOverridden is true iff a per-file override matched.
-	Threshold           float64
-	ThresholdOverridden bool
+	Threshold float64
 
 	Pass bool
 }
@@ -122,7 +120,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 	diffm = computeDiffs(diffm, o.changeRateThreshold, o.changeRateThresholdOverrides)
 
-	pass, err := generateReport(o.writer, diffm, o.changeRateThreshold)
+	pass, err := generateReport(o.writer, diffm)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
@@ -136,13 +134,12 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 }
 
 // resolveThreshold returns the threshold to apply to a given file, preferring
-// an override entry when present. The second return value reports whether
-// the override map matched.
-func resolveThreshold(key string, def float64, overrides map[string]float64) (float64, bool) {
+// an override entry when present.
+func resolveThreshold(key string, def float64, overrides map[string]float64) float64 {
 	if v, ok := overrides[key]; ok {
-		return v, true
+		return v
 	}
-	return def, false
+	return def
 }
 
 // listScanResults lists *.json files in the directory.
@@ -345,9 +342,8 @@ func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64, overrides
 		}()
 		// Resolve via the canonical map key, not d.Name — the two should
 		// always match in practice but coupling resolution to the key keeps
-		// override lookups consistent with how warnUnusedOverrides reports
-		// "unused" entries.
-		d.Threshold, d.ThresholdOverridden = resolveThreshold(name, changeRateThreshold, overrides)
+		// override lookups consistent across the codebase.
+		d.Threshold = resolveThreshold(name, changeRateThreshold, overrides)
 		d.Pass = d.ChangeRate <= d.Threshold
 
 		ds[name] = d

@@ -12,7 +12,7 @@ import (
 
 // generateReport writes a Markdown report for detection diff to w.
 // It returns whether all files passed and any write error.
-func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold float64) (bool, error) {
+func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	if len(diffm) == 0 {
 		return true, errors.New("no files to compare")
 	}
@@ -43,18 +43,18 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 ## Summary
 
-**Result**: %s (Default Change Rate Threshold: %.1f%%)
+**Result**: %s
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
-|------|----------|--------|-------|---------|-------------|----------|--------|
-`, resultLabel(pass), changeRateThreshold); err != nil {
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+`, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
+		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %.1f%% | %s |\n",
 			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate,
-			overrideLabel(d.Threshold, d.ThresholdOverridden), resultLabel(d.Pass)); err != nil {
+			d.Threshold, resultLabel(d.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -102,17 +102,6 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
-}
-
-// overrideLabel renders the override threshold (e.g. "25.0%") for rows where
-// an override matched, and an empty cell otherwise. Default-threshold rows
-// stay blank because the default value is already shown in the summary
-// header — duplicating it per-row added noise without useful signal.
-func overrideLabel(t float64, overridden bool) string {
-	if overridden {
-		return fmt.Sprintf("%.1f%%", t)
-	}
-	return ""
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.

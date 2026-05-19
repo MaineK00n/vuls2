@@ -114,9 +114,7 @@ type EcosystemDiff struct {
 	KBChangeRate        float64
 
 	// Threshold actually applied to this ecosystem (post override resolution).
-	// ThresholdOverridden is true iff a per-ecosystem override matched.
-	Threshold           float64
-	ThresholdOverridden bool
+	Threshold float64
 
 	Pass bool
 }
@@ -160,7 +158,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		return errors.Wrap(err, "compute diffs")
 	}
 
-	pass, err := generateReport(o.writer, results, o.changeRateThreshold)
+	pass, err := generateReport(o.writer, results)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
@@ -175,13 +173,12 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 }
 
 // resolveThreshold returns the threshold to apply to a given ecosystem,
-// preferring an override entry when present. The second return value reports
-// whether the override map matched.
-func resolveThreshold(key string, def float64, overrides map[string]float64) (float64, bool) {
+// preferring an override entry when present.
+func resolveThreshold(key string, def float64, overrides map[string]float64) float64 {
 	if v, ok := overrides[key]; ok {
-		return v, true
+		return v
 	}
-	return def, false
+	return def
 }
 
 func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64) ([]EcosystemDiff, error) {
@@ -309,7 +306,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 
 	diff.DetectionChangeRate = changeRate(diff.BaselineCriterions, diff.TargetCriterions, diff.MatchedCriterions)
 	diff.KBChangeRate = changeRate(diff.BaselineKBs, diff.TargetKBs, diff.MatchedKBs)
-	diff.Threshold, diff.ThresholdOverridden = resolveThreshold(string(ecosystem), changeRateThreshold, overrides)
+	diff.Threshold = resolveThreshold(string(ecosystem), changeRateThreshold, overrides)
 	diff.Pass = diff.DetectionChangeRate <= diff.Threshold && diff.KBChangeRate <= diff.Threshold
 	return diff, nil
 }

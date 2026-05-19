@@ -956,8 +956,7 @@ func TestCountKBs(t *testing.T) {
 
 func TestGenerateReport(t *testing.T) {
 	type args struct {
-		diffs               []db.EcosystemDiff
-		changeRateThreshold float64
+		diffs []db.EcosystemDiff
 	}
 	tests := []struct {
 		name       string
@@ -994,19 +993,18 @@ func TestGenerateReport(t *testing.T) {
 						Pass:                false,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
+**Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
-| ubuntu:22.04 | 75.0% | 0.0% |  | **FAIL** |
-| redhat:9 | 0.0% | 0.0% |  | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| ubuntu:22.04 | 75.0% | 0.0% | 10.0% | **FAIL** |
+| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1048,18 +1046,17 @@ func TestGenerateReport(t *testing.T) {
 						Pass:                true,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: true,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: PASS (Default Change Rate Threshold: 10.0%)
+**Result**: PASS
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
-| alma:8 | 4.8% | 0.0% |  | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| alma:8 | 4.8% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1088,18 +1085,17 @@ func TestGenerateReport(t *testing.T) {
 						Pass:           false,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
+**Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
-| microsoft | 0.0% | 140.0% |  | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| microsoft | 0.0% | 140.0% | 10.0% | **FAIL** |
 
 ## KB
 
@@ -1151,19 +1147,18 @@ func TestGenerateReport(t *testing.T) {
 						Pass:           true,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: true,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: PASS (Default Change Rate Threshold: 10.0%)
+**Result**: PASS
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
-| alma:8 | 0.0% | 0.0% |  | PASS |
-| microsoft | 0.0% | 0.0% |  | PASS |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| alma:8 | 0.0% | 0.0% | 10.0% | PASS |
+| microsoft | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1206,18 +1201,17 @@ func TestGenerateReport(t *testing.T) {
 						Pass:                false,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: false,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
+**Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
-| mixed:1 | 1.5% | 80.0% |  | **FAIL** |
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+| mixed:1 | 1.5% | 80.0% | 10.0% | **FAIL** |
 
 ## Detection
 
@@ -1256,7 +1250,6 @@ func TestGenerateReport(t *testing.T) {
 						Changed:             []string{"CVE-2026-9999"},
 						DetectionChangeRate: 40.0,
 						Threshold:           50,
-						ThresholdOverridden: true,
 						Pass:                true,
 					},
 					{
@@ -1270,19 +1263,18 @@ func TestGenerateReport(t *testing.T) {
 						Pass:               true,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: true,
 			wantReport: `# Diff Report: DB
 
 ## Summary
 
-**Result**: PASS (Default Change Rate Threshold: 10.0%)
+**Result**: PASS
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Override | Result |
-|-----------|-----------------------|----------------|----------|--------|
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
 | ubuntu:26.04 | 40.0% | 0.0% | 50.0% | PASS |
-| redhat:9 | 0.0% | 0.0% |  | PASS |
+| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
@@ -1297,7 +1289,7 @@ func TestGenerateReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			gotPass, err := db.GenerateReport(&buf, tt.args.diffs, tt.args.changeRateThreshold)
+			gotPass, err := db.GenerateReport(&buf, tt.args.diffs)
 			if err != nil {
 				t.Fatalf("GenerateReport() error = %v", err)
 			}

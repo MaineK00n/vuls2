@@ -325,14 +325,13 @@ func TestComputeDiffs(t *testing.T) {
 			},
 			want: map[string]detection.FileDiff{
 				"debian_13": {
-					Name:                "debian_13",
-					BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					Added:               []string{"CVE-2026-0003"},
-					ChangeRate:          50,
-					Threshold:           80,
-					ThresholdOverridden: true,
-					Pass:                true,
+					Name:        "debian_13",
+					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					Added:       []string{"CVE-2026-0003"},
+					ChangeRate:  50,
+					Threshold:   80,
+					Pass:        true,
 				},
 				"redhat_9": {
 					Name:        "redhat_9",
@@ -359,14 +358,13 @@ func TestComputeDiffs(t *testing.T) {
 			},
 			want: map[string]detection.FileDiff{
 				"debian_13": {
-					Name:                "debian_13",
-					BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					Added:               []string{"CVE-2026-0003"},
-					ChangeRate:          50,
-					Threshold:           30,
-					ThresholdOverridden: true,
-					Pass:                false,
+					Name:        "debian_13",
+					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					Added:       []string{"CVE-2026-0003"},
+					ChangeRate:  50,
+					Threshold:   30,
+					Pass:        false,
 				},
 			},
 		},
@@ -384,8 +382,7 @@ func TestComputeDiffs(t *testing.T) {
 
 func TestGenerateReport(t *testing.T) {
 	type args struct {
-		diffs               map[string]detection.FileDiff
-		changeRateThreshold float64
+		diffs map[string]detection.FileDiff
 	}
 	tests := []struct {
 		name       string
@@ -415,19 +412,18 @@ func TestGenerateReport(t *testing.T) {
 						Pass:        false,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: false,
 			wantReport: `# Diff Report: Detection
 
 ## Summary
 
-**Result**: **FAIL** (Default Change Rate Threshold: 10.0%)
+**Result**: **FAIL**
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
-|------|----------|--------|-------|---------|-------------|----------|--------|
-| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% |  | **FAIL** |
-| redhat_9 | 2 | 2 | 0 | 0 | 0.0% |  | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
+| redhat_9 | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 ## Details (FAIL files)
 
@@ -454,18 +450,17 @@ func TestGenerateReport(t *testing.T) {
 						Pass:        true,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: true,
 			wantReport: `# Diff Report: Detection
 
 ## Summary
 
-**Result**: PASS (Default Change Rate Threshold: 10.0%)
+**Result**: PASS
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
-|------|----------|--------|-------|---------|-------------|----------|--------|
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% |  | PASS |
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -474,14 +469,13 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"debian_13": {
-						Name:                "debian_13",
-						BaselineIDs:         []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:           []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-						Added:               []string{"CVE-2026-0003"},
-						ChangeRate:          50,
-						Threshold:           80,
-						ThresholdOverridden: true,
-						Pass:                true,
+						Name:        "debian_13",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						Added:       []string{"CVE-2026-0003"},
+						ChangeRate:  50,
+						Threshold:   80,
+						Pass:        true,
 					},
 					"redhat_9": {
 						Name:        "redhat_9",
@@ -492,19 +486,18 @@ func TestGenerateReport(t *testing.T) {
 						Pass:        true,
 					},
 				},
-				changeRateThreshold: 10,
 			},
 			wantPass: true,
 			wantReport: `# Diff Report: Detection
 
 ## Summary
 
-**Result**: PASS (Default Change Rate Threshold: 10.0%)
+**Result**: PASS
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Override | Result |
-|------|----------|--------|-------|---------|-------------|----------|--------|
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
 | debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% |  | PASS |
+| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -512,7 +505,7 @@ func TestGenerateReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			gotPass, err := detection.GenerateReport(&buf, tt.args.diffs, tt.args.changeRateThreshold)
+			gotPass, err := detection.GenerateReport(&buf, tt.args.diffs)
 			if err != nil {
 				t.Fatalf("GenerateReport() error = %v", err)
 			}
