@@ -133,15 +133,6 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 	return nil
 }
 
-// resolveThreshold returns the threshold to apply to a given file, preferring
-// an override entry when present.
-func resolveThreshold(key string, def float64, overrides map[string]float64) float64 {
-	if v, ok := overrides[key]; ok {
-		return v
-	}
-	return def
-}
-
 // listScanResults lists *.json files in the directory.
 // Returns a map from file name (without .json extension) to full path.
 func listScanResults(dir string) (map[string]string, error) {
@@ -343,7 +334,12 @@ func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64, overrides
 		// Resolve via the canonical map key, not d.Name — the two should
 		// always match in practice but coupling resolution to the key keeps
 		// override lookups consistent across the codebase.
-		d.Threshold = resolveThreshold(name, changeRateThreshold, overrides)
+		d.Threshold = func() float64 {
+			if v, ok := overrides[name]; ok {
+				return v
+			}
+			return changeRateThreshold
+		}()
 		d.Pass = d.ChangeRate <= d.Threshold
 
 		ds[name] = d
