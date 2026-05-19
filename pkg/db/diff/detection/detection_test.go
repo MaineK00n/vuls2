@@ -640,9 +640,10 @@ func TestDiff(t *testing.T) {
 	emptyDir := t.TempDir()
 
 	type args struct {
-		dir                 string
-		detectFunc          detection.DetectFunc
-		changeRateThreshold float64
+		dir                          string
+		detectFunc                   detection.DetectFunc
+		changeRateThreshold          float64
+		changeRateThresholdOverrides map[string]float64
 	}
 	tests := []struct {
 		name    string
@@ -685,12 +686,30 @@ func TestDiff(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// Locks WithChangeRateThresholdOverrides forwarding from Diff
+			// down to computeDiffs. ubuntu_2204 in fakeDetect produces a
+			// 66.7% change rate (baseline 3 IDs, target 1, two removed),
+			// which would FAIL the 10% default. The "ubuntu_2204=70"
+			// override lifts only that file above its rate so the whole
+			// Diff returns nil. If Diff stops forwarding the option, the
+			// override has no effect and ubuntu_2204 fails again.
+			name: "override forwarded through to per-file resolution",
+			args: args{
+				dir:                          scanDir,
+				detectFunc:                   fakeDetect,
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204": 70},
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := detection.Diff(
 				tt.args.dir, "baseline.db", "vuls0", "target.db", "vuls0",
 				detection.WithChangeRateThreshold(tt.args.changeRateThreshold),
+				detection.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
 				detection.WithWriter(&bytes.Buffer{}),
 				detection.WithDetectFunc(tt.args.detectFunc),
 			)
