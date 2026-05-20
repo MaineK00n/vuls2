@@ -49,7 +49,8 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 // WithChangeRateThresholdOverrides supplies per-file overrides of the change
 // rate threshold. Keys are scan-result file basenames (without the `.json`
 // extension, e.g. "debian_13"); values are percentages. Missing keys fall
-// back to the default supplied via WithChangeRateThreshold.
+// back to the default supplied via WithChangeRateThreshold. A nil or empty
+// map preserves prior behavior.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
@@ -319,16 +320,15 @@ skipUpdate = true
 	return slices.Collect(maps.Keys(sr.ScannedCves)), nil
 }
 
-// computeDiffs computes diffs per file by comparing CVE ID sets.
+// diffDetection fills in the diff fields of a single FileDiff against the
+// supplied resolved threshold. Override resolution is the caller's
+// responsibility. Parallels `diffEcosystem` on the db side.
 //
 // Only CVE IDs are compared; per-CVE content (confidence, affected packages,
 // CVSS, exploit/KEV metadata, etc.) is not diffed. Content-only changes are
 // therefore invisible. This is sufficient for regression detection (missing or
 // extra CVEs), but not for validating data source migrations where IDs stay
 // the same but metadata differs.
-// diffDetection fills in the diff fields of a single FileDiff against the
-// supplied resolved threshold. Override resolution is the caller's
-// responsibility. Parallels `diffEcosystem` on the db side.
 func diffDetection(d FileDiff, threshold float64) FileDiff {
 	d.Added = subtract(d.TargetIDs, d.BaselineIDs)
 	d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
