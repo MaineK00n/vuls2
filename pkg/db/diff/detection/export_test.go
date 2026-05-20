@@ -14,6 +14,6 @@ func (o detectFuncOption) apply(opts *options) {
 
 var (
 	Subtract       = subtract
-	ComputeDiffs   = computeDiffs
+	DiffDetection  = diffDetection
 	GenerateReport = generateReport
 )

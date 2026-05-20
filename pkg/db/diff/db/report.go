@@ -11,13 +11,26 @@ import (
 
 // generateReport writes a Markdown report for DB diff to w.
 // It returns whether all ecosystems passed and any write error.
-func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold float64) (bool, error) {
+func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	if len(diffs) == 0 {
 		return true, errors.New("no ecosystems to compare")
 	}
 
+	// Sort: FAIL first, then by max(rate) desc, then by ecosystem asc.
+	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
+	// FAIL rows first keeps triage focused on what actually blocks promotion.
 	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
 		return cmp.Or(
+			func() int {
+				switch {
+				case !a.Pass && b.Pass:
+					return -1
+				case a.Pass && !b.Pass:
+					return +1
+				default:
+					return 0
+				}
+			}(),
 			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
 				max(b.DetectionChangeRate, b.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
@@ -30,21 +43,19 @@ func generateReport(w io.Writer, diffs []EcosystemDiff, changeRateThreshold floa
 
 ## Summary
 
-**Result**: %s (Change Rate Threshold: %.1f%%)
+**Result**: %s
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Result |
-|-----------|-----------------------|----------------|--------|
-`,
-		resultLabel(pass),
-		changeRateThreshold,
-	); err != nil {
+| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|-----------------------|----------------|-----------|--------|
+`, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %s |\n",
+		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %.1f%% | %s |\n",
 			d.Ecosystem,
 			d.DetectionChangeRate,
 			d.KBChangeRate,
+			d.Threshold,
 			resultLabel(d.Pass),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")

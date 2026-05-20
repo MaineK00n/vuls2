@@ -12,14 +12,27 @@ import (
 
 // generateReport writes a Markdown report for detection diff to w.
 // It returns whether all files passed and any write error.
-func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold float64) (bool, error) {
+func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	if len(diffm) == 0 {
 		return true, errors.New("no files to compare")
 	}
 
 	diffs := slices.Collect(maps.Values(diffm))
+	// Sort: FAIL first, then by rate desc, then by name asc.
+	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
+	// FAIL rows first keeps triage focused on what actually blocks promotion.
 	slices.SortFunc(diffs, func(a, b FileDiff) int {
 		return cmp.Or(
+			func() int {
+				switch {
+				case !a.Pass && b.Pass:
+					return -1
+				case a.Pass && !b.Pass:
+					return +1
+				default:
+					return 0
+				}
+			}(),
 			cmp.Compare(b.ChangeRate, a.ChangeRate),
 			cmp.Compare(a.Name, b.Name),
 		)
@@ -30,17 +43,18 @@ func generateReport(w io.Writer, diffm map[string]FileDiff, changeRateThreshold 
 
 ## Summary
 
-**Result**: %s (Change Rate Threshold: %.1f%%)
+**Result**: %s
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Result |
-|------|----------|--------|-------|---------|-------------|--------|
-`, resultLabel(pass), changeRateThreshold); err != nil {
+| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|----------|--------|-------|---------|-------------|-----------|--------|
+`, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %s |\n",
-			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate, resultLabel(d.Pass)); err != nil {
+		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %.1f%% | %s |\n",
+			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate,
+			d.Threshold, resultLabel(d.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}

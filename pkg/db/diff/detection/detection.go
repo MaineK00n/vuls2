@@ -19,10 +19,11 @@ import (
 )
 
 type options struct {
-	changeRateThreshold float64
-	debug               bool
-	writer              io.Writer
-	detectFunc          func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
+	changeRateThreshold          float64
+	changeRateThresholdOverrides map[string]float64
+	debug                        bool
+	writer                       io.Writer
+	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
 }
 
 type Option interface {
@@ -34,8 +35,24 @@ type changeRateThresholdOption float64
 func (o changeRateThresholdOption) apply(opts *options) {
 	opts.changeRateThreshold = float64(o)
 }
+
 func WithChangeRateThreshold(r float64) Option {
 	return changeRateThresholdOption(r)
+}
+
+type changeRateThresholdOverridesOption map[string]float64
+
+func (o changeRateThresholdOverridesOption) apply(opts *options) {
+	opts.changeRateThresholdOverrides = map[string]float64(o)
+}
+
+// WithChangeRateThresholdOverrides supplies per-file overrides of the change
+// rate threshold. Keys are scan-result file basenames (without the `.json`
+// extension, e.g. "debian_13"); values are percentages. Missing keys fall
+// back to the default supplied via WithChangeRateThreshold. A nil or empty
+// map preserves prior behavior.
+func WithChangeRateThresholdOverrides(m map[string]float64) Option {
+	return changeRateThresholdOverridesOption(m)
 }
 
 type debugOption bool
@@ -43,6 +60,7 @@ type debugOption bool
 func (o debugOption) apply(opts *options) {
 	opts.debug = bool(o)
 }
+
 func WithDebug(d bool) Option {
 	return debugOption(d)
 }
@@ -52,6 +70,7 @@ type writerOption struct{ w io.Writer }
 func (o writerOption) apply(opts *options) {
 	opts.writer = o.w
 }
+
 func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
 }
@@ -64,7 +83,11 @@ type FileDiff struct {
 	Added       []string
 	Removed     []string
 	ChangeRate  float64
-	Pass        bool
+
+	// Threshold actually applied to this file (post override resolution).
+	Threshold float64
+
+	Pass bool
 }
 
 // Diff compares detection results between baseline and target pairs of (binary, DB).
@@ -99,14 +122,26 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "detect")
 	}
 
-	diffm = computeDiffs(diffm, o.changeRateThreshold)
+	for name, d := range diffm {
+		// Resolve via the canonical map key, not d.Name — the two should
+		// always match in practice but coupling resolution to the key keeps
+		// override lookups consistent across the codebase.
+		threshold := o.changeRateThreshold
+		if v, ok := o.changeRateThresholdOverrides[name]; ok {
+			threshold = v
+		}
+		diffm[name] = diffDetection(d, threshold)
+	}
 
-	pass, err := generateReport(o.writer, diffm, o.changeRateThreshold)
+	pass, err := generateReport(o.writer, diffm)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
 	if !pass {
-		return errors.Errorf("diff failed: change rate exceeded threshold (%.1f%%)", o.changeRateThreshold)
+		// Resolved per-file threshold is rendered per row in the report's
+		// Threshold column, so the exit error stays threshold-free to avoid
+		// implying the default was the one that tripped.
+		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one scan-result file; see report for details")
 	}
 	return nil
 }
@@ -285,36 +320,34 @@ skipUpdate = true
 	return slices.Collect(maps.Keys(sr.ScannedCves)), nil
 }
 
-// computeDiffs computes diffs per file by comparing CVE ID sets.
+// diffDetection fills in the diff fields of a single FileDiff against the
+// supplied resolved threshold. Override resolution is the caller's
+// responsibility. Parallels `diffEcosystem` on the db side.
 //
 // Only CVE IDs are compared; per-CVE content (confidence, affected packages,
 // CVSS, exploit/KEV metadata, etc.) is not diffed. Content-only changes are
 // therefore invisible. This is sufficient for regression detection (missing or
 // extra CVEs), but not for validating data source migrations where IDs stay
 // the same but metadata differs.
-func computeDiffs(ds map[string]FileDiff, changeRateThreshold float64) map[string]FileDiff {
-	for name, d := range ds {
-		d.Added = subtract(d.TargetIDs, d.BaselineIDs)
-		d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
+func diffDetection(d FileDiff, threshold float64) FileDiff {
+	d.Added = subtract(d.TargetIDs, d.BaselineIDs)
+	d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
 
-		// changeRate can exceed 100% when additions outnumber baseline entries.
-		// This is intentional — capping at 100 would hide the magnitude of large additions.
-		d.ChangeRate = func() float64 {
-			switch {
-			case len(d.BaselineIDs) > 0:
-				return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
-			case len(d.Added)+len(d.Removed) > 0:
-				return 100
-			default:
-				return 0
-			}
-		}()
-		d.Pass = d.ChangeRate <= changeRateThreshold
-
-		ds[name] = d
-	}
-
-	return ds
+	// changeRate can exceed 100% when additions outnumber baseline entries.
+	// This is intentional — capping at 100 would hide the magnitude of large additions.
+	d.ChangeRate = func() float64 {
+		switch {
+		case len(d.BaselineIDs) > 0:
+			return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
+		case len(d.Added)+len(d.Removed) > 0:
+			return 100
+		default:
+			return 0
+		}
+	}()
+	d.Threshold = threshold
+	d.Pass = d.ChangeRate <= threshold
+	return d
 }
 
 // subtract returns elements in a that are not in b (i.e. a \ b).

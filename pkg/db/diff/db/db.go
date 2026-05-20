@@ -24,9 +24,10 @@ import (
 )
 
 type options struct {
-	changeRateThreshold float64
-	writer              io.Writer
-	debug               bool
+	changeRateThreshold          float64
+	changeRateThresholdOverrides map[string]float64
+	writer                       io.Writer
+	debug                        bool
 }
 
 type Option interface {
@@ -41,6 +42,20 @@ func (o changeRateThresholdOption) apply(opts *options) {
 
 func WithChangeRateThreshold(r float64) Option {
 	return changeRateThresholdOption(r)
+}
+
+type changeRateThresholdOverridesOption map[string]float64
+
+func (o changeRateThresholdOverridesOption) apply(opts *options) {
+	opts.changeRateThresholdOverrides = map[string]float64(o)
+}
+
+// WithChangeRateThresholdOverrides supplies per-ecosystem overrides of the
+// change rate threshold. Keys are ecosystem identifiers (e.g. "ubuntu:26.04");
+// values are percentages. Missing keys fall back to the default supplied via
+// WithChangeRateThreshold. A nil or empty map preserves prior behavior.
+func WithChangeRateThresholdOverrides(m map[string]float64) Option {
+	return changeRateThresholdOverridesOption(m)
 }
 
 type writerOption struct{ w io.Writer }
@@ -97,7 +112,11 @@ type EcosystemDiff struct {
 	// and target, its rate is 0.
 	DetectionChangeRate float64
 	KBChangeRate        float64
-	Pass                bool
+
+	// Threshold actually applied to this ecosystem (post override resolution).
+	Threshold float64
+
+	Pass bool
 }
 
 // DiffBoltDB compares detection data directly between two BoltDB files.
@@ -134,23 +153,26 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 	defer targetDB.Close()
 
-	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold)
+	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold, o.changeRateThresholdOverrides)
 	if err != nil {
 		return errors.Wrap(err, "compute diffs")
 	}
 
-	pass, err := generateReport(o.writer, results, o.changeRateThreshold)
+	pass, err := generateReport(o.writer, results)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
 
 	if !pass {
-		return errors.Errorf("diff failed: detection and/or KB change rate exceeded threshold (%.1f%%)", o.changeRateThreshold)
+		// Resolved per-ecosystem threshold is rendered per row in the report's
+		// Threshold column, so the exit error stays threshold-free to avoid
+		// implying the default was the one that tripped.
+		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one ecosystem; see report for details")
 	}
 	return nil
 }
 
-func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64) ([]EcosystemDiff, error) {
+func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64) ([]EcosystemDiff, error) {
 	baselineEcos, err := getEcosystems(baselineDB)
 	if err != nil {
 		return nil, errors.Wrap(err, "get baseline ecosystems")
@@ -171,10 +193,16 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64) ([
 	// New ecosystems in the target are feature additions, not regressions,
 	// so they are intentionally excluded from change rate calculation.
 	for _, eco := range baselineEcos {
+		// Resolve the per-ecosystem threshold here so diffEcosystem stays a
+		// pure per-target function that doesn't need the overrides map.
+		threshold := changeRateThreshold
+		if v, ok := overrides[string(eco)]; ok {
+			threshold = v
+		}
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, changeRateThreshold)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, threshold)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -237,7 +265,9 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently. Either sub-bucket may be absent.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, changeRateThreshold float64) (EcosystemDiff, error) {
+// Override resolution is the caller's responsibility — this function applies
+// `threshold` verbatim.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
@@ -275,7 +305,8 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 
 	diff.DetectionChangeRate = changeRate(diff.BaselineCriterions, diff.TargetCriterions, diff.MatchedCriterions)
 	diff.KBChangeRate = changeRate(diff.BaselineKBs, diff.TargetKBs, diff.MatchedKBs)
-	diff.Pass = diff.DetectionChangeRate <= changeRateThreshold && diff.KBChangeRate <= changeRateThreshold
+	diff.Threshold = threshold
+	diff.Pass = diff.DetectionChangeRate <= threshold && diff.KBChangeRate <= threshold
 	return diff, nil
 }
 
