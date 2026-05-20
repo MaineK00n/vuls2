@@ -35,6 +35,7 @@ type changeRateThresholdOption float64
 func (o changeRateThresholdOption) apply(opts *options) {
 	opts.changeRateThreshold = float64(o)
 }
+
 func WithChangeRateThreshold(r float64) Option {
 	return changeRateThresholdOption(r)
 }
@@ -58,6 +59,7 @@ type debugOption bool
 func (o debugOption) apply(opts *options) {
 	opts.debug = bool(o)
 }
+
 func WithDebug(d bool) Option {
 	return debugOption(d)
 }
@@ -67,6 +69,7 @@ type writerOption struct{ w io.Writer }
 func (o writerOption) apply(opts *options) {
 	opts.writer = o.w
 }
+
 func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
 }
