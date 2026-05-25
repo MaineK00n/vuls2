@@ -159,7 +159,70 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+			// util.Detect passes every condition through; the per-condition
+			// Affected gate moved to pkg/detect.Detect. Both KB criteria are
+			// returned with zero-value Accepts (the scan only reports Applied,
+			// so neither Unapplied nor Covered matched).
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2021-1640": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5000802",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
+				"CVE-2021-26413": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5001330",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:    "fix KB covered by applied superseding KB, no detection",
@@ -181,7 +244,69 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+			// Same shape as the "all KBs applied" case: util.Detect emits the
+			// raw conditions with empty Accepts; the top-level filter in
+			// pkg/detect.Detect prunes them via Criteria.Affected().
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2021-1640": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5000802",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
+				"CVE-2021-26413": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5001330",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:    "supersession auto-discovery from applied KB",
@@ -202,7 +327,40 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
+			// CVE-2021-26413's 5001330 condition is "Covered" by the applied
+			// 5000802 (supersession chain). CVE-2021-1640's 5000802 condition
+			// is the applied KB itself; util.Detect now emits it with empty
+			// Accepts so the top-level filter can drop it.
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2021-1640": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 2004 for x64-based Systems",
+															KBID:    "5000802",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 2004 for x64-based Systems"),
+							},
+						},
+					},
+				},
 				"CVE-2021-26413": {
 					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
 					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -310,7 +468,47 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+			// Edge 98.x is above the fixed range; util.Detect still emits
+			// the version criterion (with empty Accepts.Version, i.e. no
+			// matching query index) and pkg/detect.Detect prunes it.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2022-0096": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "Microsoft Edge (Chromium-based)",
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeMicrosoftEdge,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "97.0.1072.55"}},
+														Fixed: []string{"97.0.1072.55"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Microsoft Edge (Chromium-based)"),
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:    "detect CVE-2022-21907 by Release and Kernel.Version",
@@ -406,7 +604,56 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+			// Patched kernel is at the fix; util.Detect emits the version
+			// criterion + KB criterion with empty Accepts and the top-level
+			// filter drops them.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2022-21907": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "Windows 10 Version 21H2 for x64-based Systems",
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeMicrosoftWindows,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "10.0.19044.1466"}},
+														Fixed: []string{"10.0.19044.1466"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeKB,
+												KB: &kbcTypes.Criterion{
+													Product: "Windows 10 Version 21H2 for x64-based Systems",
+													KBID:    "5009543",
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for x64-based Systems"),
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:    "detect bare cross-platform app KB criterion on Windows host",
@@ -479,6 +726,11 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
+			// util.Detect emits one condition per OS-segment tag; the host's
+			// release matches only "Windows 10 Version 21H2 for x64-based
+			// Systems" so the cross-product Server 2012 R2 / ARM64 conditions
+			// come through with empty Accepts and pkg/detect.Detect drops
+			// them.
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
 				"CVE-2024-90001": {
 					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
@@ -506,6 +758,28 @@ func TestDetect(t *testing.T) {
 									},
 								},
 								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for x64-based Systems"),
+							},
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows Server 2012 R2",
+															KBID:    "9000001",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows Server 2012 R2"),
 							},
 						},
 					},
@@ -536,6 +810,28 @@ func TestDetect(t *testing.T) {
 									},
 								},
 								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for x64-based Systems"),
+							},
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeKB,
+														KB: &kbcTypes.Criterion{
+															Product: "Windows 10 Version 21H2 for ARM64-based Systems",
+															KBID:    "9000002",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Windows 10 Version 21H2 for ARM64-based Systems"),
 							},
 						},
 					},
@@ -570,7 +866,7 @@ func TestDetect(t *testing.T) {
 					t.Errorf("Detect() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if diff := cmp.Diff(tt.want, test.FilterAffected(t, got)); diff != "" {
+				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("Detect() (-expected +got):\n%s", diff)
 				}
 			}
