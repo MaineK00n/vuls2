@@ -455,7 +455,7 @@ func TestDetect(t *testing.T) {
 					t.Errorf("Detect() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if diff := cmp.Diff(tt.want, got); diff != "" {
+				if diff := cmp.Diff(tt.want, test.FilterAffected(t, got)); diff != "" {
 					t.Errorf("Detect() (-expected +got):\n%s", diff)
 				}
 			}

@@ -14,6 +14,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -242,6 +243,15 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 		detected[rootID] = base
 	}
 
+	// util.Detect now passes every condition through unconditionally, so
+	// apply the per-condition Affected gate here for the default consumer
+	// path. Conditions whose FilteredCriteria evaluates as not-affected are
+	// dropped; Detections / VulnerabilityData that end up empty are pruned.
+	detected, err = filterAffected(detected)
+	if err != nil {
+		return detectTypes.DetectResult{}, errors.Wrap(err, "filter affected")
+	}
+
 	for rootID, base := range detected {
 		d, err := s.GetVulnerabilityData(rootID, dbTypes.Filter{
 			Contents: []dbTypes.FilterContentType{
@@ -302,4 +312,47 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 		DetectedAt: time.Now(),
 		DetectedBy: version.String(),
 	}, nil
+}
+
+// filterAffected drops conditions whose FilteredCriteria evaluates as
+// not-affected, restoring the per-condition gate that util.Detect no longer
+// applies. Detections with no remaining conditions and VulnerabilityData
+// with no remaining detections are pruned. Callers of the lower-level
+// ospkg.Detect / cpe.Detect / util.Detect that want to apply different
+// filtering rules (e.g. ecosystem-specific relaxation) can do so without
+// being short-circuited upstream.
+func filterAffected(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) (map[dataTypes.RootID]detectTypes.VulnerabilityData, error) {
+	out := make(map[dataTypes.RootID]detectTypes.VulnerabilityData, len(detected))
+	for rootID, data := range detected {
+		keptDetections := make([]detectTypes.VulnerabilityDataDetection, 0, len(data.Detections))
+		for _, d := range data.Detections {
+			keptContents := make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition)
+			for sid, conds := range d.Contents {
+				kept := make([]conditionTypes.FilteredCondition, 0, len(conds))
+				for _, cond := range conds {
+					ok, err := cond.Criteria.Affected()
+					if err != nil {
+						return nil, errors.Wrapf(err, "criteria affected (rootID: %s)", rootID)
+					}
+					if ok {
+						kept = append(kept, cond)
+					}
+				}
+				if len(kept) > 0 {
+					keptContents[sid] = kept
+				}
+			}
+			if len(keptContents) == 0 {
+				continue
+			}
+			d.Contents = keptContents
+			keptDetections = append(keptDetections, d)
+		}
+		if len(keptDetections) == 0 {
+			continue
+		}
+		data.Detections = keptDetections
+		out[rootID] = data
+	}
+	return out, nil
 }
