@@ -21,10 +21,10 @@ import (
 )
 
 // versionCondition returns a single-package FilteredCondition for a binary
-// rpm with a fixed-version range. When matched is true the inner criterion's
-// Accepts.Version is populated with a query index so Criteria.Affected()
-// returns true; otherwise Accepts.Version is empty and Affected() returns
-// false.
+// rpm with a fixed-version range. When isAffected is true the inner
+// criterion's Accepts.Version is populated with a query index so
+// Criteria.Affected() returns true; otherwise Accepts.Version is empty
+// and Affected() returns false.
 func versionCondition(pkgName, fixed string, isAffected bool) conditionTypes.FilteredCondition {
 	c := criterionTypes.FilteredCriterion{
 		Criterion: criterionTypes.Criterion{
