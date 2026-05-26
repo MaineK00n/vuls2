@@ -63,7 +63,7 @@ func versionCondition(pkgName, fixed string, isAffected bool) conditionTypes.Fil
 
 func TestFilterAffected(t *testing.T) {
 	const eco = ecosystemTypes.Ecosystem("redhat:9")
-	const src = sourceTypes.SourceID("redhat-ovalv2")
+	const src = sourceTypes.RedHatOVALv2
 
 	affectedCond := versionCondition("kernel", "0:5.14.0-70.13.1.el9_0", true)
 	unaffectedCond := versionCondition("openssl", "1:3.0.7-16.el9_2", false)
