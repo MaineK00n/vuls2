@@ -330,11 +330,14 @@ func filterAffected(detected map[dataTypes.RootID]detectTypes.VulnerabilityData)
 			for sid, conds := range d.Contents {
 				kept := make([]conditionTypes.FilteredCondition, 0, len(conds))
 				for _, cond := range conds {
-					ok, err := cond.Criteria.Affected()
+					// Route through FilteredCondition.Affected() (rather than
+					// Criteria.Affected() directly) so any future per-condition
+					// logic added to the upstream type is picked up here.
+					isAffected, err := cond.Affected()
 					if err != nil {
-						return nil, errors.Wrapf(err, "criteria affected (rootID: %s)", rootID)
+						return nil, errors.Wrapf(err, "condition affected (rootID: %s, sourceID: %s)", rootID, sid)
 					}
-					if ok {
+					if isAffected {
 						kept = append(kept, cond)
 					}
 				}
