@@ -425,7 +425,94 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+			// util.Detect now passes every condition through unconditionally;
+			// the repository mismatch fails Criteria.Affected() but is no
+			// longer pruned at this layer (the top-level pkg/detect.Detect
+			// applies the gate). The FilteredCondition shape matches the
+			// "matching repository" case above.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"RHSA-2022:5214": {
+					Ecosystem: ecosystemTypes.Ecosystem(fmt.Sprintf("%s:9", ecosystemTypes.EcosystemTypeRedHat)),
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						sourceTypes.RedHatOVALv2: {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator:     criteriaTypes.CriteriaOperatorTypeAND,
+									Repositories: []string{"rhel-9-for-ppc64le-baseos-rpms", "rhel-9-for-x86_64-baseos-rpms"},
+									Criterias: []criteriaTypes.FilteredCriteria{
+										{
+											Operator: criteriaTypes.CriteriaOperatorTypeOR,
+											Criterias: []criteriaTypes.FilteredCriteria{
+												{
+													Operator: criteriaTypes.CriteriaOperatorTypeAND,
+													Criterions: []criterionTypes.FilteredCriterion{
+														{
+															Criterion: criterionTypes.Criterion{
+																Type: criterionTypes.CriterionTypeVersion,
+																Version: &vcTypes.Criterion{
+																	Vulnerable: true,
+																	FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+																	Package: vcPackageTypes.Package{
+																		Type: vcPackageTypes.PackageTypeBinary,
+																		Binary: &vcBinaryPackageTypes.Package{
+																			Name:          "kpatch-patch-5_14_0-70_13_1",
+																			Architectures: []string{"ppc64le", "x86_64"},
+																		},
+																	},
+																	Affected: &vcAffectedTypes.Affected{
+																		Type:  vcAffectedRangeTypes.RangeTypeRPM,
+																		Range: []vcAffectedRangeTypes.Range{{LessThan: "0:1-1.el9_0"}},
+																		Fixed: []string{"0:1-1.el9_0"},
+																	},
+																},
+															},
+															Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+														},
+													},
+												},
+											},
+											Criterions: []criterionTypes.FilteredCriterion{
+												{
+													Criterion: criterionTypes.Criterion{
+														Type: criterionTypes.CriterionTypeNoneExist,
+														NoneExist: &necTypes.Criterion{
+															Type:   necTypes.PackageTypeBinary,
+															Binary: &necBinaryPackageTypes.Package{Name: "kpatch-patch-5_14_0-70_13_1"},
+														},
+													},
+													Accepts: criterionTypes.AcceptQueries{NoneExist: true},
+												},
+											},
+										},
+									},
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name:          "kernel",
+															Architectures: []string{"ppc64le", "x86_64"},
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{Equal: "0:5.14.0-70.13.1.el9_0"}},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("rhel-9-including-unpatched"),
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {

@@ -66,26 +66,26 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 						return errors.Wrap(err, "criteria accept")
 					}
 
-					isAffected, err := fcond.Affected()
+					// Pass every condition through unconditionally. The
+					// per-condition affected/unaffected gating is moved to the
+					// top-level pkg/detect.Detect, so that consumers calling
+					// this function directly (or via ospkg.Detect / cpe.Detect)
+					// can apply their own pruning / ecosystem-specific filter
+					// over the full FilteredCriteria tree.
+					fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
 					if err != nil {
-						return errors.Wrap(err, "criteria affected")
+						return errors.Wrap(err, "replace indexes")
 					}
-					if isAffected {
-						fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
-						if err != nil {
-							return errors.Wrap(err, "replace indexes")
-						}
 
-						d, ok := dm[req.RootID]
-						if !ok {
-							d = detectTypes.VulnerabilityDataDetection{
-								Ecosystem: ecosystem,
-								Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
-							}
+					d, ok := dm[req.RootID]
+					if !ok {
+						d = detectTypes.VulnerabilityDataDetection{
+							Ecosystem: ecosystem,
+							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
 						}
-						d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
-						dm[req.RootID] = d
 					}
+					d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+					dm[req.RootID] = d
 				}
 			}
 
