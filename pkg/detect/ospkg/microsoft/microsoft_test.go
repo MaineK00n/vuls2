@@ -141,7 +141,7 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
-			name:    "all KBs applied, no detection",
+			name:    "all KBs applied: lower-level emits unaffected KB conditions",
 			fixture: "testdata/fixtures/microsoft-supersession",
 			config: session.Config{
 				Type:    "boltdb",
@@ -225,7 +225,7 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
-			name:    "fix KB covered by applied superseding KB, no detection",
+			name:    "fix KB covered by applied superseding KB: lower-level emits unaffected KB conditions",
 			fixture: "testdata/fixtures/microsoft-supersession",
 			config: session.Config{
 				Type:    "boltdb",
@@ -451,7 +451,7 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
-			name:    "Edge version not affected, no detection",
+			name:    "Edge version above fix: lower-level emits unaffected version condition",
 			fixture: "testdata/fixtures/microsoft-edge",
 			config: session.Config{
 				Type:    "boltdb",
@@ -582,7 +582,7 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
-			name:    "Windows version patched, no detection",
+			name:    "Windows version at fix: lower-level emits unaffected conditions",
 			fixture: "testdata/fixtures/microsoft-windows-version",
 			config: session.Config{
 				Type:    "boltdb",
