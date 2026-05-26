@@ -67,7 +67,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 					}
 
 					// Pass every condition through unconditionally. The
-					// per-condition Affected/unaffected gating is moved to the
+					// per-condition affected/unaffected gating is moved to the
 					// top-level pkg/detect.Detect, so that consumers calling
 					// this function directly (or via ospkg.Detect / cpe.Detect)
 					// can apply their own pruning / ecosystem-specific filter
