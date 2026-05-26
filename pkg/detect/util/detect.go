@@ -72,16 +72,6 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 					// this function directly (or via ospkg.Detect / cpe.Detect)
 					// can apply their own pruning / ecosystem-specific filter
 					// over the full FilteredCriteria tree.
-					//
-					// Still invoke Affected() purely for its validation side
-					// effect — it walks the criteria tree and rejects
-					// malformed operator/type values, preserving the old
-					// fail-fast behavior at this layer. The boolean is
-					// intentionally discarded.
-					if _, err := fcond.Affected(); err != nil {
-						return errors.Wrap(err, "condition affected")
-					}
-
 					fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
 					if err != nil {
 						return errors.Wrap(err, "replace indexes")
