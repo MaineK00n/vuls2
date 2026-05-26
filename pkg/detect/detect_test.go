@@ -35,8 +35,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "affected condition is kept",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-A": {
-					ID: "CVE-A",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -72,8 +72,8 @@ func TestFilterAffected(t *testing.T) {
 				},
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-A": {
-					ID: "CVE-A",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -112,8 +112,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "unaffected-only VulnerabilityData is pruned entirely",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-B": {
-					ID: "CVE-B",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -153,8 +153,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "within a source slot, only affected conditions are kept",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-C": {
-					ID: "CVE-C",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -219,8 +219,8 @@ func TestFilterAffected(t *testing.T) {
 				},
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-C": {
-					ID: "CVE-C",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -259,8 +259,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "source with no surviving conditions is dropped, sibling source is kept",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-D": {
-					ID: "CVE-D",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -323,8 +323,8 @@ func TestFilterAffected(t *testing.T) {
 				},
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-D": {
-					ID: "CVE-D",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -363,8 +363,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "detection with no surviving sources is dropped, sibling detection is kept",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-E": {
-					ID: "CVE-E",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{
 						{
 							Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
@@ -434,8 +434,8 @@ func TestFilterAffected(t *testing.T) {
 				},
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-E": {
-					ID: "CVE-E",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
@@ -474,8 +474,8 @@ func TestFilterAffected(t *testing.T) {
 		{
 			name: "Criteria.Affected() error is surfaced",
 			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
-				"CVE-F": {
-					ID: "CVE-F",
+				"ROOT-ID": {
+					ID: "ROOT-ID",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
