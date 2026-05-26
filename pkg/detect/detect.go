@@ -326,7 +326,7 @@ func filterAffected(detected map[dataTypes.RootID]detectTypes.VulnerabilityData)
 	for rootID, data := range detected {
 		keptDetections := make([]detectTypes.VulnerabilityDataDetection, 0, len(data.Detections))
 		for _, d := range data.Detections {
-			keptContents := make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition)
+			keptContents := make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition, len(d.Contents))
 			for sid, conds := range d.Contents {
 				kept := make([]conditionTypes.FilteredCondition, 0, len(conds))
 				for _, cond := range conds {
