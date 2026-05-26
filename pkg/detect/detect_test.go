@@ -20,54 +20,7 @@ import (
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
-// versionCondition returns a single-package FilteredCondition for a binary
-// rpm with a fixed-version range. When isAffected is true the inner
-// criterion's Accepts.Version is populated with a query index so
-// Criteria.Affected() returns true; otherwise Accepts.Version is empty
-// and Affected() returns false.
-func versionCondition(pkgName, fixed string, isAffected bool) conditionTypes.FilteredCondition {
-	c := criterionTypes.FilteredCriterion{
-		Criterion: criterionTypes.Criterion{
-			Type: criterionTypes.CriterionTypeVersion,
-			Version: &vcTypes.Criterion{
-				Vulnerable: true,
-				FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
-				Package: vcPackageTypes.Package{
-					Type:   vcPackageTypes.PackageTypeBinary,
-					Binary: &vcBinaryPackageTypes.Package{Name: pkgName},
-				},
-				Affected: &vcAffectedTypes.Affected{
-					Type:  vcAffectedRangeTypes.RangeTypeRPM,
-					Range: []vcAffectedRangeTypes.Range{{LessThan: fixed}},
-					Fixed: []string{fixed},
-				},
-			},
-		},
-		Accepts: criterionTypes.AcceptQueries{Version: []int{}},
-	}
-	if isAffected {
-		c.Accepts.Version = []int{0}
-	}
-	return conditionTypes.FilteredCondition{
-		Criteria: criteriaTypes.FilteredCriteria{
-			Operator: criteriaTypes.CriteriaOperatorTypeOR,
-			Criterias: []criteriaTypes.FilteredCriteria{
-				{
-					Operator:   criteriaTypes.CriteriaOperatorTypeAND,
-					Criterions: []criterionTypes.FilteredCriterion{c},
-				},
-			},
-		},
-	}
-}
-
 func TestFilterAffected(t *testing.T) {
-	const eco = ecosystemTypes.Ecosystem("redhat:9")
-	const src = sourceTypes.RedHatOVALv2
-
-	affectedCond := versionCondition("kernel", "0:5.14.0-70.13.1.el9_0", true)
-	unaffectedCond := versionCondition("openssl", "1:3.0.7-16.el9_2", false)
-
 	tests := []struct {
 		name    string
 		arg     map[dataTypes.RootID]detectTypes.VulnerabilityData
@@ -85,8 +38,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-A": {
 					ID: "CVE-A",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -94,8 +75,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-A": {
 					ID: "CVE-A",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -106,8 +115,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-B": {
 					ID: "CVE-B",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {unaffectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "openssl"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "1:3.0.7-16.el9_2"}},
+														Fixed: []string{"1:3.0.7-16.el9_2"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -119,8 +156,65 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-C": {
 					ID: "CVE-C",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond, unaffectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {
+								{
+									Criteria: criteriaTypes.FilteredCriteria{
+										Operator: criteriaTypes.CriteriaOperatorTypeOR,
+										Criterias: []criteriaTypes.FilteredCriteria{{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{{
+												Criterion: criterionTypes.Criterion{
+													Type: criterionTypes.CriterionTypeVersion,
+													Version: &vcTypes.Criterion{
+														Vulnerable: true,
+														FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+														Package: vcPackageTypes.Package{
+															Type:   vcPackageTypes.PackageTypeBinary,
+															Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+														},
+														Affected: &vcAffectedTypes.Affected{
+															Type:  vcAffectedRangeTypes.RangeTypeRPM,
+															Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+															Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+														},
+													},
+												},
+												Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+											}},
+										}},
+									},
+								},
+								{
+									Criteria: criteriaTypes.FilteredCriteria{
+										Operator: criteriaTypes.CriteriaOperatorTypeOR,
+										Criterias: []criteriaTypes.FilteredCriteria{{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{{
+												Criterion: criterionTypes.Criterion{
+													Type: criterionTypes.CriterionTypeVersion,
+													Version: &vcTypes.Criterion{
+														Vulnerable: true,
+														FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+														Package: vcPackageTypes.Package{
+															Type:   vcPackageTypes.PackageTypeBinary,
+															Binary: &vcBinaryPackageTypes.Package{Name: "openssl"},
+														},
+														Affected: &vcAffectedTypes.Affected{
+															Type:  vcAffectedRangeTypes.RangeTypeRPM,
+															Range: []vcAffectedRangeTypes.Range{{LessThan: "1:3.0.7-16.el9_2"}},
+															Fixed: []string{"1:3.0.7-16.el9_2"},
+														},
+													},
+												},
+												Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+											}},
+										}},
+									},
+								},
+							},
+						},
 					}},
 				},
 			},
@@ -128,8 +222,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-C": {
 					ID: "CVE-C",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -140,10 +262,62 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-D": {
 					ID: "CVE-D",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
-							src:                               {affectedCond},
-							sourceTypes.SourceID("other-src"): {unaffectedCond},
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+							sourceTypes.SourceID("other-src"): {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "openssl"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "1:3.0.7-16.el9_2"}},
+														Fixed: []string{"1:3.0.7-16.el9_2"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										}},
+									}},
+								},
+							}},
 						},
 					}},
 				},
@@ -152,8 +326,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-D": {
 					ID: "CVE-D",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -165,12 +367,68 @@ func TestFilterAffected(t *testing.T) {
 					ID: "CVE-E",
 					Detections: []detectTypes.VulnerabilityDataDetection{
 						{
-							Ecosystem: eco,
-							Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {unaffectedCond}},
+							Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+							Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+								sourceTypes.RedHatOVALv2: {{
+									Criteria: criteriaTypes.FilteredCriteria{
+										Operator: criteriaTypes.CriteriaOperatorTypeOR,
+										Criterias: []criteriaTypes.FilteredCriteria{{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{{
+												Criterion: criterionTypes.Criterion{
+													Type: criterionTypes.CriterionTypeVersion,
+													Version: &vcTypes.Criterion{
+														Vulnerable: true,
+														FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+														Package: vcPackageTypes.Package{
+															Type:   vcPackageTypes.PackageTypeBinary,
+															Binary: &vcBinaryPackageTypes.Package{Name: "openssl"},
+														},
+														Affected: &vcAffectedTypes.Affected{
+															Type:  vcAffectedRangeTypes.RangeTypeRPM,
+															Range: []vcAffectedRangeTypes.Range{{LessThan: "1:3.0.7-16.el9_2"}},
+															Fixed: []string{"1:3.0.7-16.el9_2"},
+														},
+													},
+												},
+												Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+											}},
+										}},
+									},
+								}},
+							},
 						},
 						{
-							Ecosystem: eco,
-							Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+							Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+							Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+								sourceTypes.RedHatOVALv2: {{
+									Criteria: criteriaTypes.FilteredCriteria{
+										Operator: criteriaTypes.CriteriaOperatorTypeOR,
+										Criterias: []criteriaTypes.FilteredCriteria{{
+											Operator: criteriaTypes.CriteriaOperatorTypeAND,
+											Criterions: []criterionTypes.FilteredCriterion{{
+												Criterion: criterionTypes.Criterion{
+													Type: criterionTypes.CriterionTypeVersion,
+													Version: &vcTypes.Criterion{
+														Vulnerable: true,
+														FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+														Package: vcPackageTypes.Package{
+															Type:   vcPackageTypes.PackageTypeBinary,
+															Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+														},
+														Affected: &vcAffectedTypes.Affected{
+															Type:  vcAffectedRangeTypes.RangeTypeRPM,
+															Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+															Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+														},
+													},
+												},
+												Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+											}},
+										}},
+									},
+								}},
+							},
 						},
 					},
 				},
@@ -179,8 +437,36 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-E": {
 					ID: "CVE-E",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterias: []criteriaTypes.FilteredCriteria{{
+										Operator: criteriaTypes.CriteriaOperatorTypeAND,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type:   vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{Name: "kernel"},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeRPM,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "0:5.14.0-70.13.1.el9_0"}},
+														Fixed: []string{"0:5.14.0-70.13.1.el9_0"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										}},
+									}},
+								},
+							}},
+						},
 					}},
 				},
 			},
@@ -191,14 +477,16 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-F": {
 					ID: "CVE-F",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: eco,
-						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {{
-							// Out-of-range operator triggers the default branch
-							// of FilteredCriteria.Affected() and returns an
-							// error. The valid values are the AND/OR iota
-							// constants, so any other int falls through.
-							Criteria: criteriaTypes.FilteredCriteria{Operator: criteriaTypes.CriteriaOperatorType(-1)},
-						}}},
+						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
+						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+							sourceTypes.RedHatOVALv2: {{
+								// Out-of-range operator triggers the default branch
+								// of FilteredCriteria.Affected() and returns an
+								// error. The valid values are the AND/OR iota
+								// constants, so any other int falls through.
+								Criteria: criteriaTypes.FilteredCriteria{Operator: criteriaTypes.CriteriaOperatorType(-1)},
+							}},
+						},
 					}},
 				},
 			},
