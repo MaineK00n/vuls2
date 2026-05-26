@@ -9,24 +9,44 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
-	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
+	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
+	vcAffectedTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected"
+	vcAffectedRangeTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/affected/range"
+	vcFixStatusTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/fixstatus"
+	vcPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package"
+	vcBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package/binary"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
-// kbCondition returns a single-KB FilteredCondition. When unapplied is true,
-// the inner criterion's Accepts.KB.Unapplied is set so Criteria.Affected()
-// returns true; otherwise Accepts is zero and Affected() returns false.
-func kbCondition(product, kbid string, unapplied bool) conditionTypes.FilteredCondition {
+// versionCondition returns a single-package FilteredCondition for a binary
+// rpm with a fixed-version range. When matched is true the inner criterion's
+// Accepts.Version is populated with a query index so Criteria.Affected()
+// returns true; otherwise Accepts.Version is empty and Affected() returns
+// false.
+func versionCondition(pkgName, fixed string, isAffected bool) conditionTypes.FilteredCondition {
 	c := criterionTypes.FilteredCriterion{
 		Criterion: criterionTypes.Criterion{
-			Type: criterionTypes.CriterionTypeKB,
-			KB:   &kbcTypes.Criterion{Product: product, KBID: kbid},
+			Type: criterionTypes.CriterionTypeVersion,
+			Version: &vcTypes.Criterion{
+				Vulnerable: true,
+				FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+				Package: vcPackageTypes.Package{
+					Type:   vcPackageTypes.PackageTypeBinary,
+					Binary: &vcBinaryPackageTypes.Package{Name: pkgName},
+				},
+				Affected: &vcAffectedTypes.Affected{
+					Type:  vcAffectedRangeTypes.RangeTypeRPM,
+					Range: []vcAffectedRangeTypes.Range{{LessThan: fixed}},
+					Fixed: []string{fixed},
+				},
+			},
 		},
+		Accepts: criterionTypes.AcceptQueries{Version: []int{}},
 	}
-	if unapplied {
-		c.Accepts = criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}}
+	if isAffected {
+		c.Accepts.Version = []int{0}
 	}
 	return conditionTypes.FilteredCondition{
 		Criteria: criteriaTypes.FilteredCriteria{
@@ -42,11 +62,11 @@ func kbCondition(product, kbid string, unapplied bool) conditionTypes.FilteredCo
 }
 
 func TestFilterAffected(t *testing.T) {
-	const ms = ecosystemTypes.EcosystemTypeMicrosoft
-	const src = sourceTypes.SourceID("microsoft-cvrf")
+	const eco = ecosystemTypes.Ecosystem("redhat:9")
+	const src = sourceTypes.SourceID("redhat-ovalv2")
 
-	affectedCond := kbCondition("Win10", "5000802", true)
-	unaffectedCond := kbCondition("Win10", "5001330", false)
+	affectedCond := versionCondition("kernel", "0:5.14.0-70.13.1.el9_0", true)
+	unaffectedCond := versionCondition("openssl", "1:3.0.7-16.el9_2", false)
 
 	tests := []struct {
 		name    string
@@ -65,7 +85,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-A": {
 					ID: "CVE-A",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 					}},
 				},
@@ -74,7 +94,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-A": {
 					ID: "CVE-A",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 					}},
 				},
@@ -86,7 +106,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-B": {
 					ID: "CVE-B",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {unaffectedCond}},
 					}},
 				},
@@ -99,7 +119,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-C": {
 					ID: "CVE-C",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond, unaffectedCond}},
 					}},
 				},
@@ -108,7 +128,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-C": {
 					ID: "CVE-C",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 					}},
 				},
@@ -120,9 +140,9 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-D": {
 					ID: "CVE-D",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
-							src: {affectedCond},
+							src:                               {affectedCond},
 							sourceTypes.SourceID("other-src"): {unaffectedCond},
 						},
 					}},
@@ -132,7 +152,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-D": {
 					ID: "CVE-D",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 					}},
 				},
@@ -145,11 +165,11 @@ func TestFilterAffected(t *testing.T) {
 					ID: "CVE-E",
 					Detections: []detectTypes.VulnerabilityDataDetection{
 						{
-							Ecosystem: ms,
+							Ecosystem: eco,
 							Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {unaffectedCond}},
 						},
 						{
-							Ecosystem: ms,
+							Ecosystem: eco,
 							Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 						},
 					},
@@ -159,7 +179,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-E": {
 					ID: "CVE-E",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents:  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {affectedCond}},
 					}},
 				},
@@ -171,7 +191,7 @@ func TestFilterAffected(t *testing.T) {
 				"CVE-F": {
 					ID: "CVE-F",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
-						Ecosystem: ms,
+						Ecosystem: eco,
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{src: {{
 							// Out-of-range operator triggers the default branch
 							// of FilteredCriteria.Affected() and returns an
