@@ -70,18 +70,18 @@ func TestFilterAffected(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		in      map[dataTypes.RootID]detectTypes.VulnerabilityData
+		arg     map[dataTypes.RootID]detectTypes.VulnerabilityData
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityData
 		wantErr bool
 	}{
 		{
 			name: "empty input yields empty output",
-			in:   map[dataTypes.RootID]detectTypes.VulnerabilityData{},
+			arg:  map[dataTypes.RootID]detectTypes.VulnerabilityData{},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityData{},
 		},
 		{
 			name: "affected condition is kept",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-A": {
 					ID: "CVE-A",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
@@ -102,7 +102,7 @@ func TestFilterAffected(t *testing.T) {
 		},
 		{
 			name: "unaffected-only VulnerabilityData is pruned entirely",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-B": {
 					ID: "CVE-B",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
@@ -115,7 +115,7 @@ func TestFilterAffected(t *testing.T) {
 		},
 		{
 			name: "within a source slot, only affected conditions are kept",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-C": {
 					ID: "CVE-C",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
@@ -136,7 +136,7 @@ func TestFilterAffected(t *testing.T) {
 		},
 		{
 			name: "source with no surviving conditions is dropped, sibling source is kept",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-D": {
 					ID: "CVE-D",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
@@ -160,7 +160,7 @@ func TestFilterAffected(t *testing.T) {
 		},
 		{
 			name: "detection with no surviving sources is dropped, sibling detection is kept",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-E": {
 					ID: "CVE-E",
 					Detections: []detectTypes.VulnerabilityDataDetection{
@@ -187,7 +187,7 @@ func TestFilterAffected(t *testing.T) {
 		},
 		{
 			name: "Criteria.Affected() error is surfaced",
-			in: map[dataTypes.RootID]detectTypes.VulnerabilityData{
+			arg: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"CVE-F": {
 					ID: "CVE-F",
 					Detections: []detectTypes.VulnerabilityDataDetection{{
@@ -208,7 +208,7 @@ func TestFilterAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := filterAffected(tt.in)
+			got, err := filterAffected(tt.arg)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("filterAffected() error = %v, wantErr %v", err, tt.wantErr)
 			}
