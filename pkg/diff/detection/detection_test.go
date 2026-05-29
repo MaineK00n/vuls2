@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 
-	"github.com/MaineK00n/vuls2/pkg/db/diff/detection"
+	"github.com/MaineK00n/vuls2/pkg/diff/detection"
 )
 
 func TestSubtract(t *testing.T) {

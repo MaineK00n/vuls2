@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
-	diffdetection "github.com/MaineK00n/vuls2/pkg/db/diff/detection"
+	diffdetection "github.com/MaineK00n/vuls2/pkg/diff/detection"
 )
 
 func NewCmd() *cobra.Command {
