@@ -12,7 +12,7 @@ import (
 
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 
-	db "github.com/MaineK00n/vuls2/pkg/db/diff/db"
+	db "github.com/MaineK00n/vuls2/pkg/diff/db"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 )
 
