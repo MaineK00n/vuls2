@@ -11,7 +11,7 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
-	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
+	cpecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/cpecriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
@@ -35,18 +35,18 @@ func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[da
 
 	dm, err := util.Detect(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
 		var (
-			qs    []vcTypes.Query
+			qs    []cpecTypes.Query
 			idxes []int
 		)
 		for _, q := range queries {
 			for _, idx := range qm[q] {
-				qs = append(qs, vcTypes.Query{CPE: &sr.CPE[idx]})
+				qs = append(qs, cpecTypes.Query{CPE: sr.CPE[idx]})
 			}
 			idxes = append(idxes, qm[q]...)
 		}
 		return util.Request{
 			RootID:  rootID,
-			Query:   criterionTypes.Query{Version: qs},
+			Query:   criterionTypes.Query{CPE: qs},
 			Indexes: idxes,
 		}
 	}, concurrency)
