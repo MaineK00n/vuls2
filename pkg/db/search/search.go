@@ -15,6 +15,9 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
+	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
@@ -1181,4 +1184,352 @@ func joinKBList(ss []string) string {
 		return "(none)"
 	}
 	return strings.Join(filtered, " ")
+}
+
+// SearchAttack returns the queried MITRE ATT&CK records along with every
+// other Attack record they reference (mitigations, sub-techniques,
+// detection strategies, assets, groups/software/campaigns, etc.) so a
+// single query produces the same bidirectional view as the ATT&CK web UI.
+func SearchAttack(queries []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE ATT&CK", "ids", queries)
+	results := make(map[string]*attackTypes.Attack)
+	for _, query := range queries {
+		if _, ok := results[query]; ok {
+			continue
+		}
+		a, err := s.Storage().GetAttack(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get attack %s", query)
+		}
+		results[query] = a
+		for _, ref := range collectAttackRefs(a) {
+			if _, ok := results[ref]; ok {
+				continue
+			}
+			ra, err := s.Storage().GetAttack(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+					slog.Warn(err.Error())
+					continue
+				}
+				return errors.Wrapf(err, "get attack %s", ref)
+			}
+			results[ref] = ra
+		}
+	}
+
+	if err := json.MarshalWrite(os.Stdout, results); err != nil {
+		return errors.Wrap(err, "encode attack")
+	}
+	return nil
+}
+
+// collectAttackRefs returns every Attack ext-ID referenced by the given
+// record's kind-specific fields. Used for one-level bidirectional
+// resolution in SearchAttack.
+func collectAttackRefs(a *attackTypes.Attack) []string {
+	if a == nil {
+		return nil
+	}
+	out := make([]string, 0)
+	// Technique
+	out = append(out, a.Technique.Mitigations...)
+	out = append(out, a.Technique.Subtechniques...)
+	out = append(out, a.Technique.AssetsTargeted...)
+	out = append(out, a.Technique.DetectionStrategies...)
+	if a.Technique.Parent != "" {
+		out = append(out, a.Technique.Parent)
+	}
+	for _, p := range a.Technique.Procedures {
+		if p.AttackerID != "" {
+			out = append(out, p.AttackerID)
+		}
+	}
+	// Tactic
+	out = append(out, a.Tactic.Techniques...)
+	// Mitigation
+	out = append(out, a.Mitigation.TechniquesMitigated...)
+	// Group
+	for _, t := range a.Group.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, t.ID)
+		}
+	}
+	out = append(out, a.Group.SoftwaresUsed...)
+	out = append(out, a.Group.CampaignsAttributed...)
+	// Software
+	for _, t := range a.Software.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, t.ID)
+		}
+	}
+	out = append(out, a.Software.GroupsUsing...)
+	out = append(out, a.Software.CampaignsUsing...)
+	// Campaign
+	for _, t := range a.Campaign.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, t.ID)
+		}
+	}
+	out = append(out, a.Campaign.GroupsAttributed...)
+	out = append(out, a.Campaign.SoftwaresUsed...)
+	// Asset
+	out = append(out, a.Asset.TechniquesTargeting...)
+	// DetectionStrategy
+	out = append(out, a.DetectionStrategy.Analytics...)
+	out = append(out, a.DetectionStrategy.TechniquesDetected...)
+	// DataSource (kind)
+	out = append(out, a.AttackDataSource.DataComponents...)
+	// DataComponent
+	if a.DataComponent.DataSource != "" {
+		out = append(out, a.DataComponent.DataSource)
+	}
+	// Analytic
+	if a.Analytic.DetectionStrategy != "" {
+		out = append(out, a.Analytic.DetectionStrategy)
+	}
+	return out
+}
+
+// SearchCAPEC returns the queried CAPEC records along with related CAPEC
+// records they cross-reference (ChildOf / ParentOf / CanFollow /
+// CanPrecede / PeerOf).
+func SearchCAPEC(queries []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE CAPEC", "ids", queries)
+	results := make(map[string]*capecTypes.CAPEC)
+	for _, query := range queries {
+		if _, ok := results[query]; ok {
+			continue
+		}
+		c, err := s.Storage().GetCAPEC(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get capec %s", query)
+		}
+		results[query] = c
+		for _, ref := range collectCAPECRefs(c) {
+			if _, ok := results[ref]; ok {
+				continue
+			}
+			rc, err := s.Storage().GetCAPEC(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+					slog.Warn(err.Error())
+					continue
+				}
+				return errors.Wrapf(err, "get capec %s", ref)
+			}
+			results[ref] = rc
+		}
+	}
+
+	if err := json.MarshalWrite(os.Stdout, results); err != nil {
+		return errors.Wrap(err, "encode capec")
+	}
+	return nil
+}
+
+// collectCAPECRefs returns every CAPEC ext-ID referenced by the given
+// record's relationship fields (ChildOf / ParentOf / CanFollow /
+// CanPrecede / PeerOf). RelatedCWEs / RelatedAttacks are cross-catalog
+// references and are not resolved here.
+func collectCAPECRefs(c *capecTypes.CAPEC) []string {
+	if c == nil {
+		return nil
+	}
+	out := make([]string, 0)
+	out = append(out, c.ChildOf...)
+	out = append(out, c.ParentOf...)
+	out = append(out, c.CanFollow...)
+	out = append(out, c.CanPrecede...)
+	out = append(out, c.PeerOf...)
+	return out
+}
+
+// SearchCWE returns the queried CWE records along with related CWE
+// records they cross-reference (RelatedWeaknesses, Category/View
+// Members).
+func SearchCWE(queries []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil || meta == nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE CWE", "ids", queries)
+	results := make(map[string]*cweTypes.CWE)
+	for _, query := range queries {
+		if _, ok := results[query]; ok {
+			continue
+		}
+		c, err := s.Storage().GetCWE(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get cwe %s", query)
+		}
+		results[query] = c
+		for _, ref := range collectCWERefs(c) {
+			if _, ok := results[ref]; ok {
+				continue
+			}
+			rc, err := s.Storage().GetCWE(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+					slog.Warn(err.Error())
+					continue
+				}
+				return errors.Wrapf(err, "get cwe %s", ref)
+			}
+			results[ref] = rc
+		}
+	}
+
+	if err := json.MarshalWrite(os.Stdout, results); err != nil {
+		return errors.Wrap(err, "encode cwe")
+	}
+	return nil
+}
+
+// collectCWERefs returns every CWE ID referenced by the given record's
+// Weakness.RelatedWeaknesses, Category.Members and View.Members fields.
+// RelatedAttackPatterns (CAPEC IDs) are cross-catalog and not resolved here.
+func collectCWERefs(c *cweTypes.CWE) []string {
+	if c == nil {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, rw := range c.Weakness.RelatedWeaknesses {
+		if rw.CWEID != "" {
+			out = append(out, rw.CWEID)
+		}
+	}
+	for _, m := range c.Category.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	for _, m := range c.View.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	return out
 }

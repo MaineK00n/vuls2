@@ -36,6 +36,9 @@ func NewCmd() *cobra.Command {
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
+		newAttackCmd(),
+		newCAPECCmd(),
+		newCWECmd(),
 	)
 
 	return cmd
@@ -548,4 +551,107 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 			return rs
 		}(),
 	}
+}
+
+func newAttackCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "attack <attack id>...",
+		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search attack T1110
+		$ vuls db search attack M1036 T1110
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchAttack(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newCAPECCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "capec <CAPEC id>...",
+		Short: "search MITRE CAPEC records in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search capec CAPEC-66
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchCAPEC(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newCWECmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "cwe <CWE id>...",
+		Short: "search MITRE CWE records in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search cwe CWE-79
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchCWE(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
 }
