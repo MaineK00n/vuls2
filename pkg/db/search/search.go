@@ -1230,9 +1230,10 @@ func SearchAttack(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE ATT&CK", "ids", queries)
-	results := make(map[string]*attackTypes.Attack)
+	cache := make(map[string]*attackTypes.Attack)
+	queried := make([]string, 0, len(queries))
 	for _, query := range queries {
-		if _, ok := results[query]; ok {
+		if _, ok := cache[query]; ok {
 			continue
 		}
 		a, err := s.Storage().GetAttack(query)
@@ -1243,9 +1244,10 @@ func SearchAttack(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get attack %s", query)
 		}
-		results[query] = a
+		cache[query] = a
+		queried = append(queried, query)
 		for _, ref := range collectAttackRefs(a) {
-			if _, ok := results[ref]; ok {
+			if _, ok := cache[ref]; ok {
 				continue
 			}
 			ra, err := s.Storage().GetAttack(ref)
@@ -1256,8 +1258,13 @@ func SearchAttack(queries []string, opts ...Option) error {
 				}
 				return errors.Wrapf(err, "get attack %s", ref)
 			}
-			results[ref] = ra
+			cache[ref] = ra
 		}
+	}
+
+	results := make(map[string]AttackResult, len(queried))
+	for _, id := range queried {
+		results[id] = toAttackResult(cache[id], cache)
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
@@ -1376,9 +1383,10 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CAPEC", "ids", queries)
-	results := make(map[string]*capecTypes.CAPEC)
+	cache := make(map[string]*capecTypes.CAPEC)
+	queried := make([]string, 0, len(queries))
 	for _, query := range queries {
-		if _, ok := results[query]; ok {
+		if _, ok := cache[query]; ok {
 			continue
 		}
 		c, err := s.Storage().GetCAPEC(query)
@@ -1389,9 +1397,10 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get capec %s", query)
 		}
-		results[query] = c
+		cache[query] = c
+		queried = append(queried, query)
 		for _, ref := range collectCAPECRefs(c) {
-			if _, ok := results[ref]; ok {
+			if _, ok := cache[ref]; ok {
 				continue
 			}
 			rc, err := s.Storage().GetCAPEC(ref)
@@ -1402,8 +1411,13 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 				}
 				return errors.Wrapf(err, "get capec %s", ref)
 			}
-			results[ref] = rc
+			cache[ref] = rc
 		}
+	}
+
+	results := make(map[string]CAPECResult, len(queried))
+	for _, id := range queried {
+		results[id] = toCAPECResult(cache[id], cache)
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
@@ -1472,9 +1486,10 @@ func SearchCWE(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CWE", "ids", queries)
-	results := make(map[string]*cweTypes.CWE)
+	cache := make(map[string]*cweTypes.CWE)
+	queried := make([]string, 0, len(queries))
 	for _, query := range queries {
-		if _, ok := results[query]; ok {
+		if _, ok := cache[query]; ok {
 			continue
 		}
 		c, err := s.Storage().GetCWE(query)
@@ -1485,9 +1500,10 @@ func SearchCWE(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get cwe %s", query)
 		}
-		results[query] = c
+		cache[query] = c
+		queried = append(queried, query)
 		for _, ref := range collectCWERefs(c) {
-			if _, ok := results[ref]; ok {
+			if _, ok := cache[ref]; ok {
 				continue
 			}
 			rc, err := s.Storage().GetCWE(ref)
@@ -1498,8 +1514,13 @@ func SearchCWE(queries []string, opts ...Option) error {
 				}
 				return errors.Wrapf(err, "get cwe %s", ref)
 			}
-			results[ref] = rc
+			cache[ref] = rc
 		}
+	}
+
+	results := make(map[string]CWEResult, len(queried))
+	for _, id := range queried {
+		results[id] = toCWEResult(cache[id], cache)
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
