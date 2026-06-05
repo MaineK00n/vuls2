@@ -9,6 +9,7 @@ import (
 	datacomponentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/datacomponent"
 	procedureTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/procedure"
 	relatedrefTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/relatedref"
+	tacticrefTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/tacticref"
 	techniqueusedTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/techniqueused"
 	referenceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/reference"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
@@ -38,6 +39,7 @@ type AttackContent struct {
 	Deprecated  bool             `json:"deprecated,omitempty"`
 	Revoked     bool             `json:"revoked,omitempty"`
 	Version     string           `json:"version,omitempty"`
+	Created     time.Time        `json:"created,omitzero"`
 	Modified    time.Time        `json:"modified,omitzero"`
 
 	Technique         AttackContentTechnique         `json:"technique,omitzero"`
@@ -72,69 +74,116 @@ type AttackRef struct {
 	IsSubtechnique bool             `json:"is_subtechnique,omitempty"`
 }
 
+// Role-specific embed types pair an AttackRef with the per-edge
+// description and citations carried by the underlying STIX
+// relationship. The role-specific field name (Mitigation, Technique,
+// Software, Group, Campaign, ...) tells callers which side of the edge
+// the embedded ref points at; the JSON shape stays parallel across all
+// of them: { "<role>": AttackRef, "description": "<Use>", "references": [...] }.
+
 type AttackContentProcedure struct {
-	Attacker    AttackRef `json:"attacker"`
-	Description string    `json:"description,omitempty"`
+	Attacker    AttackRef                  `json:"attacker"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 type AttackContentTechniqueUsed struct {
-	Technique   AttackRef `json:"technique"`
-	Description string    `json:"description,omitempty"`
+	Technique   AttackRef                  `json:"technique"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentMitigationApplied is the Technique-side view of a STIX
-// "mitigates" edge — the Mitigation that addresses this technique plus
-// the per-edge "Use" description from the relationship object (the
-// text shown on the ATT&CK web UI's Mitigations table).
+// "mitigates" edge.
 type AttackContentMitigationApplied struct {
-	Mitigation  AttackRef `json:"mitigation"`
-	Description string    `json:"description,omitempty"`
+	Mitigation  AttackRef                  `json:"mitigation"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentTechniqueMitigated is the Mitigation-side view of a STIX
-// "mitigates" edge — a technique this mitigation addresses plus the
-// per-edge "Use" description (the text shown on the Mitigation page's
-// Techniques Addressed table).
+// "mitigates" edge.
 type AttackContentTechniqueMitigated struct {
-	Technique   AttackRef `json:"technique"`
-	Description string    `json:"description,omitempty"`
+	Technique   AttackRef                  `json:"technique"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentDetectionApplied is the Technique-side view of a STIX
-// "detects" edge — a Detection Strategy targeting this technique plus
-// the per-edge description.
+// "detects" edge.
 type AttackContentDetectionApplied struct {
-	DetectionStrategy AttackRef `json:"detection_strategy"`
-	Description       string    `json:"description,omitempty"`
+	DetectionStrategy AttackRef                  `json:"detection_strategy"`
+	Description       string                     `json:"description,omitempty"`
+	References        []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentTechniqueDetected is the DetectionStrategy-side view of
-// a STIX "detects" edge — a technique this strategy detects plus the
-// per-edge description.
+// a STIX "detects" edge.
 type AttackContentTechniqueDetected struct {
-	Technique   AttackRef `json:"technique"`
-	Description string    `json:"description,omitempty"`
+	Technique   AttackRef                  `json:"technique"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentAssetTargeted is the Technique-side view of a STIX
-// "targets" edge — an Asset this technique targets plus the per-edge
-// description.
+// "targets" edge.
 type AttackContentAssetTargeted struct {
-	Asset       AttackRef `json:"asset"`
-	Description string    `json:"description,omitempty"`
+	Asset       AttackRef                  `json:"asset"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 // AttackContentTechniqueTargeting is the Asset-side view of a STIX
-// "targets" edge — a technique that targets this asset plus the
-// per-edge description.
+// "targets" edge.
 type AttackContentTechniqueTargeting struct {
-	Technique   AttackRef `json:"technique"`
-	Description string    `json:"description,omitempty"`
+	Technique   AttackRef                  `json:"technique"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
+}
+
+// AttackContentSoftwareUsed is the Group/Campaign-side view of a STIX
+// "uses" edge pointing at a Software.
+type AttackContentSoftwareUsed struct {
+	Software    AttackRef                  `json:"software"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
+}
+
+// AttackContentGroupUsing is the Software-side view of a STIX "uses"
+// edge (reverse of Group uses Software).
+type AttackContentGroupUsing struct {
+	Group       AttackRef                  `json:"group"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
+}
+
+// AttackContentCampaignUsing is the Software-side view of a STIX "uses"
+// edge (reverse of Campaign uses Software).
+type AttackContentCampaignUsing struct {
+	Campaign    AttackRef                  `json:"campaign"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
+}
+
+// AttackContentGroupAttributed is the Campaign-side view of a STIX
+// "attributed-to" edge (Campaign attributed-to Group).
+type AttackContentGroupAttributed struct {
+	Group       AttackRef                  `json:"group"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
+}
+
+// AttackContentCampaignAttributed is the Group-side view of a STIX
+// "attributed-to" edge (reverse of Campaign attributed-to Group).
+type AttackContentCampaignAttributed struct {
+	Campaign    AttackRef                  `json:"campaign"`
+	Description string                     `json:"description,omitempty"`
+	References  []referenceTypes.Reference `json:"references,omitempty"`
 }
 
 type AttackContentTechnique struct {
 	Platforms            []string                         `json:"platforms,omitempty"`
-	Tactics              []string                         `json:"tactics,omitempty"`
+	Tactics              []AttackRef                      `json:"tactics,omitempty"`
 	IsSubtechnique       bool                             `json:"is_subtechnique,omitempty"`
 	Parent               *AttackRef                       `json:"parent,omitempty"`
 	Detection            string                           `json:"detection,omitempty"`
@@ -162,10 +211,10 @@ type AttackContentMitigation struct {
 }
 
 type AttackContentGroup struct {
-	Aliases             []string                     `json:"aliases,omitempty"`
-	TechniquesUsed      []AttackContentTechniqueUsed `json:"techniques_used,omitempty"`
-	SoftwaresUsed       []AttackRef                  `json:"softwares_used,omitempty"`
-	CampaignsAttributed []AttackRef                  `json:"campaigns_attributed,omitempty"`
+	Aliases             []string                          `json:"aliases,omitempty"`
+	TechniquesUsed      []AttackContentTechniqueUsed      `json:"techniques_used,omitempty"`
+	SoftwaresUsed       []AttackContentSoftwareUsed       `json:"softwares_used,omitempty"`
+	CampaignsAttributed []AttackContentCampaignAttributed `json:"campaigns_attributed,omitempty"`
 }
 
 type AttackContentSoftware struct {
@@ -173,17 +222,17 @@ type AttackContentSoftware struct {
 	Aliases        []string                     `json:"aliases,omitempty"`
 	Platforms      []string                     `json:"platforms,omitempty"`
 	TechniquesUsed []AttackContentTechniqueUsed `json:"techniques_used,omitempty"`
-	GroupsUsing    []AttackRef                  `json:"groups_using,omitempty"`
-	CampaignsUsing []AttackRef                  `json:"campaigns_using,omitempty"`
+	GroupsUsing    []AttackContentGroupUsing    `json:"groups_using,omitempty"`
+	CampaignsUsing []AttackContentCampaignUsing `json:"campaigns_using,omitempty"`
 }
 
 type AttackContentCampaign struct {
-	Aliases          []string                     `json:"aliases,omitempty"`
-	FirstSeen        time.Time                    `json:"first_seen,omitzero"`
-	LastSeen         time.Time                    `json:"last_seen,omitzero"`
-	TechniquesUsed   []AttackContentTechniqueUsed `json:"techniques_used,omitempty"`
-	GroupsAttributed []AttackRef                  `json:"groups_attributed,omitempty"`
-	SoftwaresUsed    []AttackRef                  `json:"softwares_used,omitempty"`
+	Aliases          []string                       `json:"aliases,omitempty"`
+	FirstSeen        time.Time                      `json:"first_seen,omitzero"`
+	LastSeen         time.Time                      `json:"last_seen,omitzero"`
+	TechniquesUsed   []AttackContentTechniqueUsed   `json:"techniques_used,omitempty"`
+	GroupsAttributed []AttackContentGroupAttributed `json:"groups_attributed,omitempty"`
+	SoftwaresUsed    []AttackContentSoftwareUsed    `json:"softwares_used,omitempty"`
 }
 
 type AttackContentAsset struct {
@@ -261,6 +310,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 		Deprecated:  a.Deprecated,
 		Revoked:     a.Revoked,
 		Version:     a.Version,
+		Created:     a.Created,
 		Modified:    a.Modified,
 		References:  a.References,
 		DataSource:  a.DataSource,
@@ -270,7 +320,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 		t := a.Technique
 		c.Technique = AttackContentTechnique{
 			Platforms:      t.Platforms,
-			Tactics:        t.Tactics,
+			Tactics:        toAttackTactics(t.Tactics, cache),
 			IsSubtechnique: t.IsSubtechnique,
 			Parent: func() *AttackRef {
 				if t.Parent == "" {
@@ -307,8 +357,8 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 		c.Group = AttackContentGroup{
 			Aliases:             g.Aliases,
 			TechniquesUsed:      toAttackContentTechniquesUsed(g.TechniquesUsed, cache),
-			SoftwaresUsed:       ToAttackRefs(g.SoftwaresUsed, cache),
-			CampaignsAttributed: ToAttackRefs(g.CampaignsAttributed, cache),
+			SoftwaresUsed:       toAttackContentSoftwaresUsed(g.SoftwaresUsed, cache),
+			CampaignsAttributed: toAttackContentCampaignsAttributed(g.CampaignsAttributed, cache),
 		}
 	case attackTypes.KindSoftware:
 		s := a.Software
@@ -317,8 +367,8 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			Aliases:        s.Aliases,
 			Platforms:      s.Platforms,
 			TechniquesUsed: toAttackContentTechniquesUsed(s.TechniquesUsed, cache),
-			GroupsUsing:    ToAttackRefs(s.GroupsUsing, cache),
-			CampaignsUsing: ToAttackRefs(s.CampaignsUsing, cache),
+			GroupsUsing:    toAttackContentGroupsUsing(s.GroupsUsing, cache),
+			CampaignsUsing: toAttackContentCampaignsUsing(s.CampaignsUsing, cache),
 		}
 	case attackTypes.KindCampaign:
 		cp := a.Campaign
@@ -327,8 +377,8 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			FirstSeen:        cp.FirstSeen,
 			LastSeen:         cp.LastSeen,
 			TechniquesUsed:   toAttackContentTechniquesUsed(cp.TechniquesUsed, cache),
-			GroupsAttributed: ToAttackRefs(cp.GroupsAttributed, cache),
-			SoftwaresUsed:    ToAttackRefs(cp.SoftwaresUsed, cache),
+			GroupsAttributed: toAttackContentGroupsAttributed(cp.GroupsAttributed, cache),
+			SoftwaresUsed:    toAttackContentSoftwaresUsed(cp.SoftwaresUsed, cache),
 		}
 	case attackTypes.KindAsset:
 		as := a.Asset
@@ -381,6 +431,27 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 	return c
 }
 
+// toAttackTactics expands the Tactic shortname+ID pairs that Technique
+// carries into AttackRefs. If the underlying TacticRef has an ID we
+// resolve it through the cache (which yields the full Tactic Name and
+// Description). When the extractor couldn't resolve a shortname to a
+// Tactic record the resulting AttackRef carries the shortname in Name
+// so consumers still see a non-empty label.
+func toAttackTactics(items []tacticrefTypes.TacticRef, cache map[string]*attackTypes.Attack) []AttackRef {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackRef, 0, len(items))
+	for _, tr := range items {
+		if tr.ID != "" {
+			out = append(out, ToAttackRef(tr.ID, cache))
+			continue
+		}
+		out = append(out, AttackRef{Name: tr.Shortname})
+	}
+	return out
+}
+
 func toAttackContentProcedures(items []procedureTypes.Procedure, cache map[string]*attackTypes.Attack) []AttackContentProcedure {
 	if len(items) == 0 {
 		return nil
@@ -390,6 +461,7 @@ func toAttackContentProcedures(items []procedureTypes.Procedure, cache map[strin
 		out = append(out, AttackContentProcedure{
 			Attacker:    ToAttackRef(p.AttackerID, cache),
 			Description: p.Description,
+			References:  p.References,
 		})
 	}
 	return out
@@ -404,6 +476,7 @@ func toAttackContentTechniquesUsed(items []techniqueusedTypes.TechniqueUsed, cac
 		out = append(out, AttackContentTechniqueUsed{
 			Technique:   ToAttackRef(t.ID, cache),
 			Description: t.Description,
+			References:  t.References,
 		})
 	}
 	return out
@@ -418,6 +491,7 @@ func toAttackContentMitigationsApplied(items []relatedrefTypes.RelatedRef, cache
 		out = append(out, AttackContentMitigationApplied{
 			Mitigation:  ToAttackRef(r.ID, cache),
 			Description: r.Description,
+			References:  r.References,
 		})
 	}
 	return out
@@ -432,6 +506,7 @@ func toAttackContentTechniquesMitigated(items []relatedrefTypes.RelatedRef, cach
 		out = append(out, AttackContentTechniqueMitigated{
 			Technique:   ToAttackRef(r.ID, cache),
 			Description: r.Description,
+			References:  r.References,
 		})
 	}
 	return out
@@ -446,6 +521,7 @@ func toAttackContentDetectionsApplied(items []relatedrefTypes.RelatedRef, cache 
 		out = append(out, AttackContentDetectionApplied{
 			DetectionStrategy: ToAttackRef(r.ID, cache),
 			Description:       r.Description,
+			References:        r.References,
 		})
 	}
 	return out
@@ -460,6 +536,7 @@ func toAttackContentTechniquesDetected(items []relatedrefTypes.RelatedRef, cache
 		out = append(out, AttackContentTechniqueDetected{
 			Technique:   ToAttackRef(r.ID, cache),
 			Description: r.Description,
+			References:  r.References,
 		})
 	}
 	return out
@@ -474,6 +551,7 @@ func toAttackContentAssetsTargeted(items []relatedrefTypes.RelatedRef, cache map
 		out = append(out, AttackContentAssetTargeted{
 			Asset:       ToAttackRef(r.ID, cache),
 			Description: r.Description,
+			References:  r.References,
 		})
 	}
 	return out
@@ -488,6 +566,82 @@ func toAttackContentTechniquesTargeting(items []relatedrefTypes.RelatedRef, cach
 		out = append(out, AttackContentTechniqueTargeting{
 			Technique:   ToAttackRef(r.ID, cache),
 			Description: r.Description,
+			References:  r.References,
+		})
+	}
+	return out
+}
+
+func toAttackContentSoftwaresUsed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentSoftwareUsed {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentSoftwareUsed, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentSoftwareUsed{
+			Software:    ToAttackRef(r.ID, cache),
+			Description: r.Description,
+			References:  r.References,
+		})
+	}
+	return out
+}
+
+func toAttackContentGroupsUsing(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentGroupUsing {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentGroupUsing, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentGroupUsing{
+			Group:       ToAttackRef(r.ID, cache),
+			Description: r.Description,
+			References:  r.References,
+		})
+	}
+	return out
+}
+
+func toAttackContentCampaignsUsing(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentCampaignUsing {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentCampaignUsing, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentCampaignUsing{
+			Campaign:    ToAttackRef(r.ID, cache),
+			Description: r.Description,
+			References:  r.References,
+		})
+	}
+	return out
+}
+
+func toAttackContentGroupsAttributed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentGroupAttributed {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentGroupAttributed, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentGroupAttributed{
+			Group:       ToAttackRef(r.ID, cache),
+			Description: r.Description,
+			References:  r.References,
+		})
+	}
+	return out
+}
+
+func toAttackContentCampaignsAttributed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentCampaignAttributed {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentCampaignAttributed, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentCampaignAttributed{
+			Campaign:    ToAttackRef(r.ID, cache),
+			Description: r.Description,
+			References:  r.References,
 		})
 	}
 	return out
@@ -515,6 +669,11 @@ func CollectAttackRefs(a attackTypes.Attack) []string {
 			out = append(out, r.ID)
 		}
 	}
+	for _, tr := range a.Technique.Tactics {
+		if tr.ID != "" {
+			out = append(out, tr.ID)
+		}
+	}
 	if a.Technique.Parent != "" {
 		out = append(out, a.Technique.Parent)
 	}
@@ -537,24 +696,48 @@ func CollectAttackRefs(a attackTypes.Attack) []string {
 			out = append(out, t.ID)
 		}
 	}
-	out = append(out, a.Group.SoftwaresUsed...)
-	out = append(out, a.Group.CampaignsAttributed...)
+	for _, r := range a.Group.SoftwaresUsed {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
+	for _, r := range a.Group.CampaignsAttributed {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// Software
 	for _, t := range a.Software.TechniquesUsed {
 		if t.ID != "" {
 			out = append(out, t.ID)
 		}
 	}
-	out = append(out, a.Software.GroupsUsing...)
-	out = append(out, a.Software.CampaignsUsing...)
+	for _, r := range a.Software.GroupsUsing {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
+	for _, r := range a.Software.CampaignsUsing {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// Campaign
 	for _, t := range a.Campaign.TechniquesUsed {
 		if t.ID != "" {
 			out = append(out, t.ID)
 		}
 	}
-	out = append(out, a.Campaign.GroupsAttributed...)
-	out = append(out, a.Campaign.SoftwaresUsed...)
+	for _, r := range a.Campaign.GroupsAttributed {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
+	for _, r := range a.Campaign.SoftwaresUsed {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// Asset
 	for _, r := range a.Asset.TechniquesTargeting {
 		if r.ID != "" {
