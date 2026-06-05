@@ -8,6 +8,7 @@ import (
 	assetTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/asset"
 	datacomponentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/datacomponent"
 	procedureTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/procedure"
+	relatedrefTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/relatedref"
 	techniqueusedTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/techniqueused"
 	referenceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/reference"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
@@ -75,24 +76,74 @@ type AttackContentTechniqueUsed struct {
 	Description string    `json:"description,omitempty"`
 }
 
+// AttackContentMitigationApplied is the Technique-side view of a STIX
+// "mitigates" edge — the Mitigation that addresses this technique plus
+// the per-edge "Use" description from the relationship object (the
+// text shown on the ATT&CK web UI's Mitigations table).
+type AttackContentMitigationApplied struct {
+	Mitigation  AttackRef `json:"mitigation"`
+	Description string    `json:"description,omitempty"`
+}
+
+// AttackContentTechniqueMitigated is the Mitigation-side view of a STIX
+// "mitigates" edge — a technique this mitigation addresses plus the
+// per-edge "Use" description (the text shown on the Mitigation page's
+// Techniques Addressed table).
+type AttackContentTechniqueMitigated struct {
+	Technique   AttackRef `json:"technique"`
+	Description string    `json:"description,omitempty"`
+}
+
+// AttackContentDetectionApplied is the Technique-side view of a STIX
+// "detects" edge — a Detection Strategy targeting this technique plus
+// the per-edge description.
+type AttackContentDetectionApplied struct {
+	DetectionStrategy AttackRef `json:"detection_strategy"`
+	Description       string    `json:"description,omitempty"`
+}
+
+// AttackContentTechniqueDetected is the DetectionStrategy-side view of
+// a STIX "detects" edge — a technique this strategy detects plus the
+// per-edge description.
+type AttackContentTechniqueDetected struct {
+	Technique   AttackRef `json:"technique"`
+	Description string    `json:"description,omitempty"`
+}
+
+// AttackContentAssetTargeted is the Technique-side view of a STIX
+// "targets" edge — an Asset this technique targets plus the per-edge
+// description.
+type AttackContentAssetTargeted struct {
+	Asset       AttackRef `json:"asset"`
+	Description string    `json:"description,omitempty"`
+}
+
+// AttackContentTechniqueTargeting is the Asset-side view of a STIX
+// "targets" edge — a technique that targets this asset plus the
+// per-edge description.
+type AttackContentTechniqueTargeting struct {
+	Technique   AttackRef `json:"technique"`
+	Description string    `json:"description,omitempty"`
+}
+
 type AttackContentTechnique struct {
-	Platforms            []string                 `json:"platforms,omitempty"`
-	Tactics              []string                 `json:"tactics,omitempty"`
-	IsSubtechnique       bool                     `json:"is_subtechnique,omitempty"`
-	Parent               *AttackRef               `json:"parent,omitempty"`
-	Detection            string                   `json:"detection,omitempty"`
-	DataSources          []string                 `json:"data_sources,omitempty"`
-	Mitigations          []AttackRef              `json:"mitigations,omitempty"`
-	Procedures           []AttackContentProcedure `json:"procedures,omitempty"`
-	PermissionsRequired  []string                 `json:"permissions_required,omitempty"`
-	EffectivePermissions []string                 `json:"effective_permissions,omitempty"`
-	DefenseBypassed      []string                 `json:"defense_bypassed,omitempty"`
-	ImpactType           []string                 `json:"impact_type,omitempty"`
-	NetworkRequirements  bool                     `json:"network_requirements,omitempty"`
-	RemoteSupport        bool                     `json:"remote_support,omitempty"`
-	Subtechniques        []AttackRef              `json:"subtechniques,omitempty"`
-	AssetsTargeted       []AttackRef              `json:"assets_targeted,omitempty"`
-	DetectionStrategies  []AttackRef              `json:"detection_strategies,omitempty"`
+	Platforms            []string                         `json:"platforms,omitempty"`
+	Tactics              []string                         `json:"tactics,omitempty"`
+	IsSubtechnique       bool                             `json:"is_subtechnique,omitempty"`
+	Parent               *AttackRef                       `json:"parent,omitempty"`
+	Detection            string                           `json:"detection,omitempty"`
+	DataSources          []string                         `json:"data_sources,omitempty"`
+	Mitigations          []AttackContentMitigationApplied `json:"mitigations,omitempty"`
+	Procedures           []AttackContentProcedure         `json:"procedures,omitempty"`
+	PermissionsRequired  []string                         `json:"permissions_required,omitempty"`
+	EffectivePermissions []string                         `json:"effective_permissions,omitempty"`
+	DefenseBypassed      []string                         `json:"defense_bypassed,omitempty"`
+	ImpactType           []string                         `json:"impact_type,omitempty"`
+	NetworkRequirements  bool                             `json:"network_requirements,omitempty"`
+	RemoteSupport        bool                             `json:"remote_support,omitempty"`
+	Subtechniques        []AttackRef                      `json:"subtechniques,omitempty"`
+	AssetsTargeted       []AttackContentAssetTargeted     `json:"assets_targeted,omitempty"`
+	DetectionStrategies  []AttackContentDetectionApplied  `json:"detection_strategies,omitempty"`
 }
 
 type AttackContentTactic struct {
@@ -101,7 +152,7 @@ type AttackContentTactic struct {
 }
 
 type AttackContentMitigation struct {
-	TechniquesMitigated []AttackRef `json:"techniques_mitigated,omitempty"`
+	TechniquesMitigated []AttackContentTechniqueMitigated `json:"techniques_mitigated,omitempty"`
 }
 
 type AttackContentGroup struct {
@@ -130,15 +181,15 @@ type AttackContentCampaign struct {
 }
 
 type AttackContentAsset struct {
-	Platforms           []string                  `json:"platforms,omitempty"`
-	Sectors             []string                  `json:"sectors,omitempty"`
-	RelatedAssets       []assetTypes.RelatedAsset `json:"related_assets,omitempty"`
-	TechniquesTargeting []AttackRef               `json:"techniques_targeting,omitempty"`
+	Platforms           []string                          `json:"platforms,omitempty"`
+	Sectors             []string                          `json:"sectors,omitempty"`
+	RelatedAssets       []assetTypes.RelatedAsset         `json:"related_assets,omitempty"`
+	TechniquesTargeting []AttackContentTechniqueTargeting `json:"techniques_targeting,omitempty"`
 }
 
 type AttackContentDetectionStrategy struct {
-	Analytics          []AttackRef `json:"analytics,omitempty"`
-	TechniquesDetected []AttackRef `json:"techniques_detected,omitempty"`
+	Analytics          []AttackRef                      `json:"analytics,omitempty"`
+	TechniquesDetected []AttackContentTechniqueDetected `json:"techniques_detected,omitempty"`
 }
 
 type AttackContentDataSource struct {
@@ -221,7 +272,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			}(),
 			Detection:            t.Detection,
 			DataSources:          t.DataSources,
-			Mitigations:          ToAttackRefs(t.Mitigations, cache),
+			Mitigations:          toAttackContentMitigationsApplied(t.Mitigations, cache),
 			Procedures:           toAttackContentProcedures(t.Procedures, cache),
 			PermissionsRequired:  t.PermissionsRequired,
 			EffectivePermissions: t.EffectivePermissions,
@@ -230,8 +281,8 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			NetworkRequirements:  t.NetworkRequirements,
 			RemoteSupport:        t.RemoteSupport,
 			Subtechniques:        ToAttackRefs(t.Subtechniques, cache),
-			AssetsTargeted:       ToAttackRefs(t.AssetsTargeted, cache),
-			DetectionStrategies:  ToAttackRefs(t.DetectionStrategies, cache),
+			AssetsTargeted:       toAttackContentAssetsTargeted(t.AssetsTargeted, cache),
+			DetectionStrategies:  toAttackContentDetectionsApplied(t.DetectionStrategies, cache),
 		}
 	case attackTypes.KindTactic:
 		c.Tactic = AttackContentTactic{
@@ -240,7 +291,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 		}
 	case attackTypes.KindMitigation:
 		c.Mitigation = AttackContentMitigation{
-			TechniquesMitigated: ToAttackRefs(a.Mitigation.TechniquesMitigated, cache),
+			TechniquesMitigated: toAttackContentTechniquesMitigated(a.Mitigation.TechniquesMitigated, cache),
 		}
 	case attackTypes.KindGroup:
 		g := a.Group
@@ -276,13 +327,13 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			Platforms:           as.Platforms,
 			Sectors:             as.Sectors,
 			RelatedAssets:       as.RelatedAssets,
-			TechniquesTargeting: ToAttackRefs(as.TechniquesTargeting, cache),
+			TechniquesTargeting: toAttackContentTechniquesTargeting(as.TechniquesTargeting, cache),
 		}
 	case attackTypes.KindDetectStrategy:
 		d := a.DetectionStrategy
 		c.DetectionStrategy = AttackContentDetectionStrategy{
 			Analytics:          ToAttackRefs(d.Analytics, cache),
-			TechniquesDetected: ToAttackRefs(d.TechniquesDetected, cache),
+			TechniquesDetected: toAttackContentTechniquesDetected(d.TechniquesDetected, cache),
 		}
 	case attackTypes.KindDataSource:
 		d := a.AttackDataSource
@@ -349,16 +400,112 @@ func toAttackContentTechniquesUsed(items []techniqueusedTypes.TechniqueUsed, cac
 	return out
 }
 
+func toAttackContentMitigationsApplied(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentMitigationApplied {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentMitigationApplied, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentMitigationApplied{
+			Mitigation:  ToAttackRef(r.ID, cache),
+			Description: r.Description,
+		})
+	}
+	return out
+}
+
+func toAttackContentTechniquesMitigated(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueMitigated {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentTechniqueMitigated, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentTechniqueMitigated{
+			Technique:   ToAttackRef(r.ID, cache),
+			Description: r.Description,
+		})
+	}
+	return out
+}
+
+func toAttackContentDetectionsApplied(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentDetectionApplied {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentDetectionApplied, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentDetectionApplied{
+			DetectionStrategy: ToAttackRef(r.ID, cache),
+			Description:       r.Description,
+		})
+	}
+	return out
+}
+
+func toAttackContentTechniquesDetected(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueDetected {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentTechniqueDetected, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentTechniqueDetected{
+			Technique:   ToAttackRef(r.ID, cache),
+			Description: r.Description,
+		})
+	}
+	return out
+}
+
+func toAttackContentAssetsTargeted(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentAssetTargeted {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentAssetTargeted, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentAssetTargeted{
+			Asset:       ToAttackRef(r.ID, cache),
+			Description: r.Description,
+		})
+	}
+	return out
+}
+
+func toAttackContentTechniquesTargeting(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueTargeting {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]AttackContentTechniqueTargeting, 0, len(items))
+	for _, r := range items {
+		out = append(out, AttackContentTechniqueTargeting{
+			Technique:   ToAttackRef(r.ID, cache),
+			Description: r.Description,
+		})
+	}
+	return out
+}
+
 // CollectAttackRefs returns every Attack external ID referenced by the
 // record's kind-specific fields. Used by Session.GetAttackData to walk
 // one level of references and build the AttackRef cache.
 func CollectAttackRefs(a attackTypes.Attack) []string {
 	out := make([]string, 0)
 	// Technique
-	out = append(out, a.Technique.Mitigations...)
+	for _, r := range a.Technique.Mitigations {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	out = append(out, a.Technique.Subtechniques...)
-	out = append(out, a.Technique.AssetsTargeted...)
-	out = append(out, a.Technique.DetectionStrategies...)
+	for _, r := range a.Technique.AssetsTargeted {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
+	for _, r := range a.Technique.DetectionStrategies {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	if a.Technique.Parent != "" {
 		out = append(out, a.Technique.Parent)
 	}
@@ -370,7 +517,11 @@ func CollectAttackRefs(a attackTypes.Attack) []string {
 	// Tactic
 	out = append(out, a.Tactic.Techniques...)
 	// Mitigation
-	out = append(out, a.Mitigation.TechniquesMitigated...)
+	for _, r := range a.Mitigation.TechniquesMitigated {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// Group
 	for _, t := range a.Group.TechniquesUsed {
 		if t.ID != "" {
@@ -396,10 +547,18 @@ func CollectAttackRefs(a attackTypes.Attack) []string {
 	out = append(out, a.Campaign.GroupsAttributed...)
 	out = append(out, a.Campaign.SoftwaresUsed...)
 	// Asset
-	out = append(out, a.Asset.TechniquesTargeting...)
+	for _, r := range a.Asset.TechniquesTargeting {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// DetectionStrategy
 	out = append(out, a.DetectionStrategy.Analytics...)
-	out = append(out, a.DetectionStrategy.TechniquesDetected...)
+	for _, r := range a.DetectionStrategy.TechniquesDetected {
+		if r.ID != "" {
+			out = append(out, r.ID)
+		}
+	}
 	// DataSource (kind)
 	out = append(out, a.AttackDataSource.DataComponents...)
 	// DataComponent
