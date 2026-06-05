@@ -672,7 +672,15 @@ func putAttackFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "create %q bucket", "attack")
 	}
 
-	bs, err := util.Marshal(a)
+	m := make(map[sourceTypes.SourceID]attackTypes.Attack)
+	if bs := b.Get([]byte(a.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s", a.ID))
+		}
+	}
+	m[a.DataSource.ID] = a
+
+	bs, err := util.Marshal(m)
 	if err != nil {
 		return errors.Wrapf(err, "marshal attack %s", a.ID)
 	}
@@ -704,7 +712,15 @@ func putCAPECFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "create %q bucket", "capec")
 	}
 
-	bs, err := util.Marshal(c)
+	m := make(map[sourceTypes.SourceID]capecTypes.CAPEC)
+	if bs := b.Get([]byte(c.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("capec -> %s", c.ID))
+		}
+	}
+	m[c.DataSource.ID] = c
+
+	bs, err := util.Marshal(m)
 	if err != nil {
 		return errors.Wrapf(err, "marshal capec %s", c.ID)
 	}
@@ -736,7 +752,15 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "create %q bucket", "cwe")
 	}
 
-	bs, err := util.Marshal(w)
+	m := make(map[sourceTypes.SourceID]cweTypes.CWE)
+	if bs := b.Get([]byte(w.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("cwe -> %s", w.ID))
+		}
+	}
+	m[w.DataSource.ID] = w
+
+	bs, err := util.Marshal(m)
 	if err != nil {
 		return errors.Wrapf(err, "marshal cwe %s", w.ID)
 	}
@@ -748,11 +772,11 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 	return nil
 }
 
-func (c *Connection) GetAttack(id string) (*attackTypes.Attack, error) {
+func (c *Connection) GetAttack(id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
 	if id == "" {
 		return nil, nil
 	}
-	var a attackTypes.Attack
+	var m map[sourceTypes.SourceID]attackTypes.Attack
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("attack"))
 		if b == nil {
@@ -762,7 +786,7 @@ func (c *Connection) GetAttack(id string) (*attackTypes.Attack, error) {
 		if len(bs) == 0 {
 			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", id))
 		}
-		if err := util.Unmarshal(bs, &a); err != nil {
+		if err := util.Unmarshal(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s", id))
 		}
 		return nil
@@ -772,14 +796,14 @@ func (c *Connection) GetAttack(id string) (*attackTypes.Attack, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	return &a, nil
+	return m, nil
 }
 
-func (c *Connection) GetCAPEC(id string) (*capecTypes.CAPEC, error) {
+func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
 	if id == "" {
 		return nil, nil
 	}
-	var p capecTypes.CAPEC
+	var m map[sourceTypes.SourceID]capecTypes.CAPEC
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("capec"))
 		if b == nil {
@@ -789,7 +813,7 @@ func (c *Connection) GetCAPEC(id string) (*capecTypes.CAPEC, error) {
 		if len(bs) == 0 {
 			return errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
 		}
-		if err := util.Unmarshal(bs, &p); err != nil {
+		if err := util.Unmarshal(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("capec -> %s", id))
 		}
 		return nil
@@ -799,14 +823,14 @@ func (c *Connection) GetCAPEC(id string) (*capecTypes.CAPEC, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	return &p, nil
+	return m, nil
 }
 
-func (c *Connection) GetCWE(id string) (*cweTypes.CWE, error) {
+func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
 	if id == "" {
 		return nil, nil
 	}
-	var w cweTypes.CWE
+	var m map[sourceTypes.SourceID]cweTypes.CWE
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("cwe"))
 		if b == nil {
@@ -816,7 +840,7 @@ func (c *Connection) GetCWE(id string) (*cweTypes.CWE, error) {
 		if len(bs) == 0 {
 			return errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
 		}
-		if err := util.Unmarshal(bs, &w); err != nil {
+		if err := util.Unmarshal(bs, &m); err != nil {
 			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("cwe -> %s", id))
 		}
 		return nil
@@ -826,7 +850,7 @@ func (c *Connection) GetCWE(id string) (*cweTypes.CWE, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	return &w, nil
+	return m, nil
 }
 
 func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, error) {

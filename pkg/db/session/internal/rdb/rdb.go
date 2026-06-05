@@ -123,15 +123,15 @@ func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]micro
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetAttack(id string) (*attackTypes.Attack, error) {
+func (c *Connection) GetAttack(id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetCAPEC(id string) (*capecTypes.CAPEC, error) {
+func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetCWE(id string) (*cweTypes.CWE, error) {
+func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
 	return nil, errors.New("not implemented yet")
 }
 

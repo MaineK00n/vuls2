@@ -1,4 +1,4 @@
-package search
+package types
 
 import (
 	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
@@ -17,40 +17,49 @@ import (
 	relatedweaknessTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/relatedweakness"
 	weaknessordinalityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/weaknessordinality"
 	referenceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/reference"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
-// CWERef is the minimal reference embedded in a CWEResult whenever the
-// underlying CWE record holds another CWE's ID. Carries {ID, Name,
-// Description} for embedded display.
+// CWEData is the session-layer view of a CWE record returned by
+// Session.GetCWEData. Carries per-source contents under Contents and
+// the union of contributing data-source provenance under DataSources.
+type CWEData struct {
+	ID          string                              `json:"id"`
+	Contents    map[sourceTypes.SourceID]CWEContent `json:"contents,omitempty"`
+	DataSources []datasourceTypes.DataSource        `json:"datasources,omitempty"`
+}
+
+// CWEContent is the per-source body of a CWE record. Mirrors
+// cweTypes.CWE with within-catalog ID references (Weakness.
+// RelatedWeaknesses / Category.Members / View.Members) replaced by
+// CWERef. RelatedAttackPatterns stays as raw CAPEC IDs since it crosses
+// catalogs.
+type CWEContent struct {
+	Kind        string `json:"kind,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Description string `json:"description,omitempty"`
+
+	Weakness CWEContentWeakness `json:"weakness,omitzero"`
+	Category CWEContentCategory `json:"category,omitzero"`
+	View     CWEContentView     `json:"view,omitzero"`
+
+	References []referenceTypes.Reference `json:"references,omitempty"`
+	DataSource sourceTypes.Source         `json:"data_source,omitzero"`
+}
+
+// CWERef is the minimal CWE reference embedded inside a CWEContent
+// whenever the source record carries another CWE's ID.
 type CWERef struct {
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
-// CWEResult mirrors cweTypes.CWE but replaces within-catalog CWE
-// references (Weakness.RelatedWeaknesses / Category.Members /
-// View.Members) with embedded CWERef values. RelatedAttackPatterns
-// (CAPEC IDs) stays as raw IDs since it crosses catalogs.
-type CWEResult struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Description string `json:"description,omitempty"`
-
-	Weakness CWEResultWeakness `json:"weakness,omitzero"`
-	Category CWEResultCategory `json:"category,omitzero"`
-	View     CWEResultView     `json:"view,omitzero"`
-
-	References []referenceTypes.Reference `json:"references,omitempty"`
-	DataSource sourceTypes.Source         `json:"data_source,omitzero"`
-}
-
-// CWEResultRelatedWeakness mirrors relatedweaknessTypes.RelatedWeakness
+// CWEContentRelatedWeakness mirrors relatedweaknessTypes.RelatedWeakness
 // but embeds CWERef for the referenced weakness.
-type CWEResultRelatedWeakness struct {
+type CWEContentRelatedWeakness struct {
 	Nature  string `json:"nature,omitempty"`
 	CWE     CWERef `json:"cwe,omitzero"`
 	ViewID  string `json:"view_id,omitempty"`
@@ -58,14 +67,14 @@ type CWEResultRelatedWeakness struct {
 	ChainID string `json:"chain_id,omitempty"`
 }
 
-// CWEResultMember mirrors a Category/View member with the referenced
-// CWE expanded.
-type CWEResultMember struct {
+// CWEContentMember mirrors a Category/View member with the referenced
+// CWE expanded into a CWERef.
+type CWEContentMember struct {
 	CWE    CWERef `json:"cwe"`
 	ViewID string `json:"view_id,omitempty"`
 }
 
-type CWEResultWeakness struct {
+type CWEContentWeakness struct {
 	Abstraction           string                                           `json:"abstraction,omitempty"`
 	Structure             string                                           `json:"structure,omitempty"`
 	Diagram               string                                           `json:"diagram,omitempty"`
@@ -73,7 +82,7 @@ type CWEResultWeakness struct {
 	LikelihoodOfExploit   string                                           `json:"likelihood_of_exploit,omitempty"`
 	BackgroundDetails     []string                                         `json:"background_details,omitempty"`
 	ModesOfIntroduction   []modeofintroductionTypes.ModeOfIntroduction     `json:"modes_of_introduction,omitempty"`
-	RelatedWeaknesses     []CWEResultRelatedWeakness                       `json:"related_weaknesses,omitempty"`
+	RelatedWeaknesses     []CWEContentRelatedWeakness                      `json:"related_weaknesses,omitempty"`
 	RelatedAttackPatterns []string                                         `json:"related_attack_patterns,omitempty"`
 	WeaknessOrdinalities  []weaknessordinalityTypes.WeaknessOrdinality     `json:"weakness_ordinalities,omitempty"`
 	ApplicablePlatforms   []applicableplatformTypes.ApplicablePlatform     `json:"applicable_platforms,omitempty"`
@@ -89,22 +98,24 @@ type CWEResultWeakness struct {
 	MappingNotes          mappingnotesTypes.MappingNotes                   `json:"mapping_notes,omitzero"`
 }
 
-type CWEResultCategory struct {
-	Members          []CWEResultMember                      `json:"members,omitempty"`
+type CWEContentCategory struct {
+	Members          []CWEContentMember                     `json:"members,omitempty"`
 	TaxonomyMappings []taxonomymappingTypes.TaxonomyMapping `json:"taxonomy_mappings,omitempty"`
 	Notes            []noteTypes.Note                       `json:"notes,omitempty"`
 	MappingNotes     mappingnotesTypes.MappingNotes         `json:"mapping_notes,omitzero"`
 }
 
-type CWEResultView struct {
+type CWEContentView struct {
 	Type         string                         `json:"type,omitempty"`
 	Audience     []audienceTypes.Audience       `json:"audience,omitempty"`
-	Members      []CWEResultMember              `json:"members,omitempty"`
+	Members      []CWEContentMember             `json:"members,omitempty"`
 	Notes        []noteTypes.Note               `json:"notes,omitempty"`
 	MappingNotes mappingnotesTypes.MappingNotes `json:"mapping_notes,omitzero"`
 }
 
-func toCWERef(id string, cache map[string]*cweTypes.CWE) CWERef {
+// ToCWERef converts a CWE ID to a CWERef by looking up the cache. When
+// the ID isn't cached, only the ID is set.
+func ToCWERef(id string, cache map[string]*cweTypes.CWE) CWERef {
 	if id == "" {
 		return CWERef{}
 	}
@@ -114,15 +125,15 @@ func toCWERef(id string, cache map[string]*cweTypes.CWE) CWERef {
 	return CWERef{ID: id}
 }
 
-func toCWEResultRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness, cache map[string]*cweTypes.CWE) []CWEResultRelatedWeakness {
+func toCWEContentRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness, cache map[string]*cweTypes.CWE) []CWEContentRelatedWeakness {
 	if len(items) == 0 {
 		return nil
 	}
-	out := make([]CWEResultRelatedWeakness, 0, len(items))
+	out := make([]CWEContentRelatedWeakness, 0, len(items))
 	for _, rw := range items {
-		out = append(out, CWEResultRelatedWeakness{
+		out = append(out, CWEContentRelatedWeakness{
 			Nature:  rw.Nature,
-			CWE:     toCWERef(rw.CWEID, cache),
+			CWE:     ToCWERef(rw.CWEID, cache),
 			ViewID:  rw.ViewID,
 			Ordinal: rw.Ordinal,
 			ChainID: rw.ChainID,
@@ -131,26 +142,24 @@ func toCWEResultRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness, 
 	return out
 }
 
-func toCWEResultMembers(items []memberTypes.Member, cache map[string]*cweTypes.CWE) []CWEResultMember {
+func toCWEContentMembers(items []memberTypes.Member, cache map[string]*cweTypes.CWE) []CWEContentMember {
 	if len(items) == 0 {
 		return nil
 	}
-	out := make([]CWEResultMember, 0, len(items))
+	out := make([]CWEContentMember, 0, len(items))
 	for _, m := range items {
-		out = append(out, CWEResultMember{
-			CWE:    toCWERef(m.CWEID, cache),
+		out = append(out, CWEContentMember{
+			CWE:    ToCWERef(m.CWEID, cache),
 			ViewID: m.ViewID,
 		})
 	}
 	return out
 }
 
-func toCWEResult(c *cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEResult {
-	if c == nil {
-		return CWEResult{}
-	}
-	r := CWEResult{
-		ID:          c.ID,
+// ToCWEContent converts a per-source cweTypes.CWE into the embedded-refs
+// CWEContent view.
+func ToCWEContent(c cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEContent {
+	r := CWEContent{
 		Kind:        c.Kind,
 		Name:        c.Name,
 		Status:      c.Status,
@@ -161,7 +170,7 @@ func toCWEResult(c *cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEResult {
 	switch c.Kind {
 	case "weakness":
 		w := c.Weakness
-		r.Weakness = CWEResultWeakness{
+		r.Weakness = CWEContentWeakness{
 			Abstraction:           w.Abstraction,
 			Structure:             w.Structure,
 			Diagram:               w.Diagram,
@@ -169,7 +178,7 @@ func toCWEResult(c *cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEResult {
 			LikelihoodOfExploit:   w.LikelihoodOfExploit,
 			BackgroundDetails:     w.BackgroundDetails,
 			ModesOfIntroduction:   w.ModesOfIntroduction,
-			RelatedWeaknesses:     toCWEResultRelatedWeaknesses(w.RelatedWeaknesses, cache),
+			RelatedWeaknesses:     toCWEContentRelatedWeaknesses(w.RelatedWeaknesses, cache),
 			RelatedAttackPatterns: w.RelatedAttackPatterns,
 			WeaknessOrdinalities:  w.WeaknessOrdinalities,
 			ApplicablePlatforms:   w.ApplicablePlatforms,
@@ -186,21 +195,44 @@ func toCWEResult(c *cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEResult {
 		}
 	case "category":
 		cat := c.Category
-		r.Category = CWEResultCategory{
-			Members:          toCWEResultMembers(cat.Members, cache),
+		r.Category = CWEContentCategory{
+			Members:          toCWEContentMembers(cat.Members, cache),
 			TaxonomyMappings: cat.TaxonomyMappings,
 			Notes:            cat.Notes,
 			MappingNotes:     cat.MappingNotes,
 		}
 	case "view":
 		v := c.View
-		r.View = CWEResultView{
+		r.View = CWEContentView{
 			Type:         v.Type,
 			Audience:     v.Audience,
-			Members:      toCWEResultMembers(v.Members, cache),
+			Members:      toCWEContentMembers(v.Members, cache),
 			Notes:        v.Notes,
 			MappingNotes: v.MappingNotes,
 		}
 	}
 	return r
+}
+
+// CollectCWERefs returns every CWE ID referenced by the record's
+// Weakness.RelatedWeaknesses, Category.Members and View.Members.
+// RelatedAttackPatterns (CAPEC IDs) is cross-catalog and not included.
+func CollectCWERefs(c cweTypes.CWE) []string {
+	out := make([]string, 0)
+	for _, rw := range c.Weakness.RelatedWeaknesses {
+		if rw.CWEID != "" {
+			out = append(out, rw.CWEID)
+		}
+	}
+	for _, m := range c.Category.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	for _, m := range c.View.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	return out
 }

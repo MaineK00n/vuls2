@@ -1,4 +1,4 @@
-package search
+package types
 
 import (
 	"time"
@@ -7,26 +7,23 @@ import (
 	mitigationTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec/mitigation"
 	skillsrequiredTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec/skillsrequired"
 	referenceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/reference"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
-// CAPECRef is the minimal reference embedded in a CAPECResult whenever
-// the underlying CAPEC record holds another CAPEC's ID. Carries {ID,
-// Name, Description} so a single response renders the bidirectional
-// relationship view from one query.
-type CAPECRef struct {
-	ID          string `json:"id"`
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description,omitempty"`
+// CAPECData is the session-layer view of a CAPEC record returned by
+// Session.GetCAPECData. Carries per-source contents under Contents and
+// the union of contributing data-source provenance under DataSources.
+type CAPECData struct {
+	ID          string                                `json:"id"`
+	Contents    map[sourceTypes.SourceID]CAPECContent `json:"contents,omitempty"`
+	DataSources []datasourceTypes.DataSource          `json:"datasources,omitempty"`
 }
 
-// CAPECResult mirrors capecTypes.CAPEC but replaces the within-catalog
-// reference IDs (ChildOf / ParentOf / CanFollow / CanPrecede / PeerOf)
-// with embedded CAPECRef values. Cross-catalog references (RelatedCWEs,
-// RelatedAttacks) stay as raw ID lists since the search command targets
-// one catalog at a time.
-type CAPECResult struct {
-	ID                  string                             `json:"id"`
+// CAPECContent is the per-source body of a CAPEC record. Mirrors
+// capecTypes.CAPEC with within-catalog ID references (ChildOf /
+// ParentOf / CanFollow / CanPrecede / PeerOf) replaced by CAPECRef.
+type CAPECContent struct {
 	Name                string                             `json:"name,omitempty"`
 	Description         string                             `json:"description,omitempty"`
 	ExtendedDescription string                             `json:"extended_description,omitempty"`
@@ -56,7 +53,17 @@ type CAPECResult struct {
 	DataSource          sourceTypes.Source                 `json:"data_source,omitzero"`
 }
 
-func toCAPECRef(id string, cache map[string]*capecTypes.CAPEC) CAPECRef {
+// CAPECRef is the minimal CAPEC reference embedded inside a CAPECContent
+// whenever the source record carries another CAPEC's external ID.
+type CAPECRef struct {
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ToCAPECRef converts a CAPEC external ID to a CAPECRef by looking up
+// the cache. When the ID isn't cached, only the ID is set.
+func ToCAPECRef(id string, cache map[string]*capecTypes.CAPEC) CAPECRef {
 	if id == "" {
 		return CAPECRef{}
 	}
@@ -66,23 +73,22 @@ func toCAPECRef(id string, cache map[string]*capecTypes.CAPEC) CAPECRef {
 	return CAPECRef{ID: id}
 }
 
-func toCAPECRefs(ids []string, cache map[string]*capecTypes.CAPEC) []CAPECRef {
+// ToCAPECRefs is the slice form of ToCAPECRef.
+func ToCAPECRefs(ids []string, cache map[string]*capecTypes.CAPEC) []CAPECRef {
 	if len(ids) == 0 {
 		return nil
 	}
 	out := make([]CAPECRef, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, toCAPECRef(id, cache))
+		out = append(out, ToCAPECRef(id, cache))
 	}
 	return out
 }
 
-func toCAPECResult(c *capecTypes.CAPEC, cache map[string]*capecTypes.CAPEC) CAPECResult {
-	if c == nil {
-		return CAPECResult{}
-	}
-	return CAPECResult{
-		ID:                  c.ID,
+// ToCAPECContent converts a per-source capecTypes.CAPEC into the
+// embedded-refs CAPECContent view.
+func ToCAPECContent(c capecTypes.CAPEC, cache map[string]*capecTypes.CAPEC) CAPECContent {
+	return CAPECContent{
 		Name:                c.Name,
 		Description:         c.Description,
 		ExtendedDescription: c.ExtendedDescription,
@@ -100,15 +106,28 @@ func toCAPECResult(c *capecTypes.CAPEC, cache map[string]*capecTypes.CAPEC) CAPE
 		ExecutionFlow:       c.ExecutionFlow,
 		RelatedCWEs:         c.RelatedCWEs,
 		RelatedAttacks:      c.RelatedAttacks,
-		ChildOf:             toCAPECRefs(c.ChildOf, cache),
-		ParentOf:            toCAPECRefs(c.ParentOf, cache),
-		CanFollow:           toCAPECRefs(c.CanFollow, cache),
-		CanPrecede:          toCAPECRefs(c.CanPrecede, cache),
-		PeerOf:              toCAPECRefs(c.PeerOf, cache),
+		ChildOf:             ToCAPECRefs(c.ChildOf, cache),
+		ParentOf:            ToCAPECRefs(c.ParentOf, cache),
+		CanFollow:           ToCAPECRefs(c.CanFollow, cache),
+		CanPrecede:          ToCAPECRefs(c.CanPrecede, cache),
+		PeerOf:              ToCAPECRefs(c.PeerOf, cache),
 		AlternateTerms:      c.AlternateTerms,
 		Version:             c.Version,
 		Modified:            c.Modified,
 		References:          c.References,
 		DataSource:          c.DataSource,
 	}
+}
+
+// CollectCAPECRefs returns every CAPEC external ID referenced by the
+// record's relationship fields. RelatedCWEs / RelatedAttacks are
+// cross-catalog and intentionally not included.
+func CollectCAPECRefs(c capecTypes.CAPEC) []string {
+	out := make([]string, 0)
+	out = append(out, c.ChildOf...)
+	out = append(out, c.ParentOf...)
+	out = append(out, c.CanFollow...)
+	out = append(out, c.CanPrecede...)
+	out = append(out, c.PeerOf...)
+	return out
 }

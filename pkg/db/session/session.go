@@ -45,9 +45,9 @@ type Storage interface {
 	GetIndex(ecosystemTypes.Ecosystem, string) ([]dataTypes.RootID, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
 	GetMicrosoftKB(string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error)
-	GetAttack(string) (*attackTypes.Attack, error)
-	GetCAPEC(string) (*capecTypes.CAPEC, error)
-	GetCWE(string) (*cweTypes.CWE, error)
+	GetAttack(string) (map[sourceTypes.SourceID]attackTypes.Attack, error)
+	GetCAPEC(string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error)
+	GetCWE(string) (map[sourceTypes.SourceID]cweTypes.CWE, error)
 	GetDataSources() ([]datasourceTypes.DataSource, error)
 	GetDataSource(sourceTypes.SourceID) (datasourceTypes.DataSource, error)
 
@@ -526,4 +526,203 @@ func (s Session) getVulnerability(id vulnerabilityContentTypes.VulnerabilityID) 
 	}
 	s.cache.StoreVulnerability(id, m)
 	return m, nil
+}
+
+// GetAttackData fetches the per-source ATT&CK record(s) for id and
+// resolves one level of within-catalog references so the returned
+// AttackData carries embedded {ID, Name, Description} refs alongside
+// each Mitigation / Sub-technique / Procedure / etc. The DataSources
+// field collects the per-source provenance for the queried record and
+// every referenced record contributing to the embedded refs.
+func (s Session) GetAttackData(id string) (dbTypes.AttackData, error) {
+	d := dbTypes.AttackData{ID: id}
+
+	primary, err := s.storage.GetAttack(id)
+	if err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+			return d, nil
+		}
+		return d, errors.Wrapf(err, "get attack %s", id)
+	}
+	if len(primary) == 0 {
+		return d, nil
+	}
+
+	refCache := make(map[string]*attackTypes.Attack)
+	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	for sid, a := range primary {
+		if _, ok := refCache[a.ID]; !ok {
+			refCache[a.ID] = &a
+		}
+		sourceIDs[sid] = struct{}{}
+	}
+
+	seenRef := map[string]struct{}{id: {}}
+	for _, a := range primary {
+		for _, ref := range dbTypes.CollectAttackRefs(a) {
+			if _, ok := seenRef[ref]; ok {
+				continue
+			}
+			seenRef[ref] = struct{}{}
+			rm, err := s.storage.GetAttack(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+					continue
+				}
+				return d, errors.Wrapf(err, "get attack %s", ref)
+			}
+			for sid, ra := range rm {
+				if _, ok := refCache[ra.ID]; !ok {
+					refCache[ra.ID] = &ra
+				}
+				sourceIDs[sid] = struct{}{}
+			}
+		}
+	}
+
+	d.Contents = make(map[sourceTypes.SourceID]dbTypes.AttackContent, len(primary))
+	for sid, a := range primary {
+		d.Contents[sid] = dbTypes.ToAttackContent(a, refCache)
+	}
+
+	d.DataSources = collectDataSources(s.storage, sourceIDs)
+	return d, nil
+}
+
+// GetCAPECData fetches the per-source CAPEC record(s) for id and
+// resolves one level of within-catalog references (ChildOf / ParentOf /
+// CanFollow / CanPrecede / PeerOf). Cross-catalog references
+// (RelatedCWEs, RelatedAttacks) stay as raw ID strings.
+func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
+	d := dbTypes.CAPECData{ID: id}
+
+	primary, err := s.storage.GetCAPEC(id)
+	if err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+			return d, nil
+		}
+		return d, errors.Wrapf(err, "get capec %s", id)
+	}
+	if len(primary) == 0 {
+		return d, nil
+	}
+
+	refCache := make(map[string]*capecTypes.CAPEC)
+	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	for sid, c := range primary {
+		if _, ok := refCache[c.ID]; !ok {
+			refCache[c.ID] = &c
+		}
+		sourceIDs[sid] = struct{}{}
+	}
+
+	seenRef := map[string]struct{}{id: {}}
+	for _, c := range primary {
+		for _, ref := range dbTypes.CollectCAPECRefs(c) {
+			if _, ok := seenRef[ref]; ok {
+				continue
+			}
+			seenRef[ref] = struct{}{}
+			rm, err := s.storage.GetCAPEC(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+					continue
+				}
+				return d, errors.Wrapf(err, "get capec %s", ref)
+			}
+			for sid, rc := range rm {
+				if _, ok := refCache[rc.ID]; !ok {
+					refCache[rc.ID] = &rc
+				}
+				sourceIDs[sid] = struct{}{}
+			}
+		}
+	}
+
+	d.Contents = make(map[sourceTypes.SourceID]dbTypes.CAPECContent, len(primary))
+	for sid, c := range primary {
+		d.Contents[sid] = dbTypes.ToCAPECContent(c, refCache)
+	}
+
+	d.DataSources = collectDataSources(s.storage, sourceIDs)
+	return d, nil
+}
+
+// GetCWEData fetches the per-source CWE record(s) for id and resolves
+// one level of within-catalog references (Weakness.RelatedWeaknesses
+// and Category/View.Members). RelatedAttackPatterns (CAPEC IDs) stays
+// as raw ID strings since it crosses catalogs.
+func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
+	d := dbTypes.CWEData{ID: id}
+
+	primary, err := s.storage.GetCWE(id)
+	if err != nil {
+		if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+			return d, nil
+		}
+		return d, errors.Wrapf(err, "get cwe %s", id)
+	}
+	if len(primary) == 0 {
+		return d, nil
+	}
+
+	refCache := make(map[string]*cweTypes.CWE)
+	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	for sid, w := range primary {
+		if _, ok := refCache[w.ID]; !ok {
+			refCache[w.ID] = &w
+		}
+		sourceIDs[sid] = struct{}{}
+	}
+
+	seenRef := map[string]struct{}{id: {}}
+	for _, w := range primary {
+		for _, ref := range dbTypes.CollectCWERefs(w) {
+			if _, ok := seenRef[ref]; ok {
+				continue
+			}
+			seenRef[ref] = struct{}{}
+			rm, err := s.storage.GetCWE(ref)
+			if err != nil {
+				if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+					continue
+				}
+				return d, errors.Wrapf(err, "get cwe %s", ref)
+			}
+			for sid, rw := range rm {
+				if _, ok := refCache[rw.ID]; !ok {
+					refCache[rw.ID] = &rw
+				}
+				sourceIDs[sid] = struct{}{}
+			}
+		}
+	}
+
+	d.Contents = make(map[sourceTypes.SourceID]dbTypes.CWEContent, len(primary))
+	for sid, w := range primary {
+		d.Contents[sid] = dbTypes.ToCWEContent(w, refCache)
+	}
+
+	d.DataSources = collectDataSources(s.storage, sourceIDs)
+	return d, nil
+}
+
+// collectDataSources looks up datasource provenance for every SourceID
+// in ids. Missing sources are skipped silently — the per-source
+// AttackContent.DataSource (or CAPEC/CWE equivalent) still carries the
+// per-record source ID, so the loss is just the repository metadata.
+func collectDataSources(storage Storage, ids map[sourceTypes.SourceID]struct{}) []datasourceTypes.DataSource {
+	if len(ids) == 0 {
+		return nil
+	}
+	keys := slices.Sorted(maps.Keys(ids))
+	out := make([]datasourceTypes.DataSource, 0, len(keys))
+	for _, id := range keys {
+		ds, err := storage.GetDataSource(id)
+		if err != nil {
+			continue
+		}
+		out = append(out, ds)
+	}
+	return out
 }

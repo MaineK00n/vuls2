@@ -15,9 +15,6 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
-	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
-	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
-	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
@@ -1186,10 +1183,11 @@ func joinKBList(ss []string) string {
 	return strings.Join(filtered, " ")
 }
 
-// SearchAttack returns the queried MITRE ATT&CK records along with every
-// other Attack record they reference (mitigations, sub-techniques,
-// detection strategies, assets, groups/software/campaigns, etc.) so a
-// single query produces the same bidirectional view as the ATT&CK web UI.
+// SearchAttack delegates to Session.GetAttackData for each query, so a
+// single response carries the queried MITRE ATT&CK records together
+// with embedded {ID, Name, Description} refs for every Mitigation /
+// Sub-technique / Procedure / etc. they touch. The output map is keyed
+// only by the queried IDs; referenced records appear inline.
 func SearchAttack(queries []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1230,41 +1228,20 @@ func SearchAttack(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE ATT&CK", "ids", queries)
-	cache := make(map[string]*attackTypes.Attack)
-	queried := make([]string, 0, len(queries))
+	results := make(map[string]dbTypes.AttackData, len(queries))
 	for _, query := range queries {
-		if _, ok := cache[query]; ok {
+		if _, ok := results[query]; ok {
 			continue
 		}
-		a, err := s.Storage().GetAttack(query)
+		d, err := s.GetAttackData(query)
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundAttack) {
-				slog.Warn(err.Error())
-				continue
-			}
-			return errors.Wrapf(err, "get attack %s", query)
+			return errors.Wrapf(err, "get attack data %s", query)
 		}
-		cache[query] = a
-		queried = append(queried, query)
-		for _, ref := range collectAttackRefs(a) {
-			if _, ok := cache[ref]; ok {
-				continue
-			}
-			ra, err := s.Storage().GetAttack(ref)
-			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
-					slog.Warn(err.Error())
-					continue
-				}
-				return errors.Wrapf(err, "get attack %s", ref)
-			}
-			cache[ref] = ra
+		if len(d.Contents) == 0 {
+			slog.Warn("attack not found", "id", query)
+			continue
 		}
-	}
-
-	results := make(map[string]AttackResult, len(queried))
-	for _, id := range queried {
-		results[id] = toAttackResult(cache[id], cache)
+		results[query] = d
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
@@ -1273,76 +1250,10 @@ func SearchAttack(queries []string, opts ...Option) error {
 	return nil
 }
 
-// collectAttackRefs returns every Attack ext-ID referenced by the given
-// record's kind-specific fields. Used for one-level bidirectional
-// resolution in SearchAttack.
-func collectAttackRefs(a *attackTypes.Attack) []string {
-	if a == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	// Technique
-	out = append(out, a.Technique.Mitigations...)
-	out = append(out, a.Technique.Subtechniques...)
-	out = append(out, a.Technique.AssetsTargeted...)
-	out = append(out, a.Technique.DetectionStrategies...)
-	if a.Technique.Parent != "" {
-		out = append(out, a.Technique.Parent)
-	}
-	for _, p := range a.Technique.Procedures {
-		if p.AttackerID != "" {
-			out = append(out, p.AttackerID)
-		}
-	}
-	// Tactic
-	out = append(out, a.Tactic.Techniques...)
-	// Mitigation
-	out = append(out, a.Mitigation.TechniquesMitigated...)
-	// Group
-	for _, t := range a.Group.TechniquesUsed {
-		if t.ID != "" {
-			out = append(out, t.ID)
-		}
-	}
-	out = append(out, a.Group.SoftwaresUsed...)
-	out = append(out, a.Group.CampaignsAttributed...)
-	// Software
-	for _, t := range a.Software.TechniquesUsed {
-		if t.ID != "" {
-			out = append(out, t.ID)
-		}
-	}
-	out = append(out, a.Software.GroupsUsing...)
-	out = append(out, a.Software.CampaignsUsing...)
-	// Campaign
-	for _, t := range a.Campaign.TechniquesUsed {
-		if t.ID != "" {
-			out = append(out, t.ID)
-		}
-	}
-	out = append(out, a.Campaign.GroupsAttributed...)
-	out = append(out, a.Campaign.SoftwaresUsed...)
-	// Asset
-	out = append(out, a.Asset.TechniquesTargeting...)
-	// DetectionStrategy
-	out = append(out, a.DetectionStrategy.Analytics...)
-	out = append(out, a.DetectionStrategy.TechniquesDetected...)
-	// DataSource (kind)
-	out = append(out, a.AttackDataSource.DataComponents...)
-	// DataComponent
-	if a.DataComponent.DataSource != "" {
-		out = append(out, a.DataComponent.DataSource)
-	}
-	// Analytic
-	if a.Analytic.DetectionStrategy != "" {
-		out = append(out, a.Analytic.DetectionStrategy)
-	}
-	return out
-}
-
-// SearchCAPEC returns the queried CAPEC records along with related CAPEC
-// records they cross-reference (ChildOf / ParentOf / CanFollow /
-// CanPrecede / PeerOf).
+// SearchCAPEC delegates to Session.GetCAPECData for each query.
+// Within-catalog references (ChildOf / ParentOf / CanFollow /
+// CanPrecede / PeerOf) are embedded inline as CAPECRef; cross-catalog
+// references (RelatedCWEs, RelatedAttacks) stay as raw ID strings.
 func SearchCAPEC(queries []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1383,41 +1294,20 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CAPEC", "ids", queries)
-	cache := make(map[string]*capecTypes.CAPEC)
-	queried := make([]string, 0, len(queries))
+	results := make(map[string]dbTypes.CAPECData, len(queries))
 	for _, query := range queries {
-		if _, ok := cache[query]; ok {
+		if _, ok := results[query]; ok {
 			continue
 		}
-		c, err := s.Storage().GetCAPEC(query)
+		d, err := s.GetCAPECData(query)
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
-				slog.Warn(err.Error())
-				continue
-			}
-			return errors.Wrapf(err, "get capec %s", query)
+			return errors.Wrapf(err, "get capec data %s", query)
 		}
-		cache[query] = c
-		queried = append(queried, query)
-		for _, ref := range collectCAPECRefs(c) {
-			if _, ok := cache[ref]; ok {
-				continue
-			}
-			rc, err := s.Storage().GetCAPEC(ref)
-			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
-					slog.Warn(err.Error())
-					continue
-				}
-				return errors.Wrapf(err, "get capec %s", ref)
-			}
-			cache[ref] = rc
+		if len(d.Contents) == 0 {
+			slog.Warn("capec not found", "id", query)
+			continue
 		}
-	}
-
-	results := make(map[string]CAPECResult, len(queried))
-	for _, id := range queried {
-		results[id] = toCAPECResult(cache[id], cache)
+		results[query] = d
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
@@ -1426,26 +1316,10 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 	return nil
 }
 
-// collectCAPECRefs returns every CAPEC ext-ID referenced by the given
-// record's relationship fields (ChildOf / ParentOf / CanFollow /
-// CanPrecede / PeerOf). RelatedCWEs / RelatedAttacks are cross-catalog
-// references and are not resolved here.
-func collectCAPECRefs(c *capecTypes.CAPEC) []string {
-	if c == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	out = append(out, c.ChildOf...)
-	out = append(out, c.ParentOf...)
-	out = append(out, c.CanFollow...)
-	out = append(out, c.CanPrecede...)
-	out = append(out, c.PeerOf...)
-	return out
-}
-
-// SearchCWE returns the queried CWE records along with related CWE
-// records they cross-reference (RelatedWeaknesses, Category/View
-// Members).
+// SearchCWE delegates to Session.GetCWEData for each query.
+// Within-catalog references (Weakness.RelatedWeaknesses, Category/View
+// Members) are embedded inline as CWERef; cross-catalog
+// RelatedAttackPatterns stays as raw CAPEC IDs.
 func SearchCWE(queries []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1486,71 +1360,24 @@ func SearchCWE(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CWE", "ids", queries)
-	cache := make(map[string]*cweTypes.CWE)
-	queried := make([]string, 0, len(queries))
+	results := make(map[string]dbTypes.CWEData, len(queries))
 	for _, query := range queries {
-		if _, ok := cache[query]; ok {
+		if _, ok := results[query]; ok {
 			continue
 		}
-		c, err := s.Storage().GetCWE(query)
+		d, err := s.GetCWEData(query)
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundCWE) {
-				slog.Warn(err.Error())
-				continue
-			}
-			return errors.Wrapf(err, "get cwe %s", query)
+			return errors.Wrapf(err, "get cwe data %s", query)
 		}
-		cache[query] = c
-		queried = append(queried, query)
-		for _, ref := range collectCWERefs(c) {
-			if _, ok := cache[ref]; ok {
-				continue
-			}
-			rc, err := s.Storage().GetCWE(ref)
-			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundCWE) {
-					slog.Warn(err.Error())
-					continue
-				}
-				return errors.Wrapf(err, "get cwe %s", ref)
-			}
-			cache[ref] = rc
+		if len(d.Contents) == 0 {
+			slog.Warn("cwe not found", "id", query)
+			continue
 		}
-	}
-
-	results := make(map[string]CWEResult, len(queried))
-	for _, id := range queried {
-		results[id] = toCWEResult(cache[id], cache)
+		results[query] = d
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
 		return errors.Wrap(err, "encode cwe")
 	}
 	return nil
-}
-
-// collectCWERefs returns every CWE ID referenced by the given record's
-// Weakness.RelatedWeaknesses, Category.Members and View.Members fields.
-// RelatedAttackPatterns (CAPEC IDs) are cross-catalog and not resolved here.
-func collectCWERefs(c *cweTypes.CWE) []string {
-	if c == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	for _, rw := range c.Weakness.RelatedWeaknesses {
-		if rw.CWEID != "" {
-			out = append(out, rw.CWEID)
-		}
-	}
-	for _, m := range c.Category.Members {
-		if m.CWEID != "" {
-			out = append(out, m.CWEID)
-		}
-	}
-	for _, m := range c.View.Members {
-		if m.CWEID != "" {
-			out = append(out, m.CWEID)
-		}
-	}
-	return out
 }
