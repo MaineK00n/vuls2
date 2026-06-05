@@ -58,12 +58,18 @@ type AttackContent struct {
 
 // AttackRef is the minimal ATT&CK reference embedded inside an
 // AttackContent whenever the source record carries another ATT&CK
-// record's external ID.
+// record's external ID. Carries the columns shown on the ATT&CK web
+// UI's relationship tables (Domain / ID / Name / Use), plus parent +
+// is_subtechnique so consumers can render sub-technique grouping
+// (e.g., T1078.001 indented under T1078 on the Mitigation page).
 type AttackRef struct {
-	ID          string           `json:"id"`
-	Kind        attackTypes.Kind `json:"kind,omitempty"`
-	Name        string           `json:"name,omitempty"`
-	Description string           `json:"description,omitempty"`
+	ID             string           `json:"id"`
+	Kind           attackTypes.Kind `json:"kind,omitempty"`
+	Name           string           `json:"name,omitempty"`
+	Description    string           `json:"description,omitempty"`
+	Domains        []string         `json:"domains,omitempty"`
+	Parent         string           `json:"parent,omitempty"`
+	IsSubtechnique bool             `json:"is_subtechnique,omitempty"`
 }
 
 type AttackContentProcedure struct {
@@ -219,10 +225,13 @@ func ToAttackRef(id string, cache map[string]*attackTypes.Attack) AttackRef {
 	}
 	if a, ok := cache[id]; ok && a != nil {
 		return AttackRef{
-			ID:          a.ID,
-			Kind:        a.Kind,
-			Name:        a.Name,
-			Description: a.Description,
+			ID:             a.ID,
+			Kind:           a.Kind,
+			Name:           a.Name,
+			Description:    a.Description,
+			Domains:        a.Domains,
+			Parent:         a.Technique.Parent,
+			IsSubtechnique: a.Technique.IsSubtechnique,
 		}
 	}
 	return AttackRef{ID: id}
