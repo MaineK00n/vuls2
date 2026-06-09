@@ -463,6 +463,32 @@ func TestConnection_Put(t *testing.T) {
 				"datasource -> source-b":                  []byte(`{"id":"source-b","name":"Source B","raw":[{"url":"ghcr.io/vulsio/source-b"}]}`),
 			},
 		},
+		{
+			name: "cpe",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				roots: []string{"testdata/fixtures/nvd-cpe/nvd-feed-cve-v2"},
+			},
+			want: map[string][]byte{
+				"metadata":                                        nil,
+				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":                                   nil,
+				"vulnerability -> root":                           nil,
+				"vulnerability -> root -> CVE-2024-0028":          []byte(`{"id":"CVE-2024-0028","vulnerabilities":["CVE-2024-0028"],"ecosystems":["cpe"],"data_sources":["nvd-feed-cve-v2"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2024-0028": []byte(`{"nvd-feed-cve-v2":{"CVE-2024-0028":[{"content":{"id":"CVE-2024-0028","description":"In Audio Service, there is a possible way to obtain MAC addresses of nearby Bluetooth devices due to a missing permission check. This could lead to local escalation of privilege with no additional execution privileges needed. User interaction is not needed for exploitation.","severity":[{"type":"cvss_v31","source":"134c704f-9b21-4f2e-91b3-4a467353bcc0","cvss_v31":{"vector":"CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N","base_score":5.5,"base_severity":"MEDIUM","temporal_score":5.5,"temporal_severity":"MEDIUM","environmental_score":5.5,"environmental_severity":"MEDIUM"}}],"cwe":[{"source":"134c704f-9b21-4f2e-91b3-4a467353bcc0","cwe":["CWE-862"]}],"references":[{"source":"nvd.nist.gov","url":"https://nvd.nist.gov/vuln/detail/CVE-2024-0028"},{"source":"security@android.com","url":"https://source.android.com/security/bulletin/android-16"}],"published":"2025-09-05T17:15:33.27Z","modified":"2025-09-08T16:38:34.34Z"},"segments":[{"ecosystem":"cpe"}]}]}}`),
+				"cpe":                               nil,
+				"cpe -> detection":                  nil,
+				"cpe -> detection -> CVE-2024-0028": []byte(`{"nvd-feed-cve-v2":[{"criteria":{"operator":"OR","criterias":[{"operator":"OR","criterias":[{"operator":"OR","criterias":[{"operator":"OR","criterions":[{"type":"cpe","cpe":{"vulnerable":true,"fix_status":{"class":"unknown"},"cpe":"cpe:2.3:o:google:android:16.0:*:*:*:*:*:*:*"}}]}]}]}]}}]}`),
+				"cpe -> index":                      nil,
+				"cpe -> index -> o:google:android":  []byte(`["CVE-2024-0028"]`),
+				"datasource":                        nil,
+				"datasource -> nvd-feed-cve-v2":     []byte(`{"id":"nvd-feed-cve-v2","name":"NVD Feed CVE v2"}`),
+			},
+		},
 	}
 
 	for _, tt := range tests {
