@@ -6,6 +6,7 @@ import (
 
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	ccTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/cpecriterion"
 	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
 	necriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
 	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
@@ -209,6 +210,29 @@ func TestWalkCriteria(t *testing.T) {
 				},
 			},
 			want: []string{"kpatch-patch-3_10_0-1062_1_1", "kernel"},
+		},
+		{
+			name: "cpe",
+			args: args{
+				ca: criteriaTypes.Criteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.Criterion{
+						{
+							Type: criterionTypes.CriterionTypeCPE,
+							CPE: &ccTypes.Criterion{
+								CPE: "cpe:2.3:a:cisco:unified_communications_manager:*:*:*:*:*:*:*:*",
+							},
+						},
+						{
+							Type: criterionTypes.CriterionTypeCPE,
+							CPE: &ccTypes.Criterion{
+								CPE: "cpe:2.3:a:vendor:product:1.2.3:*:*:*:*:*:*:*",
+							},
+						},
+					},
+				},
+			},
+			want: []string{"cisco:unified_communications_manager", "vendor:product"},
 		},
 		{
 			name: "kb",

@@ -47,24 +47,27 @@ func WalkCriteria(ca criteriaTypes.Criteria) ([]string, error) {
 				pkgs = append(pkgs, cn.Version.Package.Binary.Name)
 			case vcPackageType.PackageTypeSource:
 				pkgs = append(pkgs, cn.Version.Package.Source.Name)
-			case vcPackageType.PackageTypeCPE:
-				wfn, err := naming.UnbindFS(string(*cn.Version.Package.CPE))
-				if err != nil {
-					return nil, errors.Wrapf(err, "unbind %q", string(*cn.Version.Package.CPE))
-				}
-				pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
 			case vcPackageType.PackageTypeLanguage:
 				pkgs = append(pkgs, cn.Version.Package.Language.Name)
 			default:
-				return nil, errors.Errorf("unexpected version criterion package type. expected: %q, actual: %q", []vcPackageType.PackageType{vcPackageType.PackageTypeBinary, vcPackageType.PackageTypeSource, vcPackageType.PackageTypeCPE, vcPackageType.PackageTypeLanguage}, cn.Version.Package.Type)
+				return nil, errors.Errorf("unexpected version criterion package type. expected: %q, actual: %q", []vcPackageType.PackageType{vcPackageType.PackageTypeBinary, vcPackageType.PackageTypeSource, vcPackageType.PackageTypeLanguage}, cn.Version.Package.Type)
 			}
 		case criterionTypes.CriterionTypeNoneExist:
 		case criterionTypes.CriterionTypeKB:
 			if cn.KB != nil {
 				pkgs = append(pkgs, cn.KB.Product)
 			}
+		case criterionTypes.CriterionTypeCPE:
+			if cn.CPE == nil {
+				continue
+			}
+			wfn, err := naming.UnbindFS(string(cn.CPE.CPE))
+			if err != nil {
+				return nil, errors.Wrapf(err, "unbind %q", string(cn.CPE.CPE))
+			}
+			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
 		default:
-			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB}, cn.Type)
+			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB, criterionTypes.CriterionTypeCPE}, cn.Type)
 		}
 	}
 

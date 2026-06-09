@@ -13,6 +13,7 @@ import (
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
+	ccTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/cpecriterion"
 	kbcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/kbcriterion"
 	necriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion"
 	necBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/noneexistcriterion/binary"
@@ -737,6 +738,57 @@ func Test_replaceIndexes(t *testing.T) {
 							},
 						},
 						Accepts: criterionTypes.AcceptQueries{Version: []int{42}},
+					},
+				},
+			},
+		},
+		{
+			name: "cpe criterions",
+			args: args{
+				fca: criteriaTypes.FilteredCriteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.FilteredCriterion{
+						{
+							Criterion: criterionTypes.Criterion{
+								Type: criterionTypes.CriterionTypeCPE,
+								CPE: &ccTypes.Criterion{
+									CPE: "cpe:2.3:a:vendor:pkg0:*:*:*:*:*:*:*:*",
+								},
+							},
+						},
+						{
+							Criterion: criterionTypes.Criterion{
+								Type: criterionTypes.CriterionTypeCPE,
+								CPE: &ccTypes.Criterion{
+									CPE: "cpe:2.3:a:vendor:pkg1:*:*:*:*:*:*:*:*",
+								},
+							},
+							Accepts: criterionTypes.AcceptQueries{CPE: []int{0}},
+						},
+					},
+				},
+				indexes: []int{1, 0},
+			},
+			want: criteriaTypes.FilteredCriteria{
+				Operator: criteriaTypes.CriteriaOperatorTypeOR,
+				Criterions: []criterionTypes.FilteredCriterion{
+					{
+						Criterion: criterionTypes.Criterion{
+							Type: criterionTypes.CriterionTypeCPE,
+							CPE: &ccTypes.Criterion{
+								CPE: "cpe:2.3:a:vendor:pkg0:*:*:*:*:*:*:*:*",
+							},
+						},
+						Accepts: criterionTypes.AcceptQueries{CPE: []int{}},
+					},
+					{
+						Criterion: criterionTypes.Criterion{
+							Type: criterionTypes.CriterionTypeCPE,
+							CPE: &ccTypes.Criterion{
+								CPE: "cpe:2.3:a:vendor:pkg1:*:*:*:*:*:*:*:*",
+							},
+						},
+						Accepts: criterionTypes.AcceptQueries{CPE: []int{1}},
 					},
 				},
 			},
