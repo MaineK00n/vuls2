@@ -136,6 +136,7 @@ func TestDetect(t *testing.T) {
 				t.Fatalf("open db connection. error = %v", err)
 			}
 			defer s.Storage().Close()
+			defer s.Cache().Close()
 
 			got, err := cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency)
 			if (err != nil) != tt.wantErr {
