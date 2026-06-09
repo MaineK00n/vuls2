@@ -30,7 +30,8 @@ func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[da
 		if err != nil {
 			return nil, errors.Wrapf(err, "unbind %q to WFN", cpe)
 		}
-		qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))] = append(qm[fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))], i)
+		key := fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))
+		qm[key] = append(qm[key], i)
 	}
 
 	dm, err := util.Detect(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
