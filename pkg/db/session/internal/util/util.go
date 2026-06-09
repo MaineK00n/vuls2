@@ -65,7 +65,7 @@ func WalkCriteria(ca criteriaTypes.Criteria) ([]string, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "unbind %q", string(cn.CPE.CPE))
 			}
-			pkgs = append(pkgs, fmt.Sprintf("%s:%s", wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+			pkgs = append(pkgs, fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
 		default:
 			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB, criterionTypes.CriterionTypeCPE}, cn.Type)
 		}

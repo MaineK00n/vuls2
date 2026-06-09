@@ -232,7 +232,7 @@ func TestWalkCriteria(t *testing.T) {
 					},
 				},
 			},
-			want: []string{"cisco:unified_communications_manager", "vendor:product"},
+			want: []string{"a:cisco:unified_communications_manager", "a:vendor:product"},
 		},
 		{
 			name: "kb",
