@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
 	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -45,7 +46,7 @@ type Storage interface {
 	GetIndex(ecosystemTypes.Ecosystem, string) ([]dataTypes.RootID, error)
 	GetDetection(ecosystemTypes.Ecosystem, dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error)
 	GetMicrosoftKB(string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error)
-	GetAttack(string) (map[sourceTypes.SourceID]attackTypes.Attack, error)
+	GetAttack(kindTypes.Kind, string) (map[sourceTypes.SourceID]attackTypes.Attack, error)
 	GetCAPEC(string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error)
 	GetCWE(string) (map[sourceTypes.SourceID]cweTypes.CWE, error)
 	GetDataSources() ([]datasourceTypes.DataSource, error)
@@ -528,52 +529,56 @@ func (s Session) getVulnerability(id vulnerabilityContentTypes.VulnerabilityID) 
 	return m, nil
 }
 
-// GetAttackData fetches the per-source ATT&CK record(s) for id and
-// resolves one level of within-catalog references so the returned
+// GetAttackData fetches the per-source ATT&CK record(s) for (kind, id)
+// and resolves one level of within-catalog references so the returned
 // AttackData carries embedded {ID, Name, Description} refs alongside
 // each Mitigation / Sub-technique / Procedure / etc. The DataSources
 // field collects the per-source provenance for the queried record and
-// every referenced record contributing to the embedded refs.
-func (s Session) GetAttackData(id string) (dbTypes.AttackData, error) {
-	d := dbTypes.AttackData{ID: id}
+// every referenced record contributing to the embedded refs. (kind, id)
+// rather than id alone is the composite primary key because pre-2019
+// 1:1 mitigation course-of-action records share T#### ids with their
+// live Techniques.
+func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackData, error) {
+	d := dbTypes.AttackData{Kind: kind, ID: id}
 
-	primary, err := s.storage.GetAttack(id)
+	primary, err := s.storage.GetAttack(kind, id)
 	if err != nil {
 		if errors.Is(err, dbTypes.ErrNotFoundAttack) {
 			return d, nil
 		}
-		return d, errors.Wrapf(err, "get attack %s", id)
+		return d, errors.Wrapf(err, "get attack %s/%s", kind, id)
 	}
 	if len(primary) == 0 {
 		return d, nil
 	}
 
-	refCache := make(map[string]*attackTypes.Attack)
+	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
+	refCache := make(map[dbTypes.AttackRefID]*attackTypes.Attack)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	for sid, a := range primary {
-		if _, ok := refCache[a.ID]; !ok {
-			refCache[a.ID] = &a
+		if _, ok := refCache[selfKey]; !ok {
+			refCache[selfKey] = &a
 		}
 		sourceIDs[sid] = struct{}{}
 	}
 
-	seenRef := map[string]struct{}{id: {}}
+	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
 	for _, a := range primary {
 		for _, ref := range dbTypes.CollectAttackRefs(a) {
 			if _, ok := seenRef[ref]; ok {
 				continue
 			}
 			seenRef[ref] = struct{}{}
-			rm, err := s.storage.GetAttack(ref)
+			rm, err := s.storage.GetAttack(ref.Kind, ref.ID)
 			if err != nil {
 				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
 					continue
 				}
-				return d, errors.Wrapf(err, "get attack %s", ref)
+				return d, errors.Wrapf(err, "get attack %s/%s", ref.Kind, ref.ID)
 			}
 			for sid, ra := range rm {
-				if _, ok := refCache[ra.ID]; !ok {
-					refCache[ra.ID] = &ra
+				if _, ok := refCache[ref]; !ok {
+					refCache[ref] = &ra
 				}
 				sourceIDs[sid] = struct{}{}
 			}

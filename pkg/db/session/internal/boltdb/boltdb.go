@@ -14,6 +14,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
 	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -663,30 +664,38 @@ func putAttackFile(tx *bolt.Tx, path string) error {
 	if err := json.UnmarshalRead(f, &a); err != nil {
 		return errors.Wrapf(err, "unmarshal %s", path)
 	}
-	if a.ID == "" {
+	if a.ID == "" || a.Kind == "" {
 		return nil
 	}
 
-	b, err := tx.CreateBucketIfNotExists([]byte("attack"))
+	// ATT&CK's external_id namespace is per-Kind, not global: pre-2019
+	// 1:1 course-of-action mitigations share T#### ids with their live
+	// Techniques. A nested bucket per Kind is the canonical bolt way to
+	// hold both records without one overwriting the other.
+	parent, err := tx.CreateBucketIfNotExists([]byte("attack"))
 	if err != nil {
 		return errors.Wrapf(err, "create %q bucket", "attack")
+	}
+	b, err := parent.CreateBucketIfNotExists([]byte(string(a.Kind)))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", fmt.Sprintf("attack -> %s", a.Kind))
 	}
 
 	m := make(map[sourceTypes.SourceID]attackTypes.Attack)
 	if bs := b.Get([]byte(a.ID)); len(bs) > 0 {
 		if err := util.Unmarshal(bs, &m); err != nil {
-			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s", a.ID))
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s -> %s", a.Kind, a.ID))
 		}
 	}
 	m[a.DataSource.ID] = a
 
 	bs, err := util.Marshal(m)
 	if err != nil {
-		return errors.Wrapf(err, "marshal attack %s", a.ID)
+		return errors.Wrapf(err, "marshal attack %s/%s", a.Kind, a.ID)
 	}
 
 	if err := b.Put([]byte(a.ID), bs); err != nil {
-		return errors.Wrapf(err, "put %q", fmt.Sprintf("attack -> %s", a.ID))
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("attack -> %s -> %s", a.Kind, a.ID))
 	}
 
 	return nil
@@ -772,22 +781,26 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 	return nil
 }
 
-func (c *Connection) GetAttack(id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
-	if id == "" {
+func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
+	if kind == "" || id == "" {
 		return nil, nil
 	}
 	var m map[sourceTypes.SourceID]attackTypes.Attack
 	if err := c.conn.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("attack"))
+		parent := tx.Bucket([]byte("attack"))
+		if parent == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
+		}
+		b := parent.Bucket([]byte(string(kind)))
 		if b == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", id))
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
 		}
 		bs := b.Get([]byte(id))
 		if len(bs) == 0 {
-			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", id))
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
 		}
 		if err := util.Unmarshal(bs, &m); err != nil {
-			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s", id))
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s -> %s", kind, id))
 		}
 		return nil
 	}); err != nil {

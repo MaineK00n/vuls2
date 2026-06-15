@@ -5,6 +5,7 @@ import (
 	"github.com/redis/rueidis"
 
 	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
 	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -91,7 +92,7 @@ func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]micro
 	return nil, errors.New("not implemented yet")
 }
 
-func (c *Connection) GetAttack(id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
+func (c *Connection) GetAttack(_ kindTypes.Kind, _ string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
 	return nil, errors.New("not implemented yet")
 }
 

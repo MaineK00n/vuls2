@@ -19,6 +19,7 @@ import (
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -1183,11 +1184,14 @@ func joinKBList(ss []string) string {
 	return strings.Join(filtered, " ")
 }
 
-// SearchAttack delegates to Session.GetAttackData for each query, so a
-// single response carries the queried MITRE ATT&CK records together
-// with embedded {ID, Name, Description} refs for every Mitigation /
-// Sub-technique / Procedure / etc. they touch. The output map is keyed
-// only by the queried IDs; referenced records appear inline.
+// SearchAttack delegates to Session.GetAttackData for each query and
+// returns every Kind that holds a record with that external_id.
+// Pre-2019 1:1 mitigation course-of-action records share T#### ids
+// with their live Techniques, so a single query like "T1047" can
+// legitimately yield both a Technique and a (deprecated) Mitigation —
+// hence map[query][]AttackData rather than a single AttackData per
+// query. Cross-record references appear inline as embedded
+// {ID, Name, Description} refs inside each result.
 func SearchAttack(queries []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1228,20 +1232,26 @@ func SearchAttack(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE ATT&CK", "ids", queries)
-	results := make(map[string]dbTypes.AttackData, len(queries))
+	results := make(map[string][]dbTypes.AttackData, len(queries))
 	for _, query := range queries {
 		if _, ok := results[query]; ok {
 			continue
 		}
-		d, err := s.GetAttackData(query)
-		if err != nil {
-			return errors.Wrapf(err, "get attack data %s", query)
+		var ds []dbTypes.AttackData
+		for _, kind := range kindTypes.All() {
+			d, err := s.GetAttackData(kind, query)
+			if err != nil {
+				return errors.Wrapf(err, "get attack data %s/%s", kind, query)
+			}
+			if len(d.Contents) > 0 {
+				ds = append(ds, d)
+			}
 		}
-		if len(d.Contents) == 0 {
+		if len(ds) == 0 {
 			slog.Warn("attack not found", "id", query)
 			continue
 		}
-		results[query] = d
+		results[query] = ds
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {

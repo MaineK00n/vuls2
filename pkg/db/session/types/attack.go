@@ -7,6 +7,7 @@ import (
 	analyticTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/analytic"
 	assetTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/asset"
 	datacomponentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/datacomponent"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	procedureTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/procedure"
 	relatedrefTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/relatedref"
 	tacticrefTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/tacticref"
@@ -16,12 +17,26 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
+// AttackRefID is the composite primary key for an ATT&CK record:
+// (Kind, external_id). Pre-2019 "1 Technique = 1 Mitigation"
+// course-of-action records still ship a paired attack-pattern's
+// T#### id, so keying by id alone collapses the legacy stub onto
+// its live Technique. AttackRefID disambiguates them both on disk
+// (attack/<kind>/<id>.json) and in storage (per-kind bucket / table).
+type AttackRefID struct {
+	Kind kindTypes.Kind `json:"kind"`
+	ID   string         `json:"id"`
+}
+
 // AttackData is the session-layer view of a MITRE ATT&CK record returned
-// by Session.GetAttackData. It carries per-source contents under
-// Contents (parallel to VulnerabilityDataAdvisory.Contents) and the
-// union of contributing data-source provenance under DataSources
-// (parallel to VulnerabilityData.DataSources).
+// by Session.GetAttackData. The header carries the composite primary
+// key (Kind + ID) so callers can render "T1047 (Technique)" vs.
+// "T1047 (Mitigation)" unambiguously when both records exist. Contents
+// is the per-source body parallel to VulnerabilityDataAdvisory.Contents
+// and DataSources is the union of contributing data-source provenance
+// parallel to VulnerabilityData.DataSources.
 type AttackData struct {
+	Kind        kindTypes.Kind                         `json:"kind,omitempty"`
 	ID          string                                 `json:"id"`
 	Contents    map[sourceTypes.SourceID]AttackContent `json:"contents,omitempty"`
 	DataSources []datasourceTypes.DataSource           `json:"datasources,omitempty"`
@@ -265,14 +280,15 @@ type AttackContentAnalytic struct {
 	MutableElements     []analyticTypes.MutableElement     `json:"mutable_elements,omitempty"`
 }
 
-// ToAttackRef converts an Attack external ID to an AttackRef by looking
-// up the cache. When the ID isn't cached, only the ID is set so callers
-// can still see the unresolved reference.
-func ToAttackRef(id string, cache map[string]*attackTypes.Attack) AttackRef {
+// ToAttackRef converts an Attack (Kind, ID) pair to an AttackRef by
+// looking up the cache keyed by AttackRefID. When the entry isn't
+// cached, only the Kind and ID are set so callers can still see the
+// unresolved reference.
+func ToAttackRef(kind kindTypes.Kind, id string, cache map[AttackRefID]*attackTypes.Attack) AttackRef {
 	if id == "" {
 		return AttackRef{}
 	}
-	if a, ok := cache[id]; ok && a != nil {
+	if a, ok := cache[AttackRefID{Kind: kind, ID: id}]; ok && a != nil {
 		return AttackRef{
 			ID:             a.ID,
 			Kind:           a.Kind,
@@ -283,25 +299,27 @@ func ToAttackRef(id string, cache map[string]*attackTypes.Attack) AttackRef {
 			IsSubtechnique: a.Technique.IsSubtechnique,
 		}
 	}
-	return AttackRef{ID: id}
+	return AttackRef{ID: id, Kind: kind}
 }
 
-// ToAttackRefs is the slice form of ToAttackRef. Returns nil for an
-// empty input so JSON omitempty drops the field.
-func ToAttackRefs(ids []string, cache map[string]*attackTypes.Attack) []AttackRef {
+// ToAttackRefs is the slice form of ToAttackRef. The Kind argument
+// applies to every ID — used for fields where every entry is the
+// same Kind by the enclosing field's name (e.g.,
+// Tactic.Techniques is always Technique).
+func ToAttackRefs(kind kindTypes.Kind, ids []string, cache map[AttackRefID]*attackTypes.Attack) []AttackRef {
 	if len(ids) == 0 {
 		return nil
 	}
 	out := make([]AttackRef, 0, len(ids))
 	for _, id := range ids {
-		out = append(out, ToAttackRef(id, cache))
+		out = append(out, ToAttackRef(kind, id, cache))
 	}
 	return out
 }
 
 // ToAttackContent converts a per-source attackTypes.Attack into the
 // embedded-refs AttackContent view used inside AttackData.Contents.
-func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack) AttackContent {
+func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.Attack) AttackContent {
 	c := AttackContent{
 		Kind:        a.Kind,
 		Name:        a.Name,
@@ -326,7 +344,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 				if t.Parent == "" {
 					return nil
 				}
-				ref := ToAttackRef(t.Parent, cache)
+				ref := ToAttackRef(kindTypes.Technique, t.Parent, cache)
 				return &ref
 			}(),
 			Detection:            t.Detection,
@@ -339,14 +357,14 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 			ImpactType:           t.ImpactType,
 			NetworkRequirements:  t.NetworkRequirements,
 			RemoteSupport:        t.RemoteSupport,
-			Subtechniques:        ToAttackRefs(t.Subtechniques, cache),
+			Subtechniques:        ToAttackRefs(kindTypes.Technique, t.Subtechniques, cache),
 			AssetsTargeted:       toAttackContentAssetsTargeted(t.AssetsTargeted, cache),
 			DetectionStrategies:  toAttackContentDetectionsApplied(t.DetectionStrategies, cache),
 		}
 	case attackTypes.KindTactic:
 		c.Tactic = AttackContentTactic{
 			Shortname:  a.Tactic.Shortname,
-			Techniques: ToAttackRefs(a.Tactic.Techniques, cache),
+			Techniques: ToAttackRefs(kindTypes.Technique, a.Tactic.Techniques, cache),
 		}
 	case attackTypes.KindMitigation:
 		c.Mitigation = AttackContentMitigation{
@@ -391,7 +409,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 	case attackTypes.KindDetectStrategy:
 		d := a.DetectionStrategy
 		c.DetectionStrategy = AttackContentDetectionStrategy{
-			Analytics:          ToAttackRefs(d.Analytics, cache),
+			Analytics:          ToAttackRefs(kindTypes.Analytic, d.Analytics, cache),
 			TechniquesDetected: toAttackContentTechniquesDetected(d.TechniquesDetected, cache),
 		}
 	case attackTypes.KindDataSource:
@@ -399,7 +417,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 		c.AttackDataSource = AttackContentDataSource{
 			Platforms:        d.Platforms,
 			CollectionLayers: d.CollectionLayers,
-			DataComponents:   ToAttackRefs(d.DataComponents, cache),
+			DataComponents:   ToAttackRefs(kindTypes.DataComponent, d.DataComponents, cache),
 		}
 	case attackTypes.KindDataComponent:
 		d := a.DataComponent
@@ -408,7 +426,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 				if d.DataSource == "" {
 					return nil
 				}
-				ref := ToAttackRef(d.DataSource, cache)
+				ref := ToAttackRef(kindTypes.DataSource, d.DataSource, cache)
 				return &ref
 			}(),
 			LogSources: d.LogSources,
@@ -420,7 +438,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 				if an.DetectionStrategy == "" {
 					return nil
 				}
-				ref := ToAttackRef(an.DetectionStrategy, cache)
+				ref := ToAttackRef(kindTypes.DetectStrategy, an.DetectionStrategy, cache)
 				return &ref
 			}(),
 			Platforms:           an.Platforms,
@@ -437,14 +455,14 @@ func ToAttackContent(a attackTypes.Attack, cache map[string]*attackTypes.Attack)
 // Description). When the extractor couldn't resolve a shortname to a
 // Tactic record the resulting AttackRef carries the shortname in Name
 // so consumers still see a non-empty label.
-func toAttackTactics(items []tacticrefTypes.TacticRef, cache map[string]*attackTypes.Attack) []AttackRef {
+func toAttackTactics(items []tacticrefTypes.TacticRef, cache map[AttackRefID]*attackTypes.Attack) []AttackRef {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackRef, 0, len(items))
 	for _, tr := range items {
 		if tr.ID != "" {
-			out = append(out, ToAttackRef(tr.ID, cache))
+			out = append(out, ToAttackRef(kindTypes.Tactic, tr.ID, cache))
 			continue
 		}
 		out = append(out, AttackRef{Name: tr.Shortname})
@@ -452,14 +470,14 @@ func toAttackTactics(items []tacticrefTypes.TacticRef, cache map[string]*attackT
 	return out
 }
 
-func toAttackContentProcedures(items []procedureTypes.Procedure, cache map[string]*attackTypes.Attack) []AttackContentProcedure {
+func toAttackContentProcedures(items []procedureTypes.Procedure, cache map[AttackRefID]*attackTypes.Attack) []AttackContentProcedure {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentProcedure, 0, len(items))
 	for _, p := range items {
 		out = append(out, AttackContentProcedure{
-			Attacker:    ToAttackRef(p.AttackerID, cache),
+			Attacker:    ToAttackRef(p.AttackerKind, p.AttackerID, cache),
 			Description: p.Description,
 			References:  p.References,
 		})
@@ -467,14 +485,14 @@ func toAttackContentProcedures(items []procedureTypes.Procedure, cache map[strin
 	return out
 }
 
-func toAttackContentTechniquesUsed(items []techniqueusedTypes.TechniqueUsed, cache map[string]*attackTypes.Attack) []AttackContentTechniqueUsed {
+func toAttackContentTechniquesUsed(items []techniqueusedTypes.TechniqueUsed, cache map[AttackRefID]*attackTypes.Attack) []AttackContentTechniqueUsed {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentTechniqueUsed, 0, len(items))
 	for _, t := range items {
 		out = append(out, AttackContentTechniqueUsed{
-			Technique:   ToAttackRef(t.ID, cache),
+			Technique:   ToAttackRef(kindTypes.Technique, t.ID, cache),
 			Description: t.Description,
 			References:  t.References,
 		})
@@ -482,14 +500,14 @@ func toAttackContentTechniquesUsed(items []techniqueusedTypes.TechniqueUsed, cac
 	return out
 }
 
-func toAttackContentMitigationsApplied(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentMitigationApplied {
+func toAttackContentMitigationsApplied(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentMitigationApplied {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentMitigationApplied, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentMitigationApplied{
-			Mitigation:  ToAttackRef(r.ID, cache),
+			Mitigation:  ToAttackRef(kindTypes.Mitigation, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -497,14 +515,14 @@ func toAttackContentMitigationsApplied(items []relatedrefTypes.RelatedRef, cache
 	return out
 }
 
-func toAttackContentTechniquesMitigated(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueMitigated {
+func toAttackContentTechniquesMitigated(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentTechniqueMitigated {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentTechniqueMitigated, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentTechniqueMitigated{
-			Technique:   ToAttackRef(r.ID, cache),
+			Technique:   ToAttackRef(kindTypes.Technique, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -512,14 +530,14 @@ func toAttackContentTechniquesMitigated(items []relatedrefTypes.RelatedRef, cach
 	return out
 }
 
-func toAttackContentDetectionsApplied(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentDetectionApplied {
+func toAttackContentDetectionsApplied(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentDetectionApplied {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentDetectionApplied, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentDetectionApplied{
-			DetectionStrategy: ToAttackRef(r.ID, cache),
+			DetectionStrategy: ToAttackRef(kindTypes.DetectStrategy, r.ID, cache),
 			Description:       r.Description,
 			References:        r.References,
 		})
@@ -527,14 +545,14 @@ func toAttackContentDetectionsApplied(items []relatedrefTypes.RelatedRef, cache 
 	return out
 }
 
-func toAttackContentTechniquesDetected(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueDetected {
+func toAttackContentTechniquesDetected(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentTechniqueDetected {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentTechniqueDetected, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentTechniqueDetected{
-			Technique:   ToAttackRef(r.ID, cache),
+			Technique:   ToAttackRef(kindTypes.Technique, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -542,14 +560,14 @@ func toAttackContentTechniquesDetected(items []relatedrefTypes.RelatedRef, cache
 	return out
 }
 
-func toAttackContentAssetsTargeted(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentAssetTargeted {
+func toAttackContentAssetsTargeted(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentAssetTargeted {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentAssetTargeted, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentAssetTargeted{
-			Asset:       ToAttackRef(r.ID, cache),
+			Asset:       ToAttackRef(kindTypes.Asset, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -557,14 +575,14 @@ func toAttackContentAssetsTargeted(items []relatedrefTypes.RelatedRef, cache map
 	return out
 }
 
-func toAttackContentTechniquesTargeting(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentTechniqueTargeting {
+func toAttackContentTechniquesTargeting(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentTechniqueTargeting {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentTechniqueTargeting, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentTechniqueTargeting{
-			Technique:   ToAttackRef(r.ID, cache),
+			Technique:   ToAttackRef(kindTypes.Technique, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -572,14 +590,14 @@ func toAttackContentTechniquesTargeting(items []relatedrefTypes.RelatedRef, cach
 	return out
 }
 
-func toAttackContentSoftwaresUsed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentSoftwareUsed {
+func toAttackContentSoftwaresUsed(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentSoftwareUsed {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentSoftwareUsed, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentSoftwareUsed{
-			Software:    ToAttackRef(r.ID, cache),
+			Software:    ToAttackRef(kindTypes.Software, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -587,14 +605,14 @@ func toAttackContentSoftwaresUsed(items []relatedrefTypes.RelatedRef, cache map[
 	return out
 }
 
-func toAttackContentGroupsUsing(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentGroupUsing {
+func toAttackContentGroupsUsing(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentGroupUsing {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentGroupUsing, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentGroupUsing{
-			Group:       ToAttackRef(r.ID, cache),
+			Group:       ToAttackRef(kindTypes.Group, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -602,14 +620,14 @@ func toAttackContentGroupsUsing(items []relatedrefTypes.RelatedRef, cache map[st
 	return out
 }
 
-func toAttackContentCampaignsUsing(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentCampaignUsing {
+func toAttackContentCampaignsUsing(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentCampaignUsing {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentCampaignUsing, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentCampaignUsing{
-			Campaign:    ToAttackRef(r.ID, cache),
+			Campaign:    ToAttackRef(kindTypes.Campaign, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -617,14 +635,14 @@ func toAttackContentCampaignsUsing(items []relatedrefTypes.RelatedRef, cache map
 	return out
 }
 
-func toAttackContentGroupsAttributed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentGroupAttributed {
+func toAttackContentGroupsAttributed(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentGroupAttributed {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentGroupAttributed, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentGroupAttributed{
-			Group:       ToAttackRef(r.ID, cache),
+			Group:       ToAttackRef(kindTypes.Group, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -632,14 +650,14 @@ func toAttackContentGroupsAttributed(items []relatedrefTypes.RelatedRef, cache m
 	return out
 }
 
-func toAttackContentCampaignsAttributed(items []relatedrefTypes.RelatedRef, cache map[string]*attackTypes.Attack) []AttackContentCampaignAttributed {
+func toAttackContentCampaignsAttributed(items []relatedrefTypes.RelatedRef, cache map[AttackRefID]*attackTypes.Attack) []AttackContentCampaignAttributed {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]AttackContentCampaignAttributed, 0, len(items))
 	for _, r := range items {
 		out = append(out, AttackContentCampaignAttributed{
-			Campaign:    ToAttackRef(r.ID, cache),
+			Campaign:    ToAttackRef(kindTypes.Campaign, r.ID, cache),
 			Description: r.Description,
 			References:  r.References,
 		})
@@ -647,119 +665,139 @@ func toAttackContentCampaignsAttributed(items []relatedrefTypes.RelatedRef, cach
 	return out
 }
 
-// CollectAttackRefs returns every Attack external ID referenced by the
-// record's kind-specific fields. Used by Session.GetAttackData to walk
-// one level of references and build the AttackRef cache.
-func CollectAttackRefs(a attackTypes.Attack) []string {
-	out := make([]string, 0)
+// CollectAttackRefs returns every cross-record AttackRefID referenced
+// by the record's kind-specific fields. Used by Session.GetAttackData
+// to walk one level of references and build the AttackRef cache. The
+// Kind for each ref is statically determined by the enclosing field
+// name (e.g., Technique.Mitigations is always KindMitigation), with
+// the single exception of Procedure.AttackerKind which is carried
+// inline on the source struct.
+func CollectAttackRefs(a attackTypes.Attack) []AttackRefID {
+	out := make([]AttackRefID, 0)
 	// Technique
 	for _, r := range a.Technique.Mitigations {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Mitigation, ID: r.ID})
 		}
 	}
-	out = append(out, a.Technique.Subtechniques...)
+	for _, id := range a.Technique.Subtechniques {
+		if id != "" {
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: id})
+		}
+	}
 	for _, r := range a.Technique.AssetsTargeted {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Asset, ID: r.ID})
 		}
 	}
 	for _, r := range a.Technique.DetectionStrategies {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.DetectStrategy, ID: r.ID})
 		}
 	}
 	for _, tr := range a.Technique.Tactics {
 		if tr.ID != "" {
-			out = append(out, tr.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Tactic, ID: tr.ID})
 		}
 	}
 	if a.Technique.Parent != "" {
-		out = append(out, a.Technique.Parent)
+		out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: a.Technique.Parent})
 	}
 	for _, p := range a.Technique.Procedures {
 		if p.AttackerID != "" {
-			out = append(out, p.AttackerID)
+			out = append(out, AttackRefID{Kind: p.AttackerKind, ID: p.AttackerID})
 		}
 	}
 	// Tactic
-	out = append(out, a.Tactic.Techniques...)
+	for _, id := range a.Tactic.Techniques {
+		if id != "" {
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: id})
+		}
+	}
 	// Mitigation
 	for _, r := range a.Mitigation.TechniquesMitigated {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
 		}
 	}
 	// Group
 	for _, t := range a.Group.TechniquesUsed {
 		if t.ID != "" {
-			out = append(out, t.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
 		}
 	}
 	for _, r := range a.Group.SoftwaresUsed {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Software, ID: r.ID})
 		}
 	}
 	for _, r := range a.Group.CampaignsAttributed {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Campaign, ID: r.ID})
 		}
 	}
 	// Software
 	for _, t := range a.Software.TechniquesUsed {
 		if t.ID != "" {
-			out = append(out, t.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
 		}
 	}
 	for _, r := range a.Software.GroupsUsing {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Group, ID: r.ID})
 		}
 	}
 	for _, r := range a.Software.CampaignsUsing {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Campaign, ID: r.ID})
 		}
 	}
 	// Campaign
 	for _, t := range a.Campaign.TechniquesUsed {
 		if t.ID != "" {
-			out = append(out, t.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
 		}
 	}
 	for _, r := range a.Campaign.GroupsAttributed {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Group, ID: r.ID})
 		}
 	}
 	for _, r := range a.Campaign.SoftwaresUsed {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Software, ID: r.ID})
 		}
 	}
 	// Asset
 	for _, r := range a.Asset.TechniquesTargeting {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
 		}
 	}
 	// DetectionStrategy
-	out = append(out, a.DetectionStrategy.Analytics...)
+	for _, id := range a.DetectionStrategy.Analytics {
+		if id != "" {
+			out = append(out, AttackRefID{Kind: kindTypes.Analytic, ID: id})
+		}
+	}
 	for _, r := range a.DetectionStrategy.TechniquesDetected {
 		if r.ID != "" {
-			out = append(out, r.ID)
+			out = append(out, AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
 		}
 	}
 	// DataSource (kind)
-	out = append(out, a.AttackDataSource.DataComponents...)
+	for _, id := range a.AttackDataSource.DataComponents {
+		if id != "" {
+			out = append(out, AttackRefID{Kind: kindTypes.DataComponent, ID: id})
+		}
+	}
 	// DataComponent
 	if a.DataComponent.DataSource != "" {
-		out = append(out, a.DataComponent.DataSource)
+		out = append(out, AttackRefID{Kind: kindTypes.DataSource, ID: a.DataComponent.DataSource})
 	}
 	// Analytic
 	if a.Analytic.DetectionStrategy != "" {
-		out = append(out, a.Analytic.DetectionStrategy)
+		out = append(out, AttackRefID{Kind: kindTypes.DetectStrategy, ID: a.Analytic.DetectionStrategy})
 	}
 	return out
 }
