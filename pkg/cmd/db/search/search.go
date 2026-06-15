@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
@@ -553,7 +555,31 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 	}
 }
 
+// newAttackCmd builds the `db search attack` parent. The actual lookups
+// live under one subcommand per Kind so each invocation fixes the
+// namespace before any ext-ids are consumed — ATT&CK's external_id
+// space is per-Kind (pre-2019 1:1 mitigation course-of-action records
+// share T#### ids with their live Techniques), so the kind has to come
+// in explicitly. The kind list is generated from kindTypes.All() so
+// future ATT&CK kinds wire themselves up without touching the CLI.
 func newAttackCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "attack <kind>",
+		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search attack technique T1110
+		$ vuls db search attack mitigation M1036
+		$ vuls db search attack technique T1047
+		$ vuls db search attack mitigation T1047
+		`),
+	}
+	for _, kind := range kindTypes.All() {
+		cmd.AddCommand(newAttackKindCmd(kind))
+	}
+	return cmd
+}
+
+func newAttackKindCmd(kind kindTypes.Kind) *cobra.Command {
 	options := struct {
 		dbtype utilflag.DBType
 		dbpath string
@@ -565,16 +591,12 @@ func newAttackCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "attack <kind>:<ext-id>...",
-		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
-		Example: heredoc.Doc(`
-		$ vuls db search attack technique:T1110
-		$ vuls db search attack mitigation:M1036 technique:T1110
-		$ vuls db search attack technique:T1047 mitigation:T1047
-		`),
-		Args: cobra.MinimumNArgs(1),
+		Use:     fmt.Sprintf("%s <ext-id>...", kind),
+		Short:   fmt.Sprintf("search MITRE ATT&CK %s records in vuls db", kind),
+		Example: fmt.Sprintf("  $ vuls db search attack %s T1110\n", kind),
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := db.SearchAttack(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+			if err := db.SearchAttack(kind, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
 				return errors.Wrap(err, "db search")
 			}
 			return nil
