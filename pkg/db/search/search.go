@@ -1184,14 +1184,14 @@ func joinKBList(ss []string) string {
 	return strings.Join(filtered, " ")
 }
 
-// SearchAttack delegates to Session.GetAttackData for each query and
-// returns every Kind that holds a record with that external_id.
-// Pre-2019 1:1 mitigation course-of-action records share T#### ids
-// with their live Techniques, so a single query like "T1047" can
-// legitimately yield both a Technique and a (deprecated) Mitigation —
-// hence map[query][]AttackData rather than a single AttackData per
-// query. Cross-record references appear inline as embedded
-// {ID, Name, Description} refs inside each result.
+// SearchAttack delegates to Session.GetAttackData for each query. Each
+// query must be of the form "<kind>:<ext-id>" (e.g., "technique:T1047"
+// or "mitigation:T1047") so we can dispatch a single per-Kind lookup
+// instead of scanning every namespace — ATT&CK's external_id space is
+// per-Kind, not global, and we don't want to silently pick a side when
+// pre-2019 1:1 mitigation course-of-action records share an id with
+// their live Technique. Cross-record references appear inline as
+// embedded {ID, Name, Description} refs inside each result.
 func SearchAttack(queries []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1231,33 +1231,47 @@ func SearchAttack(queries []string, opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 	}
 
-	slog.Info("Get MITRE ATT&CK", "ids", queries)
-	results := make(map[string][]dbTypes.AttackData, len(queries))
+	slog.Info("Get MITRE ATT&CK", "queries", queries)
+	results := make(map[string]dbTypes.AttackData, len(queries))
 	for _, query := range queries {
 		if _, ok := results[query]; ok {
 			continue
 		}
-		var ds []dbTypes.AttackData
-		for _, kind := range kindTypes.All() {
-			d, err := s.GetAttackData(kind, query)
-			if err != nil {
-				return errors.Wrapf(err, "get attack data %s/%s", kind, query)
-			}
-			if len(d.Contents) > 0 {
-				ds = append(ds, d)
-			}
+		kind, id, err := parseAttackQuery(query)
+		if err != nil {
+			return errors.Wrapf(err, "parse attack query %q", query)
 		}
-		if len(ds) == 0 {
-			slog.Warn("attack not found", "id", query)
+		d, err := s.GetAttackData(kind, id)
+		if err != nil {
+			return errors.Wrapf(err, "get attack data %s/%s", kind, id)
+		}
+		if len(d.Contents) == 0 {
+			slog.Warn("attack not found", "query", query)
 			continue
 		}
-		results[query] = ds
+		results[query] = d
 	}
 
 	if err := json.MarshalWrite(os.Stdout, results); err != nil {
 		return errors.Wrap(err, "encode attack")
 	}
 	return nil
+}
+
+// parseAttackQuery splits a "<kind>:<ext-id>" SearchAttack query into
+// its (Kind, ID) components. Both halves must be non-empty; the kind
+// must match one of the defined ATT&CK kinds so a typo doesn't silently
+// resolve to "no record found".
+func parseAttackQuery(query string) (kindTypes.Kind, string, error) {
+	before, after, ok := strings.Cut(query, ":")
+	if !ok || before == "" || after == "" {
+		return "", "", errors.Errorf("attack query must be %q, got %q", "<kind>:<ext-id>", query)
+	}
+	kind := kindTypes.Kind(before)
+	if !slices.Contains(kindTypes.All(), kind) {
+		return "", "", errors.Errorf("unknown attack kind %q in query %q (expected one of %v)", before, query, kindTypes.All())
+	}
+	return kind, after, nil
 }
 
 // SearchCAPEC delegates to Session.GetCAPECData for each query.

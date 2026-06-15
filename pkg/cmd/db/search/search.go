@@ -565,11 +565,12 @@ func newAttackCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "attack <attack id>...",
+		Use:   "attack <kind>:<ext-id>...",
 		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
 		Example: heredoc.Doc(`
-		$ vuls db search attack T1110
-		$ vuls db search attack M1036 T1110
+		$ vuls db search attack technique:T1110
+		$ vuls db search attack mitigation:M1036 technique:T1110
+		$ vuls db search attack technique:T1047 mitigation:T1047
 		`),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
