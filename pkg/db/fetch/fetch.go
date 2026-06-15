@@ -24,6 +24,9 @@ import (
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 )
 
+// DefaultRepository is the default OCI repository that vuls.db is fetched from.
+const DefaultRepository = "ghcr.io/vulsio/vuls-nightly-db:nightly"
+
 type options struct {
 	dbpath      string
 	storageopts session.StorageOptions
@@ -91,7 +94,7 @@ func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
-		repository:  "ghcr.io/mainek00n/vuls2:latest",
+		repository:  DefaultRepository,
 		debug:       false,
 		noProgress:  false,
 	}
