@@ -47,7 +47,7 @@ type AttackData struct {
 // with an AttackRef so a single query renders the same ID/Name/
 // Description triples shown on the ATT&CK web UI.
 type AttackContent struct {
-	Kind        attackTypes.Kind `json:"kind,omitempty"`
+	Kind        kindTypes.Kind `json:"kind,omitempty"`
 	Name        string           `json:"name,omitempty"`
 	Description string           `json:"description,omitempty"`
 	Domains     []string         `json:"domains,omitempty"`
@@ -81,7 +81,7 @@ type AttackContent struct {
 // (e.g., T1078.001 indented under T1078 on the Mitigation page).
 type AttackRef struct {
 	ID             string           `json:"id"`
-	Kind           attackTypes.Kind `json:"kind,omitempty"`
+	Kind           kindTypes.Kind `json:"kind,omitempty"`
 	Name           string           `json:"name,omitempty"`
 	Description    string           `json:"description,omitempty"`
 	Domains        []string         `json:"domains,omitempty"`
@@ -334,7 +334,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 		DataSource:  a.DataSource,
 	}
 	switch a.Kind {
-	case attackTypes.KindTechnique:
+	case kindTypes.Technique:
 		t := a.Technique
 		c.Technique = AttackContentTechnique{
 			Platforms:      t.Platforms,
@@ -361,16 +361,16 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			AssetsTargeted:       toAttackContentAssetsTargeted(t.AssetsTargeted, cache),
 			DetectionStrategies:  toAttackContentDetectionsApplied(t.DetectionStrategies, cache),
 		}
-	case attackTypes.KindTactic:
+	case kindTypes.Tactic:
 		c.Tactic = AttackContentTactic{
 			Shortname:  a.Tactic.Shortname,
 			Techniques: ToAttackRefs(kindTypes.Technique, a.Tactic.Techniques, cache),
 		}
-	case attackTypes.KindMitigation:
+	case kindTypes.Mitigation:
 		c.Mitigation = AttackContentMitigation{
 			TechniquesMitigated: toAttackContentTechniquesMitigated(a.Mitigation.TechniquesMitigated, cache),
 		}
-	case attackTypes.KindGroup:
+	case kindTypes.Group:
 		g := a.Group
 		c.Group = AttackContentGroup{
 			Aliases:             g.Aliases,
@@ -378,7 +378,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			SoftwaresUsed:       toAttackContentSoftwaresUsed(g.SoftwaresUsed, cache),
 			CampaignsAttributed: toAttackContentCampaignsAttributed(g.CampaignsAttributed, cache),
 		}
-	case attackTypes.KindSoftware:
+	case kindTypes.Software:
 		s := a.Software
 		c.Software = AttackContentSoftware{
 			Type:           s.Type,
@@ -388,7 +388,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			GroupsUsing:    toAttackContentGroupsUsing(s.GroupsUsing, cache),
 			CampaignsUsing: toAttackContentCampaignsUsing(s.CampaignsUsing, cache),
 		}
-	case attackTypes.KindCampaign:
+	case kindTypes.Campaign:
 		cp := a.Campaign
 		c.Campaign = AttackContentCampaign{
 			Aliases:          cp.Aliases,
@@ -398,7 +398,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			GroupsAttributed: toAttackContentGroupsAttributed(cp.GroupsAttributed, cache),
 			SoftwaresUsed:    toAttackContentSoftwaresUsed(cp.SoftwaresUsed, cache),
 		}
-	case attackTypes.KindAsset:
+	case kindTypes.Asset:
 		as := a.Asset
 		c.Asset = AttackContentAsset{
 			Platforms:           as.Platforms,
@@ -406,20 +406,20 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			RelatedAssets:       as.RelatedAssets,
 			TechniquesTargeting: toAttackContentTechniquesTargeting(as.TechniquesTargeting, cache),
 		}
-	case attackTypes.KindDetectStrategy:
+	case kindTypes.DetectStrategy:
 		d := a.DetectionStrategy
 		c.DetectionStrategy = AttackContentDetectionStrategy{
 			Analytics:          ToAttackRefs(kindTypes.Analytic, d.Analytics, cache),
 			TechniquesDetected: toAttackContentTechniquesDetected(d.TechniquesDetected, cache),
 		}
-	case attackTypes.KindDataSource:
+	case kindTypes.DataSource:
 		d := a.AttackDataSource
 		c.AttackDataSource = AttackContentDataSource{
 			Platforms:        d.Platforms,
 			CollectionLayers: d.CollectionLayers,
 			DataComponents:   ToAttackRefs(kindTypes.DataComponent, d.DataComponents, cache),
 		}
-	case attackTypes.KindDataComponent:
+	case kindTypes.DataComponent:
 		d := a.DataComponent
 		c.DataComponent = AttackContentDataComponent{
 			DataSource: func() *AttackRef {
@@ -431,7 +431,7 @@ func ToAttackContent(a attackTypes.Attack, cache map[AttackRefID]*attackTypes.At
 			}(),
 			LogSources: d.LogSources,
 		}
-	case attackTypes.KindAnalytic:
+	case kindTypes.Analytic:
 		an := a.Analytic
 		c.Analytic = AttackContentAnalytic{
 			DetectionStrategy: func() *AttackRef {
