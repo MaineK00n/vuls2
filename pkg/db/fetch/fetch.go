@@ -91,7 +91,7 @@ func Fetch(opts ...Option) error {
 	options := &options{
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
-		repository:  "ghcr.io/mainek00n/vuls2:latest",
+		repository:  "ghcr.io/vulsio/vuls-nightly-db:nightly",
 		debug:       false,
 		noProgress:  false,
 	}

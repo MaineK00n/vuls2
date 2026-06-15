@@ -19,7 +19,7 @@ func NewCmd() *cobra.Command {
 		debug      bool
 	}{
 		dbpath:     filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		repository: "ghcr.io/mainek00n/vuls2:latest",
+		repository: "ghcr.io/vulsio/vuls-nightly-db:nightly",
 		noProgress: false,
 		debug:      false,
 	}
