@@ -22,6 +22,17 @@ jobs:
       with:
         go-version-file: 'go.mod'
 
+    - name: Download Go modules
+      # golangci-lint-action does not pre-download modules, and
+      # golangci-lint v2's typecheck linter resolves cross-module
+      # imports by reading them off disk. When vuls-data-update lands
+      # a new sub-package this branch consumes (e.g.,
+      # attack/datacomponent or attack/relatedref) the cache miss
+      # surfaces as a flood of "could not import" / "undefined"
+      # errors. A separate "go mod download" keeps the linter
+      # resolving cleanly.
+      run: go mod download
+
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
