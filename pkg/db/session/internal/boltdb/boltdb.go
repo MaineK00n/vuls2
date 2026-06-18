@@ -48,13 +48,13 @@ const (
 
 // boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
 
-// boltdb: microsoft:kb:<KB ID> -> microsoftkbTypes.KB
+// boltdb: microsoft -> kb -> <KB ID> -> map[<Source ID>]microsoftkbTypes.KB
 
-// boltdb: attack:<Attack ID> -> attackTypes.Attack
+// boltdb: attack -> <Kind> -> <Attack ID> -> map[<Source ID>]attackTypes.Attack
 
-// boltdb: capec:<CAPEC ID> -> capecTypes.CAPEC
+// boltdb: capec -> <CAPEC ID> -> map[<Source ID>]capecTypes.CAPEC
 
-// boltdb: cwe:<CWE ID> -> cweTypes.CWE
+// boltdb: cwe -> <CWE ID> -> map[<Source ID>]cweTypes.CWE
 
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 

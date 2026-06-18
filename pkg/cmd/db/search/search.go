@@ -564,7 +564,7 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 // future ATT&CK kinds wire themselves up without touching the CLI.
 func newAttackCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "attack <kind>",
+		Use:   "attack",
 		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
 		Example: heredoc.Doc(`
 		$ vuls db search attack technique T1110
