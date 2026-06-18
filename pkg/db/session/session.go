@@ -543,19 +543,19 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 
 	primary, err := s.storage.GetAttack(kind, id)
 	if err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundAttack) {
-			return d, nil
-		}
 		return d, errors.Wrapf(err, "get attack %s/%s", kind, id)
 	}
-	if len(primary) == 0 {
-		return d, nil
-	}
 
+	// Embedded-ref cache: a given (Kind, ext-id) can appear in more
+	// than one source's record, but the AttackRef rendered downstream
+	// carries one Name / Description / Domains triple. Pick the
+	// lexicographically-first source so the rendered ref is stable
+	// run-to-run instead of inheriting bolt map iteration order.
 	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
 	refCache := make(map[dbTypes.AttackRefID]*attackTypes.Attack)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
-	for sid, a := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		a := primary[sid]
 		if _, ok := refCache[selfKey]; !ok {
 			refCache[selfKey] = &a
 		}
@@ -563,7 +563,8 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 	}
 
 	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
-	for _, a := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		a := primary[sid]
 		for _, ref := range dbTypes.CollectAttackRefs(a) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -576,11 +577,12 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 				}
 				return d, errors.Wrapf(err, "get attack %s/%s", ref.Kind, ref.ID)
 			}
-			for sid, ra := range rm {
+			for _, rsid := range slices.Sorted(maps.Keys(rm)) {
+				ra := rm[rsid]
 				if _, ok := refCache[ref]; !ok {
 					refCache[ref] = &ra
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}
@@ -603,18 +605,16 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 
 	primary, err := s.storage.GetCAPEC(id)
 	if err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
-			return d, nil
-		}
 		return d, errors.Wrapf(err, "get capec %s", id)
 	}
-	if len(primary) == 0 {
-		return d, nil
-	}
 
+	// Sort the per-source map keys before populating refCache so the
+	// rendered CAPECRef triples (Name / Description / ...) are stable
+	// run-to-run when a CAPEC id appears in more than one source.
 	refCache := make(map[string]*capecTypes.CAPEC)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
-	for sid, c := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		c := primary[sid]
 		if _, ok := refCache[c.ID]; !ok {
 			refCache[c.ID] = &c
 		}
@@ -622,7 +622,8 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 	}
 
 	seenRef := map[string]struct{}{id: {}}
-	for _, c := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		c := primary[sid]
 		for _, ref := range dbTypes.CollectCAPECRefs(c) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -635,11 +636,12 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 				}
 				return d, errors.Wrapf(err, "get capec %s", ref)
 			}
-			for sid, rc := range rm {
+			for _, rsid := range slices.Sorted(maps.Keys(rm)) {
+				rc := rm[rsid]
 				if _, ok := refCache[rc.ID]; !ok {
 					refCache[rc.ID] = &rc
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}
@@ -662,18 +664,16 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 
 	primary, err := s.storage.GetCWE(id)
 	if err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundCWE) {
-			return d, nil
-		}
 		return d, errors.Wrapf(err, "get cwe %s", id)
 	}
-	if len(primary) == 0 {
-		return d, nil
-	}
 
+	// Sort the per-source map keys before populating refCache so the
+	// rendered CWERef triples (Name / Description / ...) are stable
+	// run-to-run when a CWE id appears in more than one source.
 	refCache := make(map[string]*cweTypes.CWE)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
-	for sid, w := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		w := primary[sid]
 		if _, ok := refCache[w.ID]; !ok {
 			refCache[w.ID] = &w
 		}
@@ -681,7 +681,8 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 	}
 
 	seenRef := map[string]struct{}{id: {}}
-	for _, w := range primary {
+	for _, sid := range slices.Sorted(maps.Keys(primary)) {
+		w := primary[sid]
 		for _, ref := range dbTypes.CollectCWERefs(w) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -694,11 +695,12 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 				}
 				return d, errors.Wrapf(err, "get cwe %s", ref)
 			}
-			for sid, rw := range rm {
+			for _, rsid := range slices.Sorted(maps.Keys(rm)) {
+				rw := rm[rsid]
 				if _, ok := refCache[rw.ID]; !ok {
 					refCache[rw.ID] = &rw
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}

@@ -80,13 +80,17 @@ type AttackContent struct {
 // is_subtechnique so consumers can render sub-technique grouping
 // (e.g., T1078.001 indented under T1078 on the Mitigation page).
 type AttackRef struct {
-	ID             string           `json:"id"`
+	// ID is omitempty so the shortname-only fallback in toAttackTactics
+	// (where a Technique's kill_chain_phase shortname couldn't resolve
+	// to an x-mitre-tactic record) doesn't ship a misleading "id":""
+	// to consumers. Every resolved ref still carries the ext-id.
+	ID             string         `json:"id,omitempty"`
 	Kind           kindTypes.Kind `json:"kind,omitempty"`
-	Name           string           `json:"name,omitempty"`
-	Description    string           `json:"description,omitempty"`
-	Domains        []string         `json:"domains,omitempty"`
-	Parent         string           `json:"parent,omitempty"`
-	IsSubtechnique bool             `json:"is_subtechnique,omitempty"`
+	Name           string         `json:"name,omitempty"`
+	Description    string         `json:"description,omitempty"`
+	Domains        []string       `json:"domains,omitempty"`
+	Parent         string         `json:"parent,omitempty"`
+	IsSubtechnique bool           `json:"is_subtechnique,omitempty"`
 }
 
 // Role-specific embed types pair an AttackRef with the per-edge

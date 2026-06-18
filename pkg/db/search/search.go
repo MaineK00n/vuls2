@@ -1241,11 +1241,11 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 		}
 		d, err := s.GetAttackData(kind, id)
 		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+				slog.Warn("attack not found", "kind", kind, "id", id)
+				continue
+			}
 			return errors.Wrapf(err, "get attack data %s/%s", kind, id)
-		}
-		if len(d.Contents) == 0 {
-			slog.Warn("attack not found", "kind", kind, "id", id)
-			continue
 		}
 		results[id] = d
 	}
@@ -1307,6 +1307,10 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 		}
 		d, err := s.GetCAPECData(query)
 		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+				slog.Warn("capec not found", "id", query)
+				continue
+			}
 			return errors.Wrapf(err, "get capec data %s", query)
 		}
 		if len(d.Contents) == 0 {
@@ -1373,6 +1377,10 @@ func SearchCWE(queries []string, opts ...Option) error {
 		}
 		d, err := s.GetCWEData(query)
 		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+				slog.Warn("cwe not found", "id", query)
+				continue
+			}
 			return errors.Wrapf(err, "get cwe data %s", query)
 		}
 		if len(d.Contents) == 0 {
