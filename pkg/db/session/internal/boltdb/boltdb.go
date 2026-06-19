@@ -782,15 +782,15 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 }
 
 func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
-	if kind == "" || id == "" {
-		return nil, errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
-	}
 	var m map[sourceTypes.SourceID]attackTypes.Attack
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		parent := tx.Bucket([]byte("attack"))
 		if parent == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
+			return errors.Errorf("%q is not exists", "attack")
 		}
+		// Per-Kind sub-buckets are created lazily by putAttackFile,
+		// so a missing one means "no record of this kind has been
+		// loaded yet" — surface it as a regular not-found.
 		b := parent.Bucket([]byte(string(kind)))
 		if b == nil {
 			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
@@ -813,14 +813,11 @@ func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.
 }
 
 func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
-	if id == "" {
-		return nil, errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
-	}
 	var m map[sourceTypes.SourceID]capecTypes.CAPEC
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("capec"))
 		if b == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
+			return errors.Errorf("%q is not exists", "capec")
 		}
 		bs := b.Get([]byte(id))
 		if len(bs) == 0 {
@@ -840,14 +837,11 @@ func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CA
 }
 
 func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
-	if id == "" {
-		return nil, errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
-	}
 	var m map[sourceTypes.SourceID]cweTypes.CWE
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("cwe"))
 		if b == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
+			return errors.Errorf("%q is not exists", "cwe")
 		}
 		bs := b.Get([]byte(id))
 		if len(bs) == 0 {
@@ -991,7 +985,7 @@ func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
 			switch n := string(name); n {
-			case "metadata", "vulnerability", "datasource":
+			case "metadata", "vulnerability", "datasource", "attack", "capec", "cwe":
 			default:
 				es = append(es, ecosystemTypes.Ecosystem(name))
 			}
@@ -1181,6 +1175,24 @@ func (c *Connection) Initialize() error {
 
 		if _, err := tx.CreateBucket([]byte("datasource")); err != nil {
 			return errors.Wrapf(err, "create %q", "datasource")
+		}
+
+		// attack:<Kind>:<Attack ID>, capec:<CAPEC ID>, cwe:<CWE ID>
+		// are first-class catalog buckets parallel to vulnerability;
+		// pre-create the parents here so GetX paths get an
+		// "empty-bucket" answer instead of a missing-parent surprise
+		// on a freshly-initialized db. The per-Kind ATT&CK sub-buckets
+		// stay lazy — putAttackFile creates them on first Put.
+		if _, err := tx.CreateBucket([]byte("attack")); err != nil {
+			return errors.Wrapf(err, "create %q", "attack")
+		}
+
+		if _, err := tx.CreateBucket([]byte("capec")); err != nil {
+			return errors.Wrapf(err, "create %q", "capec")
+		}
+
+		if _, err := tx.CreateBucket([]byte("cwe")); err != nil {
+			return errors.Wrapf(err, "create %q", "cwe")
 		}
 
 		return nil
