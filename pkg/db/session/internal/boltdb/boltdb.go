@@ -804,9 +804,6 @@ func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.
 		}
 		return nil
 	}); err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundAttack) {
-			return nil, err
-		}
 		return nil, errors.WithStack(err)
 	}
 	return m, nil
@@ -828,9 +825,6 @@ func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CA
 		}
 		return nil
 	}); err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
-			return nil, err
-		}
 		return nil, errors.WithStack(err)
 	}
 	return m, nil
@@ -852,9 +846,6 @@ func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, e
 		}
 		return nil
 	}); err != nil {
-		if errors.Is(err, dbTypes.ErrNotFoundCWE) {
-			return nil, err
-		}
 		return nil, errors.WithStack(err)
 	}
 	return m, nil
@@ -985,7 +976,7 @@ func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
 			switch n := string(name); n {
-			case "metadata", "vulnerability", "datasource", "attack", "capec", "cwe":
+			case "metadata", "vulnerability", "attack", "capec", "cwe", "datasource":
 			default:
 				es = append(es, ecosystemTypes.Ecosystem(name))
 			}
