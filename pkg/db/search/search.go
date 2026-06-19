@@ -1230,11 +1230,7 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE ATT&CK", "kind", kind, "ids", ids)
-	results := make(map[string]dbTypes.AttackData, len(ids))
 	for _, id := range ids {
-		if _, ok := results[id]; ok {
-			continue
-		}
 		d, err := s.GetAttackData(kind, id)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundAttack) {
@@ -1243,12 +1239,11 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get attack data %s/%s", kind, id)
 		}
-		results[id] = d
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s/%s", kind, id)
+		}
 	}
 
-	if err := json.MarshalWrite(os.Stdout, results); err != nil {
-		return errors.Wrap(err, "encode attack")
-	}
 	return nil
 }
 
@@ -1296,11 +1291,7 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CAPEC", "ids", queries)
-	results := make(map[string]dbTypes.CAPECData, len(queries))
 	for _, query := range queries {
-		if _, ok := results[query]; ok {
-			continue
-		}
 		d, err := s.GetCAPECData(query)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
@@ -1309,12 +1300,11 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get capec data %s", query)
 		}
-		results[query] = d
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s", query)
+		}
 	}
 
-	if err := json.MarshalWrite(os.Stdout, results); err != nil {
-		return errors.Wrap(err, "encode capec")
-	}
 	return nil
 }
 
@@ -1362,11 +1352,7 @@ func SearchCWE(queries []string, opts ...Option) error {
 	}
 
 	slog.Info("Get MITRE CWE", "ids", queries)
-	results := make(map[string]dbTypes.CWEData, len(queries))
 	for _, query := range queries {
-		if _, ok := results[query]; ok {
-			continue
-		}
 		d, err := s.GetCWEData(query)
 		if err != nil {
 			if errors.Is(err, dbTypes.ErrNotFoundCWE) {
@@ -1375,11 +1361,10 @@ func SearchCWE(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get cwe data %s", query)
 		}
-		results[query] = d
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s", query)
+		}
 	}
 
-	if err := json.MarshalWrite(os.Stdout, results); err != nil {
-		return errors.Wrap(err, "encode cwe")
-	}
 	return nil
 }
