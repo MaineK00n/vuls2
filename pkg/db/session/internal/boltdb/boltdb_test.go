@@ -278,7 +278,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":              nil,
-				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":         nil,
 				"vulnerability -> root": nil,
 				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
@@ -309,7 +309,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":              nil,
-				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":         nil,
 				"vulnerability -> root": nil,
 				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
@@ -350,7 +350,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":              nil,
-				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":         nil,
 				"vulnerability -> root": nil,
 				"vulnerability -> root -> ALSA-2019:5001":         []byte(`{"id":"ALSA-2019:5001","advisories":["ALSA-2019:5001"],"vulnerabilities":["CVE-2019-5001"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
@@ -388,7 +388,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":                                        nil,
-				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":                                   nil,
 				"vulnerability -> root":                           nil,
 				"vulnerability -> root -> MS17-010":               []byte(`{"id":"MS17-010","advisories":["MS17-010"],"vulnerabilities":["CVE-2017-0143","CVE-2017-0144","CVE-2017-0145","CVE-2017-0146","CVE-2017-0147","CVE-2017-0148"],"ecosystems":["microsoft"],"data_sources":["microsoft-bulletin"]}`),
@@ -425,7 +425,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":                       nil,
-				"metadata -> db":                 fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":                 fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":                  nil,
 				"vulnerability -> root":          nil,
 				"vulnerability -> advisory":      nil,
@@ -456,7 +456,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":                                nil,
-				"metadata -> db":                          fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":                          fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":                           nil,
 				"vulnerability -> root":                   nil,
 				"vulnerability -> root -> ROOT-A":         []byte(`{"id":"ROOT-A","advisories":["ROOT-A"],"vulnerabilities":["CVE-A"],"ecosystems":["test:multi"],"data_sources":["source-a"]}`),
@@ -491,7 +491,7 @@ func TestConnection_Put(t *testing.T) {
 			},
 			want: map[string][]byte{
 				"metadata":                                        nil,
-				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"metadata -> db":                                  fmt.Appendf(nil, `{"schema_version":1,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
 				"vulnerability":                                   nil,
 				"vulnerability -> root":                           nil,
 				"vulnerability -> root -> CVE-2024-0028":          []byte(`{"id":"CVE-2024-0028","vulnerabilities":["CVE-2024-0028"],"ecosystems":["cpe"],"data_sources":["nvd-feed-cve-v2"]}`),
