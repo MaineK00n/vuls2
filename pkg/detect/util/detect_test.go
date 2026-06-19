@@ -763,7 +763,7 @@ func Test_replaceIndexes(t *testing.T) {
 									CPE: "cpe:2.3:a:vendor:pkg1:*:*:*:*:*:*:*:*",
 								},
 							},
-							Accepts: criterionTypes.AcceptQueries{CPE: []int{0}},
+							Accepts: criterionTypes.AcceptQueries{CPE: criterionTypes.CPEAccepts{Exact: []int{0}, VersionUnconfirmed: []int{1}}},
 						},
 					},
 				},
@@ -779,7 +779,7 @@ func Test_replaceIndexes(t *testing.T) {
 								CPE: "cpe:2.3:a:vendor:pkg0:*:*:*:*:*:*:*:*",
 							},
 						},
-						Accepts: criterionTypes.AcceptQueries{CPE: []int{}},
+						Accepts: criterionTypes.AcceptQueries{CPE: criterionTypes.CPEAccepts{Exact: []int{}, VersionUnconfirmed: []int{}}},
 					},
 					{
 						Criterion: criterionTypes.Criterion{
@@ -788,7 +788,7 @@ func Test_replaceIndexes(t *testing.T) {
 								CPE: "cpe:2.3:a:vendor:pkg1:*:*:*:*:*:*:*:*",
 							},
 						},
-						Accepts: criterionTypes.AcceptQueries{CPE: []int{1}},
+						Accepts: criterionTypes.AcceptQueries{CPE: criterionTypes.CPEAccepts{Exact: []int{1}, VersionUnconfirmed: []int{0}}},
 					},
 				},
 			},

@@ -104,7 +104,7 @@ func TestDetect(t *testing.T) {
 																			CPE:        "cpe:2.3:o:google:android:16.0:*:*:*:*:*:*:*",
 																		},
 																	},
-																	Accepts: criterionTypes.AcceptQueries{CPE: []int{0}},
+																	Accepts: criterionTypes.AcceptQueries{CPE: criterionTypes.CPEAccepts{Exact: []int{0}, VersionUnconfirmed: []int{}}},
 																},
 															},
 														},
