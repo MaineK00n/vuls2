@@ -766,10 +766,13 @@ func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.
 		}
 		// Per-Kind sub-buckets are created lazily by putAttackFile,
 		// so a missing one means "no record of this kind has been
-		// loaded yet" — surface it as a regular not-found.
+		// loaded yet" — surface it as a regular not-found. The
+		// error message stops at the kind so callers (and bbolt
+		// CLI inspectors) can tell this branch apart from the
+		// id-not-in-bucket branch a few lines down.
 		b := parent.Bucket([]byte(string(kind)))
 		if b == nil {
-			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", kind))
 		}
 		bs := b.Get([]byte(id))
 		if len(bs) == 0 {
