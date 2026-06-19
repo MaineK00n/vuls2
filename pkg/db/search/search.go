@@ -1229,23 +1229,6 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 	}
 
-	knownAttackKinds := []kindTypes.Kind{
-		kindTypes.Technique,
-		kindTypes.Tactic,
-		kindTypes.Mitigation,
-		kindTypes.Group,
-		kindTypes.Software,
-		kindTypes.Campaign,
-		kindTypes.Asset,
-		kindTypes.DetectStrategy,
-		kindTypes.Analytic,
-		kindTypes.DataSource,
-		kindTypes.DataComponent,
-	}
-	if !slices.Contains(knownAttackKinds, kind) {
-		return errors.Errorf("unknown attack kind %q (expected one of %v)", kind, knownAttackKinds)
-	}
-
 	slog.Info("Get MITRE ATT&CK", "kind", kind, "ids", ids)
 	results := make(map[string]dbTypes.AttackData, len(ids))
 	for _, id := range ids {
