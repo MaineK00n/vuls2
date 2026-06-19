@@ -125,8 +125,11 @@ func SearchMetadata(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -177,8 +180,11 @@ func SearchDataSources(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -235,8 +241,11 @@ func SearchEcosystems(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -293,8 +302,11 @@ func SearchRoot(queries []dataTypes.RootID, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -356,8 +368,11 @@ func SearchAdisory(queries []advisoryContentTypes.AdvisoryID, opts ...Option) er
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -419,8 +434,11 @@ func SearchVulnerability(queries []vulnerabilityContentTypes.VulnerabilityID, op
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -482,8 +500,11 @@ func SearchPackage(ecosytem ecosystemTypes.Ecosystem, queries []string, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -542,8 +563,11 @@ func SearchKBInfo(queries []string, datasources []sourceTypes.SourceID, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -615,8 +639,11 @@ func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -721,8 +748,11 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -1218,8 +1248,11 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -1279,8 +1312,11 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -1340,8 +1376,11 @@ func SearchCWE(queries []string, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {

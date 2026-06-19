@@ -641,7 +641,7 @@ func putAttackFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "unmarshal %s", path)
 	}
 	if a.ID == "" || a.Kind == "" {
-		return nil
+		return errors.Errorf("attack record at %s has empty id or kind", path)
 	}
 
 	// ATT&CK's external_id namespace is per-Kind, not global: pre-2019
@@ -689,7 +689,7 @@ func putCAPECFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "unmarshal %s", path)
 	}
 	if c.ID == "" {
-		return nil
+		return errors.Errorf("capec record at %s has empty id", path)
 	}
 
 	b, err := tx.CreateBucketIfNotExists([]byte("capec"))
@@ -729,7 +729,7 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 		return errors.Wrapf(err, "unmarshal %s", path)
 	}
 	if w.ID == "" {
-		return nil
+		return errors.Errorf("cwe record at %s has empty id", path)
 	}
 
 	b, err := tx.CreateBucketIfNotExists([]byte("cwe"))

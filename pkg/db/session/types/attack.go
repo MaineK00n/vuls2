@@ -466,7 +466,7 @@ func toAttackTactics(items []tacticrefTypes.TacticRef, cache map[AttackRefID]att
 			out = append(out, ToAttackRef(kindTypes.Tactic, tr.ID, cache))
 			continue
 		}
-		out = append(out, AttackRef{Name: tr.Shortname})
+		out = append(out, AttackRef{Kind: kindTypes.Tactic, Name: tr.Shortname})
 	}
 	return out
 }

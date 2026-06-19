@@ -866,7 +866,10 @@ func collectAttackRefs(a attackTypes.Attack) []dbTypes.AttackRefID {
 // record's relationship fields. RelatedCWEs / RelatedAttacks are
 // cross-catalog and intentionally not included.
 func collectCAPECRefs(c capecTypes.CAPEC) []string {
-	return slices.Concat(c.ChildOf, c.ParentOf, c.CanFollow, c.CanPrecede, c.PeerOf)
+	return slices.DeleteFunc(
+		slices.Concat(c.ChildOf, c.ParentOf, c.CanFollow, c.CanPrecede, c.PeerOf),
+		func(s string) bool { return s == "" },
+	)
 }
 
 // collectCWERefs returns every CWE ID referenced by the record's
