@@ -584,11 +584,13 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 		d.Contents[sid] = dbTypes.ToAttackContent(a, refCache)
 	}
 
-	ds, err := collectDataSources(s.storage, sourceIDs)
-	if err != nil {
-		return d, errors.Wrap(err, "collect datasources")
+	for id := range sourceIDs {
+		ds, err := s.storage.GetDataSource(id)
+		if err != nil {
+			return d, errors.Wrap(err, "get datasource")
+		}
+		d.DataSources = append(d.DataSources, ds)
 	}
-	d.DataSources = ds
 	return d, nil
 }
 
@@ -641,11 +643,13 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 		d.Contents[sid] = dbTypes.ToCAPECContent(c, refCache)
 	}
 
-	ds, err := collectDataSources(s.storage, sourceIDs)
-	if err != nil {
-		return d, errors.Wrap(err, "collect datasources")
+	for id := range sourceIDs {
+		ds, err := s.storage.GetDataSource(id)
+		if err != nil {
+			return d, errors.Wrap(err, "get datasource")
+		}
+		d.DataSources = append(d.DataSources, ds)
 	}
-	d.DataSources = ds
 	return d, nil
 }
 
@@ -698,35 +702,12 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 		d.Contents[sid] = dbTypes.ToCWEContent(w, refCache)
 	}
 
-	ds, err := collectDataSources(s.storage, sourceIDs)
-	if err != nil {
-		return d, errors.Wrap(err, "collect datasources")
-	}
-	d.DataSources = ds
-	return d, nil
-}
-
-// collectDataSources looks up datasource provenance for every SourceID
-// in ids. ErrNotFoundDataSource is non-fatal — the per-source
-// AttackContent.DataSource (or CAPEC/CWE equivalent) still carries the
-// per-record source ID, so the loss is just the repository metadata.
-// Anything else (corruption, unmarshal failure, transport error) is
-// surfaced so the caller doesn't silently get incomplete provenance.
-func collectDataSources(storage Storage, ids map[sourceTypes.SourceID]struct{}) ([]datasourceTypes.DataSource, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	keys := slices.Sorted(maps.Keys(ids))
-	out := make([]datasourceTypes.DataSource, 0, len(keys))
-	for _, id := range keys {
-		ds, err := storage.GetDataSource(id)
+	for id := range sourceIDs {
+		ds, err := s.storage.GetDataSource(id)
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundDataSource) {
-				continue
-			}
-			return nil, errors.Wrapf(err, "get datasource %s", id)
+			return d, errors.Wrap(err, "get datasource")
 		}
-		out = append(out, ds)
+		d.DataSources = append(d.DataSources, ds)
 	}
-	return out, nil
+	return d, nil
 }
