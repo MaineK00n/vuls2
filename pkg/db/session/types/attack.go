@@ -680,7 +680,29 @@ func toAttackContentCampaignsAttributed(items []relatedrefTypes.RelatedRef, cach
 // the single exception of Procedure.AttackerKind which is carried
 // inline on the source struct.
 func CollectAttackRefs(a attackTypes.Attack) []AttackRefID {
-	out := make([]AttackRefID, 0)
+	n := len(a.Technique.Mitigations) +
+		len(a.Technique.Subtechniques) +
+		len(a.Technique.AssetsTargeted) +
+		len(a.Technique.DetectionStrategies) +
+		len(a.Technique.Tactics) +
+		len(a.Technique.Procedures) +
+		len(a.Tactic.Techniques) +
+		len(a.Mitigation.TechniquesMitigated) +
+		len(a.Group.TechniquesUsed) +
+		len(a.Group.SoftwaresUsed) +
+		len(a.Group.CampaignsAttributed) +
+		len(a.Software.TechniquesUsed) +
+		len(a.Software.GroupsUsing) +
+		len(a.Software.CampaignsUsing) +
+		len(a.Campaign.TechniquesUsed) +
+		len(a.Campaign.GroupsAttributed) +
+		len(a.Campaign.SoftwaresUsed) +
+		len(a.Asset.TechniquesTargeting) +
+		len(a.DetectionStrategy.Analytics) +
+		len(a.DetectionStrategy.TechniquesDetected) +
+		len(a.AttackDataSource.DataComponents) +
+		3 // Technique.Parent + DataComponent.DataSource + Analytic.DetectionStrategy
+	out := make([]AttackRefID, 0, n)
 	// Technique
 	for _, r := range a.Technique.Mitigations {
 		if r.ID != "" {
