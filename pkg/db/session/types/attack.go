@@ -48,14 +48,14 @@ type AttackData struct {
 // Description triples shown on the ATT&CK web UI.
 type AttackContent struct {
 	Kind        kindTypes.Kind `json:"kind,omitempty"`
-	Name        string           `json:"name,omitempty"`
-	Description string           `json:"description,omitempty"`
-	Domains     []string         `json:"domains,omitempty"`
-	Deprecated  bool             `json:"deprecated,omitempty"`
-	Revoked     bool             `json:"revoked,omitempty"`
-	Version     string           `json:"version,omitempty"`
-	Created     time.Time        `json:"created,omitzero"`
-	Modified    time.Time        `json:"modified,omitzero"`
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Domains     []string       `json:"domains,omitempty"`
+	Deprecated  bool           `json:"deprecated,omitempty"`
+	Revoked     bool           `json:"revoked,omitempty"`
+	Version     string         `json:"version,omitempty"`
+	Created     time.Time      `json:"created,omitzero"`
+	Modified    time.Time      `json:"modified,omitzero"`
 
 	Technique         AttackContentTechnique         `json:"technique,omitzero"`
 	Tactic            AttackContentTactic            `json:"tactic,omitzero"`
@@ -76,9 +76,12 @@ type AttackContent struct {
 // AttackRef is the minimal ATT&CK reference embedded inside an
 // AttackContent whenever the source record carries another ATT&CK
 // record's external ID. Carries the columns shown on the ATT&CK web
-// UI's relationship tables (Domain / ID / Name / Use), plus parent +
+// UI's relationship tables (Domain / ID / Name) plus parent +
 // is_subtechnique so consumers can render sub-technique grouping
 // (e.g., T1078.001 indented under T1078 on the Mitigation page).
+// The per-edge "Use" text lives on the surrounding role-specific
+// struct's Description field (AttackContentMitigationApplied etc.),
+// not on AttackRef itself.
 type AttackRef struct {
 	// ID is omitempty so the shortname-only fallback in toAttackTactics
 	// (where a Technique's kill_chain_phase shortname couldn't resolve

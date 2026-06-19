@@ -783,7 +783,7 @@ func putCWEFile(tx *bolt.Tx, path string) error {
 
 func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
 	if kind == "" || id == "" {
-		return nil, nil
+		return nil, errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
 	}
 	var m map[sourceTypes.SourceID]attackTypes.Attack
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -814,7 +814,7 @@ func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.
 
 func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
 	if id == "" {
-		return nil, nil
+		return nil, errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
 	}
 	var m map[sourceTypes.SourceID]capecTypes.CAPEC
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -841,7 +841,7 @@ func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CA
 
 func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
 	if id == "" {
-		return nil, nil
+		return nil, errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
 	}
 	var m map[sourceTypes.SourceID]cweTypes.CWE
 	if err := c.conn.View(func(tx *bolt.Tx) error {
