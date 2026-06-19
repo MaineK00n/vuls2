@@ -46,7 +46,7 @@ const (
 
 // boltdb: <ecosystem>:index:<package> -> [<Root ID>]
 
-// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
+// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>][]conditionTypes.Condition
 
 // boltdb: microsoft:kb:<KB ID> -> map[<Source ID>]microsoftkbTypes.KB
 
