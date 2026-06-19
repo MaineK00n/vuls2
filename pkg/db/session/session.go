@@ -552,15 +552,12 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
 	refCache := make(map[dbTypes.AttackRefID]attackTypes.Attack)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
 	for sid, a := range primary {
 		if _, ok := refCache[selfKey]; !ok {
 			refCache[selfKey] = a
 		}
 		sourceIDs[sid] = struct{}{}
-	}
-
-	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
-	for _, a := range primary {
 		for _, ref := range collectAttackRefs(a) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -570,11 +567,11 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 			if err != nil {
 				return dbTypes.AttackData{}, errors.Wrap(err, "get attack")
 			}
-			for sid, ra := range rm {
+			for rsid, ra := range rm {
 				if _, ok := refCache[ref]; !ok {
 					refCache[ref] = ra
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}
@@ -611,15 +608,12 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 
 	refCache := make(map[string]capecTypes.CAPEC)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	seenRef := map[string]struct{}{id: {}}
 	for sid, c := range primary {
 		if _, ok := refCache[c.ID]; !ok {
 			refCache[c.ID] = c
 		}
 		sourceIDs[sid] = struct{}{}
-	}
-
-	seenRef := map[string]struct{}{id: {}}
-	for _, c := range primary {
 		for _, ref := range collectCAPECRefs(c) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -629,11 +623,11 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 			if err != nil {
 				return dbTypes.CAPECData{}, errors.Wrap(err, "get capec")
 			}
-			for sid, rc := range rm {
+			for rsid, rc := range rm {
 				if _, ok := refCache[rc.ID]; !ok {
 					refCache[rc.ID] = rc
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}
@@ -670,15 +664,12 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 
 	refCache := make(map[string]cweTypes.CWE)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
+	seenRef := map[string]struct{}{id: {}}
 	for sid, w := range primary {
 		if _, ok := refCache[w.ID]; !ok {
 			refCache[w.ID] = w
 		}
 		sourceIDs[sid] = struct{}{}
-	}
-
-	seenRef := map[string]struct{}{id: {}}
-	for _, w := range primary {
 		for _, ref := range collectCWERefs(w) {
 			if _, ok := seenRef[ref]; ok {
 				continue
@@ -688,11 +679,11 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 			if err != nil {
 				return dbTypes.CWEData{}, errors.Wrap(err, "get cwe")
 			}
-			for sid, rw := range rm {
+			for rsid, rw := range rm {
 				if _, ok := refCache[rw.ID]; !ok {
 					refCache[rw.ID] = rw
 				}
-				sourceIDs[sid] = struct{}{}
+				sourceIDs[rsid] = struct{}{}
 			}
 		}
 	}
@@ -875,13 +866,7 @@ func collectAttackRefs(a attackTypes.Attack) []dbTypes.AttackRefID {
 // record's relationship fields. RelatedCWEs / RelatedAttacks are
 // cross-catalog and intentionally not included.
 func collectCAPECRefs(c capecTypes.CAPEC) []string {
-	out := make([]string, 0, len(c.ChildOf)+len(c.ParentOf)+len(c.CanFollow)+len(c.CanPrecede)+len(c.PeerOf))
-	out = append(out, c.ChildOf...)
-	out = append(out, c.ParentOf...)
-	out = append(out, c.CanFollow...)
-	out = append(out, c.CanPrecede...)
-	out = append(out, c.PeerOf...)
-	return out
+	return slices.Concat(c.ChildOf, c.ParentOf, c.CanFollow, c.CanPrecede, c.PeerOf)
 }
 
 // collectCWERefs returns every CWE ID referenced by the record's
