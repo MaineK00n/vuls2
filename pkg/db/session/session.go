@@ -541,9 +541,12 @@ func (s Session) getVulnerability(id vulnerabilityContentTypes.VulnerabilityID) 
 func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackData, error) {
 	d := dbTypes.AttackData{Kind: kind, ID: id}
 
-	primary, err := s.storage.GetAttack(kind, id)
+	primary, err := s.Storage().GetAttack(kind, id)
 	if err != nil {
-		return d, errors.Wrapf(err, "get attack %s/%s", kind, id)
+		return dbTypes.AttackData{}, errors.Wrap(err, "get attack")
+	}
+	if len(primary) == 0 {
+		return d, nil
 	}
 
 	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
@@ -563,12 +566,12 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 				continue
 			}
 			seenRef[ref] = struct{}{}
-			rm, err := s.storage.GetAttack(ref.Kind, ref.ID)
+			rm, err := s.Storage().GetAttack(ref.Kind, ref.ID)
 			if err != nil {
 				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
 					continue
 				}
-				return d, errors.Wrapf(err, "get attack %s/%s", ref.Kind, ref.ID)
+				return dbTypes.AttackData{}, errors.Wrap(err, "get attack")
 			}
 			for sid, ra := range rm {
 				if _, ok := refCache[ref]; !ok {
@@ -585,9 +588,9 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 	}
 
 	for id := range sourceIDs {
-		ds, err := s.storage.GetDataSource(id)
+		ds, err := s.Storage().GetDataSource(id)
 		if err != nil {
-			return d, errors.Wrap(err, "get datasource")
+			return dbTypes.AttackData{}, errors.Wrap(err, "get datasource")
 		}
 		d.DataSources = append(d.DataSources, ds)
 	}
@@ -601,9 +604,12 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 	d := dbTypes.CAPECData{ID: id}
 
-	primary, err := s.storage.GetCAPEC(id)
+	primary, err := s.Storage().GetCAPEC(id)
 	if err != nil {
-		return d, errors.Wrapf(err, "get capec %s", id)
+		return dbTypes.CAPECData{}, errors.Wrap(err, "get capec")
+	}
+	if len(primary) == 0 {
+		return d, nil
 	}
 
 	refCache := make(map[string]*capecTypes.CAPEC)
@@ -622,12 +628,12 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 				continue
 			}
 			seenRef[ref] = struct{}{}
-			rm, err := s.storage.GetCAPEC(ref)
+			rm, err := s.Storage().GetCAPEC(ref)
 			if err != nil {
 				if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
 					continue
 				}
-				return d, errors.Wrapf(err, "get capec %s", ref)
+				return dbTypes.CAPECData{}, errors.Wrap(err, "get capec")
 			}
 			for sid, rc := range rm {
 				if _, ok := refCache[rc.ID]; !ok {
@@ -644,9 +650,9 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 	}
 
 	for id := range sourceIDs {
-		ds, err := s.storage.GetDataSource(id)
+		ds, err := s.Storage().GetDataSource(id)
 		if err != nil {
-			return d, errors.Wrap(err, "get datasource")
+			return dbTypes.CAPECData{}, errors.Wrap(err, "get datasource")
 		}
 		d.DataSources = append(d.DataSources, ds)
 	}
@@ -660,9 +666,12 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 	d := dbTypes.CWEData{ID: id}
 
-	primary, err := s.storage.GetCWE(id)
+	primary, err := s.Storage().GetCWE(id)
 	if err != nil {
-		return d, errors.Wrapf(err, "get cwe %s", id)
+		return dbTypes.CWEData{}, errors.Wrap(err, "get cwe")
+	}
+	if len(primary) == 0 {
+		return d, nil
 	}
 
 	refCache := make(map[string]*cweTypes.CWE)
@@ -681,12 +690,12 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 				continue
 			}
 			seenRef[ref] = struct{}{}
-			rm, err := s.storage.GetCWE(ref)
+			rm, err := s.Storage().GetCWE(ref)
 			if err != nil {
 				if errors.Is(err, dbTypes.ErrNotFoundCWE) {
 					continue
 				}
-				return d, errors.Wrapf(err, "get cwe %s", ref)
+				return dbTypes.CWEData{}, errors.Wrap(err, "get cwe")
 			}
 			for sid, rw := range rm {
 				if _, ok := refCache[rw.ID]; !ok {
@@ -703,9 +712,9 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 	}
 
 	for id := range sourceIDs {
-		ds, err := s.storage.GetDataSource(id)
+		ds, err := s.Storage().GetDataSource(id)
 		if err != nil {
-			return d, errors.Wrap(err, "get datasource")
+			return dbTypes.CWEData{}, errors.Wrap(err, "get datasource")
 		}
 		d.DataSources = append(d.DataSources, ds)
 	}
