@@ -560,8 +560,10 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 // namespace before any ext-ids are consumed — ATT&CK's external_id
 // space is per-Kind (pre-2019 1:1 mitigation course-of-action records
 // share T#### ids with their live Techniques), so the kind has to come
-// in explicitly. The kind list is generated from kindTypes.All() so
-// future ATT&CK kinds wire themselves up without touching the CLI.
+// in explicitly. The subcommand list is spelled out below rather than
+// derived from kindTypes.All() so the CLI surface is reviewable in
+// one place and a new ATT&CK Kind landing in vuls-data-update doesn't
+// silently become a published vuls db subcommand.
 func newAttackCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attack",
@@ -573,7 +575,19 @@ func newAttackCmd() *cobra.Command {
 		$ vuls db search attack mitigation T1047
 		`),
 	}
-	for _, kind := range kindTypes.All() {
+	for _, kind := range []kindTypes.Kind{
+		kindTypes.Technique,
+		kindTypes.Tactic,
+		kindTypes.Mitigation,
+		kindTypes.Group,
+		kindTypes.Software,
+		kindTypes.Campaign,
+		kindTypes.Asset,
+		kindTypes.DetectStrategy,
+		kindTypes.Analytic,
+		kindTypes.DataSource,
+		kindTypes.DataComponent,
+	} {
 		cmd.AddCommand(newAttackKindCmd(kind))
 	}
 	return cmd

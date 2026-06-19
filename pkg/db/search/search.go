@@ -1185,11 +1185,11 @@ func joinKBList(ss []string) string {
 }
 
 // SearchAttack delegates to Session.GetAttackData for each ext-id under
-// the given Kind. The CLI front-end registers one subcommand per Kind
-// (via kindTypes.All()), so a single SearchAttack call only ever scans
-// one Kind namespace — ATT&CK's external_id space is per-Kind, not
-// global. Cross-record references appear inline as embedded
-// {ID, Name, Description} refs inside each result.
+// the given Kind. The CLI front-end registers one subcommand per Kind,
+// so a single SearchAttack call only ever scans one Kind namespace —
+// ATT&CK's external_id space is per-Kind, not global. Cross-record
+// references appear inline as embedded {ID, Name, Description} refs
+// inside each result.
 func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -1229,8 +1229,21 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
 	}
 
-	if !slices.Contains(kindTypes.All(), kind) {
-		return errors.Errorf("unknown attack kind %q (expected one of %v)", kind, kindTypes.All())
+	knownAttackKinds := []kindTypes.Kind{
+		kindTypes.Technique,
+		kindTypes.Tactic,
+		kindTypes.Mitigation,
+		kindTypes.Group,
+		kindTypes.Software,
+		kindTypes.Campaign,
+		kindTypes.Asset,
+		kindTypes.DetectStrategy,
+		kindTypes.Analytic,
+		kindTypes.DataSource,
+		kindTypes.DataComponent,
+	}
+	if !slices.Contains(knownAttackKinds, kind) {
+		return errors.Errorf("unknown attack kind %q (expected one of %v)", kind, knownAttackKinds)
 	}
 
 	slog.Info("Get MITRE ATT&CK", "kind", kind, "ids", ids)
