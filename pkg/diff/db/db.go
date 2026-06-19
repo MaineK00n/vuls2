@@ -251,7 +251,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 	if err := db.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
 			switch string(name) {
-			case "metadata", "vulnerability", "datasource":
+			case "metadata", "vulnerability", "attack", "capec", "cwe", "datasource":
 			default:
 				ecos = append(ecos, ecosystemTypes.Ecosystem(name))
 			}
