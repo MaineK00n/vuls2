@@ -568,9 +568,6 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 			seenRef[ref] = struct{}{}
 			rm, err := s.Storage().GetAttack(ref.Kind, ref.ID)
 			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundAttack) {
-					continue
-				}
 				return dbTypes.AttackData{}, errors.Wrap(err, "get attack")
 			}
 			for sid, ra := range rm {
@@ -630,9 +627,6 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 			seenRef[ref] = struct{}{}
 			rm, err := s.Storage().GetCAPEC(ref)
 			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
-					continue
-				}
 				return dbTypes.CAPECData{}, errors.Wrap(err, "get capec")
 			}
 			for sid, rc := range rm {
@@ -692,9 +686,6 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 			seenRef[ref] = struct{}{}
 			rm, err := s.Storage().GetCWE(ref)
 			if err != nil {
-				if errors.Is(err, dbTypes.ErrNotFoundCWE) {
-					continue
-				}
 				return dbTypes.CWEData{}, errors.Wrap(err, "get cwe")
 			}
 			for sid, rw := range rm {
