@@ -204,26 +204,3 @@ func ToCWEContent(c cweTypes.CWE, cache map[string]cweTypes.CWE) CWEContent {
 	}
 	return r
 }
-
-// CollectCWERefs returns every CWE ID referenced by the record's
-// Weakness.RelatedWeaknesses, Category.Members and View.Members.
-// RelatedAttackPatterns (CAPEC IDs) is cross-catalog and not included.
-func CollectCWERefs(c cweTypes.CWE) []string {
-	out := make([]string, 0, len(c.Weakness.RelatedWeaknesses)+len(c.Category.Members)+len(c.View.Members))
-	for _, rw := range c.Weakness.RelatedWeaknesses {
-		if rw.CWEID != "" {
-			out = append(out, rw.CWEID)
-		}
-	}
-	for _, m := range c.Category.Members {
-		if m.CWEID != "" {
-			out = append(out, m.CWEID)
-		}
-	}
-	for _, m := range c.View.Members {
-		if m.CWEID != "" {
-			out = append(out, m.CWEID)
-		}
-	}
-	return out
-}

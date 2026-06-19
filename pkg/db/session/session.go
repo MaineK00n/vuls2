@@ -561,7 +561,7 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 
 	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
 	for _, a := range primary {
-		for _, ref := range dbTypes.CollectAttackRefs(a) {
+		for _, ref := range collectAttackRefs(a) {
 			if _, ok := seenRef[ref]; ok {
 				continue
 			}
@@ -620,7 +620,7 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 
 	seenRef := map[string]struct{}{id: {}}
 	for _, c := range primary {
-		for _, ref := range dbTypes.CollectCAPECRefs(c) {
+		for _, ref := range collectCAPECRefs(c) {
 			if _, ok := seenRef[ref]; ok {
 				continue
 			}
@@ -679,7 +679,7 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 
 	seenRef := map[string]struct{}{id: {}}
 	for _, w := range primary {
-		for _, ref := range dbTypes.CollectCWERefs(w) {
+		for _, ref := range collectCWERefs(w) {
 			if _, ok := seenRef[ref]; ok {
 				continue
 			}
@@ -710,4 +710,199 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 		d.DataSources = append(d.DataSources, ds)
 	}
 	return d, nil
+}
+
+// by the record's kind-specific fields. Used by Session.GetAttackData
+// to walk one level of references and build the AttackRef cache. The
+// Kind for each ref is statically determined by the enclosing field
+// name (e.g., Technique.Mitigations is always KindMitigation), with
+// the single exception of Procedure.AttackerKind which is carried
+// inline on the source struct.
+func collectAttackRefs(a attackTypes.Attack) []dbTypes.AttackRefID {
+	// + 3 for the scalar string fields Technique.Parent /
+	// DataComponent.DataSource / Analytic.DetectionStrategy.
+	out := make([]dbTypes.AttackRefID, 0, len(a.Technique.Mitigations)+
+		len(a.Technique.Subtechniques)+
+		len(a.Technique.AssetsTargeted)+
+		len(a.Technique.DetectionStrategies)+
+		len(a.Technique.Tactics)+
+		len(a.Technique.Procedures)+
+		len(a.Tactic.Techniques)+
+		len(a.Mitigation.TechniquesMitigated)+
+		len(a.Group.TechniquesUsed)+
+		len(a.Group.SoftwaresUsed)+
+		len(a.Group.CampaignsAttributed)+
+		len(a.Software.TechniquesUsed)+
+		len(a.Software.GroupsUsing)+
+		len(a.Software.CampaignsUsing)+
+		len(a.Campaign.TechniquesUsed)+
+		len(a.Campaign.GroupsAttributed)+
+		len(a.Campaign.SoftwaresUsed)+
+		len(a.Asset.TechniquesTargeting)+
+		len(a.DetectionStrategy.Analytics)+
+		len(a.DetectionStrategy.TechniquesDetected)+
+		len(a.AttackDataSource.DataComponents)+
+		3)
+	// Technique
+	for _, r := range a.Technique.Mitigations {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Mitigation, ID: r.ID})
+		}
+	}
+	for _, id := range a.Technique.Subtechniques {
+		if id != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: id})
+		}
+	}
+	for _, r := range a.Technique.AssetsTargeted {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Asset, ID: r.ID})
+		}
+	}
+	for _, r := range a.Technique.DetectionStrategies {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.DetectStrategy, ID: r.ID})
+		}
+	}
+	for _, tr := range a.Technique.Tactics {
+		if tr.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Tactic, ID: tr.ID})
+		}
+	}
+	if a.Technique.Parent != "" {
+		out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: a.Technique.Parent})
+	}
+	for _, p := range a.Technique.Procedures {
+		if p.AttackerID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: p.AttackerKind, ID: p.AttackerID})
+		}
+	}
+	// Tactic
+	for _, id := range a.Tactic.Techniques {
+		if id != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: id})
+		}
+	}
+	// Mitigation
+	for _, r := range a.Mitigation.TechniquesMitigated {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
+		}
+	}
+	// Group
+	for _, t := range a.Group.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
+		}
+	}
+	for _, r := range a.Group.SoftwaresUsed {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Software, ID: r.ID})
+		}
+	}
+	for _, r := range a.Group.CampaignsAttributed {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Campaign, ID: r.ID})
+		}
+	}
+	// Software
+	for _, t := range a.Software.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
+		}
+	}
+	for _, r := range a.Software.GroupsUsing {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Group, ID: r.ID})
+		}
+	}
+	for _, r := range a.Software.CampaignsUsing {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Campaign, ID: r.ID})
+		}
+	}
+	// Campaign
+	for _, t := range a.Campaign.TechniquesUsed {
+		if t.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: t.ID})
+		}
+	}
+	for _, r := range a.Campaign.GroupsAttributed {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Group, ID: r.ID})
+		}
+	}
+	for _, r := range a.Campaign.SoftwaresUsed {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Software, ID: r.ID})
+		}
+	}
+	// Asset
+	for _, r := range a.Asset.TechniquesTargeting {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
+		}
+	}
+	// DetectionStrategy
+	for _, id := range a.DetectionStrategy.Analytics {
+		if id != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Analytic, ID: id})
+		}
+	}
+	for _, r := range a.DetectionStrategy.TechniquesDetected {
+		if r.ID != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.Technique, ID: r.ID})
+		}
+	}
+	// DataSource (kind)
+	for _, id := range a.AttackDataSource.DataComponents {
+		if id != "" {
+			out = append(out, dbTypes.AttackRefID{Kind: kindTypes.DataComponent, ID: id})
+		}
+	}
+	// DataComponent
+	if a.DataComponent.DataSource != "" {
+		out = append(out, dbTypes.AttackRefID{Kind: kindTypes.DataSource, ID: a.DataComponent.DataSource})
+	}
+	// Analytic
+	if a.Analytic.DetectionStrategy != "" {
+		out = append(out, dbTypes.AttackRefID{Kind: kindTypes.DetectStrategy, ID: a.Analytic.DetectionStrategy})
+	}
+	return out
+}
+
+// collectCAPECRefs returns every CAPEC external ID referenced by the
+// record's relationship fields. RelatedCWEs / RelatedAttacks are
+// cross-catalog and intentionally not included.
+func collectCAPECRefs(c capecTypes.CAPEC) []string {
+	out := make([]string, 0, len(c.ChildOf)+len(c.ParentOf)+len(c.CanFollow)+len(c.CanPrecede)+len(c.PeerOf))
+	out = append(out, c.ChildOf...)
+	out = append(out, c.ParentOf...)
+	out = append(out, c.CanFollow...)
+	out = append(out, c.CanPrecede...)
+	out = append(out, c.PeerOf...)
+	return out
+}
+
+// collectCWERefs returns every CWE ID referenced by the record's
+// Weakness.RelatedWeaknesses, Category.Members and View.Members.
+// RelatedAttackPatterns (CAPEC IDs) is cross-catalog and not included.
+func collectCWERefs(c cweTypes.CWE) []string {
+	out := make([]string, 0, len(c.Weakness.RelatedWeaknesses)+len(c.Category.Members)+len(c.View.Members))
+	for _, rw := range c.Weakness.RelatedWeaknesses {
+		if rw.CWEID != "" {
+			out = append(out, rw.CWEID)
+		}
+	}
+	for _, m := range c.Category.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	for _, m := range c.View.Members {
+		if m.CWEID != "" {
+			out = append(out, m.CWEID)
+		}
+	}
+	return out
 }

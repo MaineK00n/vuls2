@@ -115,16 +115,3 @@ func ToCAPECContent(c capecTypes.CAPEC, cache map[string]capecTypes.CAPEC) CAPEC
 		DataSource:          c.DataSource,
 	}
 }
-
-// CollectCAPECRefs returns every CAPEC external ID referenced by the
-// record's relationship fields. RelatedCWEs / RelatedAttacks are
-// cross-catalog and intentionally not included.
-func CollectCAPECRefs(c capecTypes.CAPEC) []string {
-	out := make([]string, 0, len(c.ChildOf)+len(c.ParentOf)+len(c.CanFollow)+len(c.CanPrecede)+len(c.PeerOf))
-	out = append(out, c.ChildOf...)
-	out = append(out, c.ParentOf...)
-	out = append(out, c.CanFollow...)
-	out = append(out, c.CanPrecede...)
-	out = append(out, c.PeerOf...)
-	return out
-}
