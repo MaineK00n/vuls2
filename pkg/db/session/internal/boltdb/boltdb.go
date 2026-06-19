@@ -1143,10 +1143,6 @@ func (c *Connection) Initialize() error {
 			return errors.Wrapf(err, "create %q", "vulnerability -> vulnerability")
 		}
 
-		if _, err := tx.CreateBucket([]byte("datasource")); err != nil {
-			return errors.Wrapf(err, "create %q", "datasource")
-		}
-
 		// attack:<Kind>:<Attack ID>, capec:<CAPEC ID>, cwe:<CWE ID>
 		// are first-class catalog buckets parallel to vulnerability;
 		// pre-create the parents here so GetX paths get an
@@ -1163,6 +1159,14 @@ func (c *Connection) Initialize() error {
 
 		if _, err := tx.CreateBucket([]byte("cwe")); err != nil {
 			return errors.Wrapf(err, "create %q", "cwe")
+		}
+
+		// datasource is per-record provenance, kept last so the
+		// catalog buckets (vulnerability / attack / capec / cwe)
+		// stay grouped together — matches the boltdb layout
+		// header comments above and GetEcosystems's exclusion list.
+		if _, err := tx.CreateBucket([]byte("datasource")); err != nil {
+			return errors.Wrapf(err, "create %q", "datasource")
 		}
 
 		return nil
