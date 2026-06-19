@@ -550,11 +550,11 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 	}
 
 	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
-	refCache := make(map[dbTypes.AttackRefID]*attackTypes.Attack)
+	refCache := make(map[dbTypes.AttackRefID]attackTypes.Attack)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	for sid, a := range primary {
 		if _, ok := refCache[selfKey]; !ok {
-			refCache[selfKey] = &a
+			refCache[selfKey] = a
 		}
 		sourceIDs[sid] = struct{}{}
 	}
@@ -575,7 +575,7 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 			}
 			for sid, ra := range rm {
 				if _, ok := refCache[ref]; !ok {
-					refCache[ref] = &ra
+					refCache[ref] = ra
 				}
 				sourceIDs[sid] = struct{}{}
 			}
@@ -612,11 +612,11 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 		return d, nil
 	}
 
-	refCache := make(map[string]*capecTypes.CAPEC)
+	refCache := make(map[string]capecTypes.CAPEC)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	for sid, c := range primary {
 		if _, ok := refCache[c.ID]; !ok {
-			refCache[c.ID] = &c
+			refCache[c.ID] = c
 		}
 		sourceIDs[sid] = struct{}{}
 	}
@@ -637,7 +637,7 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 			}
 			for sid, rc := range rm {
 				if _, ok := refCache[rc.ID]; !ok {
-					refCache[rc.ID] = &rc
+					refCache[rc.ID] = rc
 				}
 				sourceIDs[sid] = struct{}{}
 			}
@@ -674,11 +674,11 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 		return d, nil
 	}
 
-	refCache := make(map[string]*cweTypes.CWE)
+	refCache := make(map[string]cweTypes.CWE)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	for sid, w := range primary {
 		if _, ok := refCache[w.ID]; !ok {
-			refCache[w.ID] = &w
+			refCache[w.ID] = w
 		}
 		sourceIDs[sid] = struct{}{}
 	}
@@ -699,7 +699,7 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 			}
 			for sid, rw := range rm {
 				if _, ok := refCache[rw.ID]; !ok {
-					refCache[rw.ID] = &rw
+					refCache[rw.ID] = rw
 				}
 				sourceIDs[sid] = struct{}{}
 			}

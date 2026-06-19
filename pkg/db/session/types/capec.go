@@ -63,18 +63,15 @@ type CAPECRef struct {
 
 // ToCAPECRef converts a CAPEC external ID to a CAPECRef by looking up
 // the cache. When the ID isn't cached, only the ID is set.
-func ToCAPECRef(id string, cache map[string]*capecTypes.CAPEC) CAPECRef {
-	if id == "" {
-		return CAPECRef{}
-	}
-	if c, ok := cache[id]; ok && c != nil {
+func ToCAPECRef(id string, cache map[string]capecTypes.CAPEC) CAPECRef {
+	if c, ok := cache[id]; ok {
 		return CAPECRef{ID: c.ID, Name: c.Name, Description: c.Description}
 	}
 	return CAPECRef{ID: id}
 }
 
 // ToCAPECRefs is the slice form of ToCAPECRef.
-func ToCAPECRefs(ids []string, cache map[string]*capecTypes.CAPEC) []CAPECRef {
+func ToCAPECRefs(ids []string, cache map[string]capecTypes.CAPEC) []CAPECRef {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -87,7 +84,7 @@ func ToCAPECRefs(ids []string, cache map[string]*capecTypes.CAPEC) []CAPECRef {
 
 // ToCAPECContent converts a per-source capecTypes.CAPEC into the
 // embedded-refs CAPECContent view.
-func ToCAPECContent(c capecTypes.CAPEC, cache map[string]*capecTypes.CAPEC) CAPECContent {
+func ToCAPECContent(c capecTypes.CAPEC, cache map[string]capecTypes.CAPEC) CAPECContent {
 	return CAPECContent{
 		Name:                c.Name,
 		Description:         c.Description,

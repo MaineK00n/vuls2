@@ -115,20 +115,14 @@ type CWEContentView struct {
 
 // ToCWERef converts a CWE ID to a CWERef by looking up the cache. When
 // the ID isn't cached, only the ID is set.
-func ToCWERef(id string, cache map[string]*cweTypes.CWE) CWERef {
-	if id == "" {
-		return CWERef{}
-	}
-	if c, ok := cache[id]; ok && c != nil {
+func ToCWERef(id string, cache map[string]cweTypes.CWE) CWERef {
+	if c, ok := cache[id]; ok {
 		return CWERef{ID: c.ID, Name: c.Name, Description: c.Description}
 	}
 	return CWERef{ID: id}
 }
 
-func toCWEContentRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness, cache map[string]*cweTypes.CWE) []CWEContentRelatedWeakness {
-	if len(items) == 0 {
-		return nil
-	}
+func toCWEContentRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness, cache map[string]cweTypes.CWE) []CWEContentRelatedWeakness {
 	out := make([]CWEContentRelatedWeakness, 0, len(items))
 	for _, rw := range items {
 		out = append(out, CWEContentRelatedWeakness{
@@ -142,10 +136,7 @@ func toCWEContentRelatedWeaknesses(items []relatedweaknessTypes.RelatedWeakness,
 	return out
 }
 
-func toCWEContentMembers(items []memberTypes.Member, cache map[string]*cweTypes.CWE) []CWEContentMember {
-	if len(items) == 0 {
-		return nil
-	}
+func toCWEContentMembers(items []memberTypes.Member, cache map[string]cweTypes.CWE) []CWEContentMember {
 	out := make([]CWEContentMember, 0, len(items))
 	for _, m := range items {
 		out = append(out, CWEContentMember{
@@ -158,7 +149,7 @@ func toCWEContentMembers(items []memberTypes.Member, cache map[string]*cweTypes.
 
 // ToCWEContent converts a per-source cweTypes.CWE into the embedded-refs
 // CWEContent view.
-func ToCWEContent(c cweTypes.CWE, cache map[string]*cweTypes.CWE) CWEContent {
+func ToCWEContent(c cweTypes.CWE, cache map[string]cweTypes.CWE) CWEContent {
 	r := CWEContent{
 		Kind:        c.Kind,
 		Name:        c.Name,
