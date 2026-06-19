@@ -171,62 +171,18 @@ func (c *Connection) Put(root string) error {
 
 	idx := make(pkgIndex)
 
-	dataPaths, err := collectJSONPaths(filepath.Join(root, "data"))
-	if err != nil {
-		return errors.Wrap(err, "collect data paths")
-	}
-	for batch := range slices.Chunk(dataPaths, batchSize) {
-		if err := c.conn.Update(func(tx *bolt.Tx) error {
-			for _, p := range batch {
-				if err := putDataFile(tx, p, idx); err != nil {
-					return errors.Wrapf(err, "put data file %s", p)
-				}
-			}
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "put data batch")
-		}
-	}
-
-	// Each ecosystem's index lives in its own B+tree sub-bucket, so process
-	// one ecosystem at a time. Package order is map-iteration order; sorting
-	// it was tested and made no measurable difference to total Put time.
-	for eco, byPkg := range idx {
-		for batch := range slices.Chunk(slices.Collect(maps.Keys(byPkg)), batchSize) {
-			if err := c.conn.Update(func(tx *bolt.Tx) error {
-				for _, pkg := range batch {
-					if err := putIndexEntry(tx, eco, pkg, slices.Collect(maps.Keys(byPkg[pkg]))); err != nil {
-						return errors.Wrapf(err, "put index entry %s -> %s", eco, pkg)
-					}
-				}
-				return nil
-			}); err != nil {
-				return errors.Wrap(err, "put index batch")
-			}
-		}
-	}
-
-	kbPaths, err := collectJSONPaths(filepath.Join(root, "microsoftkb"))
-	if err != nil {
-		return errors.Wrap(err, "collect microsoftkb paths")
-	}
-	for batch := range slices.Chunk(kbPaths, batchSize) {
-		if err := c.conn.Update(func(tx *bolt.Tx) error {
-			for _, p := range batch {
-				if err := putMicrosoftKBFile(tx, p); err != nil {
-					return errors.Wrapf(err, "put microsoftkb file %s", p)
-				}
-			}
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "put microsoftkb batch")
-		}
-	}
-
+	// File-based puts share a "collect paths, write in size-bounded
+	// transactions" shape. data files differ only in that putDataFile
+	// accumulates per-package -> rootID entries into idx; the flush
+	// after the loop walks idx and writes the index sub-buckets in
+	// one ecosystem-batched pass so each indexed package is
+	// read-modify-written at most once per Put.
 	for _, spec := range []struct {
 		dir string
 		put func(*bolt.Tx, string) error
 	}{
+		{dir: "data", put: func(tx *bolt.Tx, p string) error { return putDataFile(tx, p, idx) }},
+		{dir: "microsoftkb", put: putMicrosoftKBFile},
 		{dir: "attack", put: putAttackFile},
 		{dir: "capec", put: putCAPECFile},
 		{dir: "cwe", put: putCWEFile},
@@ -245,6 +201,26 @@ func (c *Connection) Put(root string) error {
 				return nil
 			}); err != nil {
 				return errors.Wrapf(err, "put %s batch", spec.dir)
+			}
+		}
+	}
+
+	// Flush the per-package -> rootID index accumulated during data
+	// file processing. Each ecosystem's index lives in its own B+tree
+	// sub-bucket, so process one ecosystem at a time. Package order is
+	// map-iteration order; sorting it was tested and made no
+	// measurable difference to total Put time.
+	for eco, byPkg := range idx {
+		for batch := range slices.Chunk(slices.Collect(maps.Keys(byPkg)), batchSize) {
+			if err := c.conn.Update(func(tx *bolt.Tx) error {
+				for _, pkg := range batch {
+					if err := putIndexEntry(tx, eco, pkg, slices.Collect(maps.Keys(byPkg[pkg]))); err != nil {
+						return errors.Wrapf(err, "put index entry %s -> %s", eco, pkg)
+					}
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "put index batch")
 			}
 		}
 	}
