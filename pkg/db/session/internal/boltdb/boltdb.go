@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	SchemaVersion = 1
+	SchemaVersion = 0
 )
 
 // boltdb: metadata:db -> dbTypes.Metadata
