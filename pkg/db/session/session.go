@@ -550,13 +550,14 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 	}
 
 	selfKey := dbTypes.AttackRefID{Kind: kind, ID: id}
-	refCache := make(map[dbTypes.AttackRefID]attackTypes.Attack)
+	refCache := make(map[sourceTypes.SourceID]map[dbTypes.AttackRefID]attackTypes.Attack)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	seenRef := map[dbTypes.AttackRefID]struct{}{selfKey: {}}
 	for sid, a := range primary {
-		if _, ok := refCache[selfKey]; !ok {
-			refCache[selfKey] = a
+		if refCache[sid] == nil {
+			refCache[sid] = make(map[dbTypes.AttackRefID]attackTypes.Attack)
 		}
+		refCache[sid][selfKey] = a
 		sourceIDs[sid] = struct{}{}
 		for _, ref := range collectAttackRefs(a) {
 			if _, ok := seenRef[ref]; ok {
@@ -568,9 +569,10 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 				return dbTypes.AttackData{}, errors.Wrap(err, "get attack")
 			}
 			for rsid, ra := range rm {
-				if _, ok := refCache[ref]; !ok {
-					refCache[ref] = ra
+				if refCache[rsid] == nil {
+					refCache[rsid] = make(map[dbTypes.AttackRefID]attackTypes.Attack)
 				}
+				refCache[rsid][ref] = ra
 				sourceIDs[rsid] = struct{}{}
 			}
 		}
@@ -578,7 +580,7 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 
 	d.Contents = make(map[sourceTypes.SourceID]dbTypes.AttackContent, len(primary))
 	for sid, a := range primary {
-		d.Contents[sid] = dbTypes.ToAttackContent(a, refCache)
+		d.Contents[sid] = dbTypes.ToAttackContent(a, refCache[sid])
 	}
 
 	for id := range sourceIDs {
@@ -606,13 +608,14 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 		return d, nil
 	}
 
-	refCache := make(map[string]capecTypes.CAPEC)
+	refCache := make(map[sourceTypes.SourceID]map[string]capecTypes.CAPEC)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	seenRef := map[string]struct{}{id: {}}
 	for sid, c := range primary {
-		if _, ok := refCache[c.ID]; !ok {
-			refCache[c.ID] = c
+		if refCache[sid] == nil {
+			refCache[sid] = make(map[string]capecTypes.CAPEC)
 		}
+		refCache[sid][c.ID] = c
 		sourceIDs[sid] = struct{}{}
 		for _, ref := range collectCAPECRefs(c) {
 			if _, ok := seenRef[ref]; ok {
@@ -624,9 +627,10 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 				return dbTypes.CAPECData{}, errors.Wrap(err, "get capec")
 			}
 			for rsid, rc := range rm {
-				if _, ok := refCache[rc.ID]; !ok {
-					refCache[rc.ID] = rc
+				if refCache[rsid] == nil {
+					refCache[rsid] = make(map[string]capecTypes.CAPEC)
 				}
+				refCache[rsid][rc.ID] = rc
 				sourceIDs[rsid] = struct{}{}
 			}
 		}
@@ -634,7 +638,7 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 
 	d.Contents = make(map[sourceTypes.SourceID]dbTypes.CAPECContent, len(primary))
 	for sid, c := range primary {
-		d.Contents[sid] = dbTypes.ToCAPECContent(c, refCache)
+		d.Contents[sid] = dbTypes.ToCAPECContent(c, refCache[sid])
 	}
 
 	for id := range sourceIDs {
@@ -662,13 +666,14 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 		return d, nil
 	}
 
-	refCache := make(map[string]cweTypes.CWE)
+	refCache := make(map[sourceTypes.SourceID]map[string]cweTypes.CWE)
 	sourceIDs := make(map[sourceTypes.SourceID]struct{})
 	seenRef := map[string]struct{}{id: {}}
 	for sid, w := range primary {
-		if _, ok := refCache[w.ID]; !ok {
-			refCache[w.ID] = w
+		if refCache[sid] == nil {
+			refCache[sid] = make(map[string]cweTypes.CWE)
 		}
+		refCache[sid][w.ID] = w
 		sourceIDs[sid] = struct{}{}
 		for _, ref := range collectCWERefs(w) {
 			if _, ok := seenRef[ref]; ok {
@@ -680,9 +685,10 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 				return dbTypes.CWEData{}, errors.Wrap(err, "get cwe")
 			}
 			for rsid, rw := range rm {
-				if _, ok := refCache[rw.ID]; !ok {
-					refCache[rw.ID] = rw
+				if refCache[rsid] == nil {
+					refCache[rsid] = make(map[string]cweTypes.CWE)
 				}
+				refCache[rsid][rw.ID] = rw
 				sourceIDs[rsid] = struct{}{}
 			}
 		}
@@ -690,7 +696,7 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 
 	d.Contents = make(map[sourceTypes.SourceID]dbTypes.CWEContent, len(primary))
 	for sid, w := range primary {
-		d.Contents[sid] = dbTypes.ToCWEContent(w, refCache)
+		d.Contents[sid] = dbTypes.ToCWEContent(w, refCache[sid])
 	}
 
 	for id := range sourceIDs {
