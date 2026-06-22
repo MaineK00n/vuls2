@@ -1,1 +1,42 @@
-{"id":"CWE-707","contents":{"mitre-cwe":{"kind":"category","name":"Improper Neutralization","status":"Incomplete","description":"Weaknesses in this category occur when the product does not properly neutralize special elements within data.","category":{"members":[{"cwe":{"id":"CWE-89","name":"Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')","description":"The product constructs all or part of an SQL command using externally-influenced input."},"view_id":"1000"}]},"data_source":{"id":"mitre-cwe"}}},"datasources":[{"id":"mitre-cwe","name":"MITRE CWE","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-cwe","commit":"0000000000000000000000000000000000000000","date":"2026-04-01T00:00:00Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-cwe"}}]}
+{
+  "id": "CWE-707",
+  "contents": {
+    "mitre-cwe": {
+      "kind": "category",
+      "name": "Improper Neutralization",
+      "status": "Incomplete",
+      "description": "Weaknesses in this category occur when the product does not properly neutralize special elements within data.",
+      "category": {
+        "members": [
+          {
+            "cwe": {
+              "id": "CWE-89",
+              "name": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+              "description": "The product constructs all or part of an SQL command using externally-influenced input."
+            },
+            "view_id": "1000"
+          }
+        ]
+      },
+      "data_source": {
+        "id": "mitre-cwe"
+      }
+    }
+  },
+  "datasources": [
+    {
+      "id": "mitre-cwe",
+      "name": "MITRE CWE",
+      "raw": [
+        {
+          "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-cwe",
+          "commit": "0000000000000000000000000000000000000000",
+          "date": "2026-04-01T00:00:00Z"
+        }
+      ],
+      "extracted": {
+        "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-cwe"
+      }
+    }
+  ]
+}

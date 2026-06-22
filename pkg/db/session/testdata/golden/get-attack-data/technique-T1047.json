@@ -1,1 +1,55 @@
-{"kind":"technique","id":"T1047","contents":{"mitre-attack":{"kind":"technique","name":"Windows Management Instrumentation","description":"Adversaries may abuse Windows Management Instrumentation (WMI) to execute malicious commands and payloads.","domains":["enterprise"],"deprecated":false,"revoked":false,"technique":{"platforms":["Windows"],"tactics":[{"id":"TA0002","kind":"tactic","name":"Execution","description":"The adversary is trying to run malicious code.","domains":["enterprise"],"is_subtechnique":false}],"is_subtechnique":false,"network_requirements":false,"remote_support":false},"data_source":{"id":"mitre-attack"}}},"datasources":[{"id":"mitre-attack","name":"MITRE ATT&CK","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-attack","commit":"0000000000000000000000000000000000000000","date":"2026-04-01T00:00:00Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-attack"}}]}
+{
+  "kind": "technique",
+  "id": "T1047",
+  "contents": {
+    "mitre-attack": {
+      "kind": "technique",
+      "name": "Windows Management Instrumentation",
+      "description": "Adversaries may abuse Windows Management Instrumentation (WMI) to execute malicious commands and payloads.",
+      "domains": [
+        "enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "technique": {
+        "platforms": [
+          "Windows"
+        ],
+        "tactics": [
+          {
+            "id": "TA0002",
+            "kind": "tactic",
+            "name": "Execution",
+            "description": "The adversary is trying to run malicious code.",
+            "domains": [
+              "enterprise"
+            ],
+            "is_subtechnique": false
+          }
+        ],
+        "is_subtechnique": false,
+        "network_requirements": false,
+        "remote_support": false
+      },
+      "data_source": {
+        "id": "mitre-attack"
+      }
+    }
+  },
+  "datasources": [
+    {
+      "id": "mitre-attack",
+      "name": "MITRE ATT&CK",
+      "raw": [
+        {
+          "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-attack",
+          "commit": "0000000000000000000000000000000000000000",
+          "date": "2026-04-01T00:00:00Z"
+        }
+      ],
+      "extracted": {
+        "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-attack"
+      }
+    }
+  ]
+}
