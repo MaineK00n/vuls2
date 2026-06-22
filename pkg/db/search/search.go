@@ -20,6 +20,7 @@ import (
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -1272,6 +1273,9 @@ func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get attack data %s/%s", kind, id)
 		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
 		if err := json.MarshalWrite(os.Stdout, d); err != nil {
 			return errors.Wrapf(err, "encode %s/%s", kind, id)
 		}
@@ -1336,6 +1340,9 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get capec data %s", query)
 		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
 		if err := json.MarshalWrite(os.Stdout, d); err != nil {
 			return errors.Wrapf(err, "encode %s", query)
 		}
@@ -1400,6 +1407,9 @@ func SearchCWE(queries []string, opts ...Option) error {
 			}
 			return errors.Wrapf(err, "get cwe data %s", query)
 		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
 		if err := json.MarshalWrite(os.Stdout, d); err != nil {
 			return errors.Wrapf(err, "encode %s", query)
 		}
