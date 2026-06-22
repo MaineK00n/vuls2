@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
@@ -36,6 +38,9 @@ func NewCmd() *cobra.Command {
 		newMetadataCmd(),
 		newDataSourcesCmd(),
 		newEcosystemsCmd(),
+		newAttackCmd(),
+		newCAPECCmd(),
+		newCWECmd(),
 	)
 
 	return cmd
@@ -548,4 +553,142 @@ func (o filterOptions) buildFilter() dbTypes.Filter {
 			return rs
 		}(),
 	}
+}
+
+// newAttackCmd builds the `db search attack` parent. The actual lookups
+// live under one subcommand per Kind so each invocation fixes the
+// namespace before any ext-ids are consumed — ATT&CK's external_id
+// space is per-Kind (pre-2019 1:1 mitigation course-of-action records
+// share T#### ids with their live Techniques), so the kind has to come
+// in explicitly. The subcommand list is spelled out below rather than
+// derived from kindTypes.All() so the CLI surface is reviewable in
+// one place and a new ATT&CK Kind landing in vuls-data-update doesn't
+// silently become a published vuls db subcommand.
+func newAttackCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "attack",
+		Short: "search MITRE ATT&CK records (techniques, mitigations, etc.) in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search attack technique T1110
+		$ vuls db search attack mitigation M1036
+		$ vuls db search attack technique T1047
+		$ vuls db search attack mitigation T1047
+		`),
+	}
+	for _, kind := range []kindTypes.Kind{
+		kindTypes.Technique,
+		kindTypes.Tactic,
+		kindTypes.Mitigation,
+		kindTypes.Group,
+		kindTypes.Software,
+		kindTypes.Campaign,
+		kindTypes.Asset,
+		kindTypes.DetectStrategy,
+		kindTypes.Analytic,
+		kindTypes.DataSource,
+		kindTypes.DataComponent,
+	} {
+		cmd.AddCommand(newAttackKindCmd(kind))
+	}
+	return cmd
+}
+
+func newAttackKindCmd(kind kindTypes.Kind) *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:     fmt.Sprintf("%s <ext-id>...", kind),
+		Short:   fmt.Sprintf("search MITRE ATT&CK %s records in vuls db", kind),
+		Example: fmt.Sprintf("  $ vuls db search attack %s T1110\n", kind),
+		Args:    cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchAttack(kind, args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newCAPECCmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "capec <CAPEC id>...",
+		Short: "search MITRE CAPEC records in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search capec CAPEC-66
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchCAPEC(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
+}
+
+func newCWECmd() *cobra.Command {
+	options := struct {
+		dbtype utilflag.DBType
+		dbpath string
+		debug  bool
+	}{
+		dbtype: utilflag.DBTypeBoltDB,
+		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		debug:  false,
+	}
+
+	cmd := &cobra.Command{
+		Use:   "cwe <CWE id>...",
+		Short: "search MITRE CWE records in vuls db",
+		Example: heredoc.Doc(`
+		$ vuls db search cwe CWE-79
+		`),
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.SearchCWE(args, db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath), db.WithDebug(options.debug)); err != nil {
+				return errors.Wrap(err, "db search")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
+	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
+	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
+
+	return cmd
 }

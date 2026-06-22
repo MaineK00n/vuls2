@@ -1,0 +1,71 @@
+{
+  "kind": "tactic",
+  "id": "TA0002",
+  "contents": {
+    "mitre-attack": {
+      "kind": "tactic",
+      "name": "Execution",
+      "description": "The adversary is trying to run malicious code.",
+      "domains": [
+        "enterprise"
+      ],
+      "deprecated": false,
+      "revoked": false,
+      "tactic": {
+        "shortname": "execution",
+        "techniques": [
+          {
+            "id": "T1047",
+            "kind": "technique",
+            "name": "Windows Management Instrumentation",
+            "description": "Adversaries may abuse Windows Management Instrumentation (WMI) to execute malicious commands and payloads.",
+            "domains": [
+              "enterprise"
+            ],
+            "is_subtechnique": false
+          },
+          {
+            "id": "T1059",
+            "kind": "technique",
+            "name": "Command and Scripting Interpreter",
+            "description": "Adversaries may abuse command and script interpreters to execute commands, scripts, or binaries.",
+            "domains": [
+              "enterprise"
+            ],
+            "is_subtechnique": false
+          },
+          {
+            "id": "T1059.001",
+            "kind": "technique",
+            "name": "PowerShell",
+            "description": "Adversaries may abuse PowerShell commands and scripts for execution.",
+            "domains": [
+              "enterprise"
+            ],
+            "parent": "T1059",
+            "is_subtechnique": true
+          }
+        ]
+      },
+      "data_source": {
+        "id": "mitre-attack"
+      }
+    }
+  },
+  "datasources": [
+    {
+      "id": "mitre-attack",
+      "name": "MITRE ATT&CK",
+      "raw": [
+        {
+          "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-attack",
+          "commit": "0000000000000000000000000000000000000000",
+          "date": "2026-04-01T00:00:00Z"
+        }
+      ],
+      "extracted": {
+        "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-attack"
+      }
+    }
+  ]
+}

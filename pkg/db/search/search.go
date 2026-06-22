@@ -15,10 +15,12 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -124,8 +126,11 @@ func SearchMetadata(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -176,8 +181,11 @@ func SearchDataSources(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -234,8 +242,11 @@ func SearchEcosystems(opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -292,8 +303,11 @@ func SearchRoot(queries []dataTypes.RootID, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -355,8 +369,11 @@ func SearchAdisory(queries []advisoryContentTypes.AdvisoryID, opts ...Option) er
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -418,8 +435,11 @@ func SearchVulnerability(queries []vulnerabilityContentTypes.VulnerabilityID, op
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -481,8 +501,11 @@ func SearchPackage(ecosytem ecosystemTypes.Ecosystem, queries []string, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -541,8 +564,11 @@ func SearchKBInfo(queries []string, datasources []sourceTypes.SourceID, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -614,8 +640,11 @@ func SearchKBVuln(queries []string, datasources []sourceTypes.SourceID, opts ...
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -720,8 +749,11 @@ func SearchKBExpand(req KBExpandRequest, opts ...Option) error {
 
 	slog.Info("Get Metadata")
 	meta, err := s.Storage().GetMetadata()
-	if err != nil || meta == nil {
+	if err != nil {
 		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
 	}
 	sv, err := session.SchemaVersion(options.dbtype)
 	if err != nil {
@@ -1181,4 +1213,207 @@ func joinKBList(ss []string) string {
 		return "(none)"
 	}
 	return strings.Join(filtered, " ")
+}
+
+// SearchAttack delegates to Session.GetAttackData for each ext-id under
+// the given Kind. The CLI front-end registers one subcommand per Kind,
+// so a single SearchAttack call only ever scans one Kind namespace —
+// ATT&CK's external_id space is per-Kind, not global. Cross-record
+// references appear inline as embedded {ID, Name, Description} refs
+// inside each result.
+func SearchAttack(kind kindTypes.Kind, ids []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE ATT&CK", "kind", kind, "ids", ids)
+	for _, id := range ids {
+		d, err := s.GetAttackData(kind, id)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundAttack) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get attack data %s/%s", kind, id)
+		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s/%s", kind, id)
+		}
+	}
+
+	return nil
+}
+
+// SearchCAPEC delegates to Session.GetCAPECData for each query.
+// Within-catalog references (ChildOf / ParentOf / CanFollow /
+// CanPrecede / PeerOf) are embedded inline as CAPECRef; cross-catalog
+// references (RelatedCWEs, RelatedAttacks) stay as raw ID strings.
+func SearchCAPEC(queries []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE CAPEC", "ids", queries)
+	for _, query := range queries {
+		d, err := s.GetCAPECData(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCAPEC) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get capec data %s", query)
+		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s", query)
+		}
+	}
+
+	return nil
+}
+
+// SearchCWE delegates to Session.GetCWEData for each query.
+// Within-catalog references (Weakness.RelatedWeaknesses, Category/View
+// Members) are embedded inline as CWERef; cross-catalog
+// RelatedAttackPatterns stays as raw CAPEC IDs.
+func SearchCWE(queries []string, opts ...Option) error {
+	options := &options{
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	s, err := (&session.Config{
+		Type:    options.dbtype,
+		Path:    options.dbpath,
+		Debug:   options.debug,
+		Options: options.storageopts,
+	}).New()
+	if err != nil {
+		return errors.Wrap(err, "new db connection")
+	}
+
+	if err := s.Storage().Open(); err != nil {
+		return errors.Wrap(err, "open db connection")
+	}
+	defer s.Storage().Close()
+
+	slog.Info("Get Metadata")
+	meta, err := s.Storage().GetMetadata()
+	if err != nil {
+		return errors.Wrap(err, "get metadata")
+	}
+	if meta == nil {
+		return errors.New("get metadata: metadata is nil")
+	}
+	sv, err := session.SchemaVersion(options.dbtype)
+	if err != nil {
+		return errors.Wrap(err, "get schema version")
+	}
+	if meta.SchemaVersion != sv {
+		return errors.Errorf("unexpected schema version. expected: %d, actual: %d", sv, meta.SchemaVersion)
+	}
+
+	slog.Info("Get MITRE CWE", "ids", queries)
+	for _, query := range queries {
+		d, err := s.GetCWEData(query)
+		if err != nil {
+			if errors.Is(err, dbTypes.ErrNotFoundCWE) {
+				slog.Warn(err.Error())
+				continue
+			}
+			return errors.Wrapf(err, "get cwe data %s", query)
+		}
+		slices.SortFunc(d.DataSources, func(a, b datasourceTypes.DataSource) int {
+			return cmp.Compare(string(a.ID), string(b.ID))
+		})
+		if err := json.MarshalWrite(os.Stdout, d); err != nil {
+			return errors.Wrapf(err, "encode %s", query)
+		}
+	}
+
+	return nil
 }

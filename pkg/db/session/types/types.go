@@ -28,6 +28,9 @@ var (
 	ErrNotFoundDetection     = errors.New("detection not found")
 	ErrNotFoundMicrosoftKB   = errors.New("microsoft kb not found")
 	ErrNotFoundDataSource    = errors.New("datasource not found")
+	ErrNotFoundAttack        = errors.New("attack not found")
+	ErrNotFoundCAPEC         = errors.New("capec not found")
+	ErrNotFoundCWE           = errors.New("cwe not found")
 )
 
 type Metadata struct {

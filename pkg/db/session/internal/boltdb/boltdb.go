@@ -13,6 +13,10 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
+	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
+	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
+	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -42,9 +46,15 @@ const (
 
 // boltdb: <ecosystem>:index:<package> -> [<Root ID>]
 
-// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>]criteriaTypes.Criteria
+// boltdb: <ecosystem>:detection:<Root ID> -> map[<Source ID>][]conditionTypes.Condition
 
-// boltdb: microsoft:kb:<KB ID> -> microsoftkbTypes.KB
+// boltdb: microsoft:kb:<KB ID> -> map[<Source ID>]microsoftkbTypes.KB
+
+// boltdb: attack:<Kind>:<Attack ID> -> map[<Source ID>]attackTypes.Attack
+
+// boltdb: capec:<CAPEC ID> -> map[<Source ID>]capecTypes.CAPEC
+
+// boltdb: cwe:<CWE ID> -> map[<Source ID>]cweTypes.CWE
 
 // boltdb: datasource:<Source ID> -> datasourceTypes.DataSource
 
@@ -161,26 +171,45 @@ func (c *Connection) Put(root string) error {
 
 	idx := make(pkgIndex)
 
-	dataPaths, err := collectJSONPaths(filepath.Join(root, "data"))
-	if err != nil {
-		return errors.Wrap(err, "collect data paths")
-	}
-	for batch := range slices.Chunk(dataPaths, batchSize) {
-		if err := c.conn.Update(func(tx *bolt.Tx) error {
-			for _, p := range batch {
-				if err := putDataFile(tx, p, idx); err != nil {
-					return errors.Wrapf(err, "put data file %s", p)
+	// File-based puts share a "collect paths, write in size-bounded
+	// transactions" shape. data files differ only in that putDataFile
+	// accumulates per-package -> rootID entries into idx; the flush
+	// after the loop walks idx and writes the index sub-buckets in
+	// one ecosystem-batched pass so each indexed package is
+	// read-modify-written at most once per Put.
+	for _, spec := range []struct {
+		dir string
+		put func(*bolt.Tx, string) error
+	}{
+		{dir: "data", put: func(tx *bolt.Tx, p string) error { return putDataFile(tx, p, idx) }},
+		{dir: "microsoftkb", put: putMicrosoftKBFile},
+		{dir: "attack", put: putAttackFile},
+		{dir: "capec", put: putCAPECFile},
+		{dir: "cwe", put: putCWEFile},
+	} {
+		paths, err := collectJSONPaths(filepath.Join(root, spec.dir))
+		if err != nil {
+			return errors.Wrapf(err, "collect %s paths", spec.dir)
+		}
+		for batch := range slices.Chunk(paths, batchSize) {
+			if err := c.conn.Update(func(tx *bolt.Tx) error {
+				for _, p := range batch {
+					if err := spec.put(tx, p); err != nil {
+						return errors.Wrapf(err, "put %s file %s", spec.dir, p)
+					}
 				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "put %s batch", spec.dir)
 			}
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "put data batch")
 		}
 	}
 
-	// Each ecosystem's index lives in its own B+tree sub-bucket, so process
-	// one ecosystem at a time. Package order is map-iteration order; sorting
-	// it was tested and made no measurable difference to total Put time.
+	// Flush the per-package -> rootID index accumulated during data
+	// file processing. Each ecosystem's index lives in its own B+tree
+	// sub-bucket, so process one ecosystem at a time. Package order is
+	// map-iteration order; sorting it was tested and made no
+	// measurable difference to total Put time.
 	for eco, byPkg := range idx {
 		for batch := range slices.Chunk(slices.Collect(maps.Keys(byPkg)), batchSize) {
 			if err := c.conn.Update(func(tx *bolt.Tx) error {
@@ -193,23 +222,6 @@ func (c *Connection) Put(root string) error {
 			}); err != nil {
 				return errors.Wrap(err, "put index batch")
 			}
-		}
-	}
-
-	kbPaths, err := collectJSONPaths(filepath.Join(root, "microsoftkb"))
-	if err != nil {
-		return errors.Wrap(err, "collect microsoftkb paths")
-	}
-	for batch := range slices.Chunk(kbPaths, batchSize) {
-		if err := c.conn.Update(func(tx *bolt.Tx) error {
-			for _, p := range batch {
-				if err := putMicrosoftKBFile(tx, p); err != nil {
-					return errors.Wrapf(err, "put microsoftkb file %s", p)
-				}
-			}
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "put microsoftkb batch")
 		}
 	}
 
@@ -617,6 +629,207 @@ func putDataSourceFile(tx *bolt.Tx, path string) error {
 	return nil
 }
 
+func putAttackFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var a attackTypes.Attack
+	if err := json.UnmarshalRead(f, &a); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if a.ID == "" || a.Kind == "" {
+		return errors.Errorf("attack record at %s has empty id or kind", path)
+	}
+
+	// ATT&CK's external_id namespace is per-Kind, not global: pre-2019
+	// 1:1 course-of-action mitigations share T#### ids with their live
+	// Techniques. A nested bucket per Kind is the canonical bolt way to
+	// hold both records without one overwriting the other.
+	parent, err := tx.CreateBucketIfNotExists([]byte("attack"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "attack")
+	}
+	b, err := parent.CreateBucketIfNotExists([]byte(string(a.Kind)))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", fmt.Sprintf("attack -> %s", a.Kind))
+	}
+
+	m := make(map[sourceTypes.SourceID]attackTypes.Attack)
+	if bs := b.Get([]byte(a.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s -> %s", a.Kind, a.ID))
+		}
+	}
+	m[a.DataSource.ID] = a
+
+	bs, err := util.Marshal(m)
+	if err != nil {
+		return errors.Wrapf(err, "marshal attack %s/%s", a.Kind, a.ID)
+	}
+
+	if err := b.Put([]byte(a.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("attack -> %s -> %s", a.Kind, a.ID))
+	}
+
+	return nil
+}
+
+func putCAPECFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var c capecTypes.CAPEC
+	if err := json.UnmarshalRead(f, &c); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if c.ID == "" {
+		return errors.Errorf("capec record at %s has empty id", path)
+	}
+
+	b, err := tx.CreateBucketIfNotExists([]byte("capec"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "capec")
+	}
+
+	m := make(map[sourceTypes.SourceID]capecTypes.CAPEC)
+	if bs := b.Get([]byte(c.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("capec -> %s", c.ID))
+		}
+	}
+	m[c.DataSource.ID] = c
+
+	bs, err := util.Marshal(m)
+	if err != nil {
+		return errors.Wrapf(err, "marshal capec %s", c.ID)
+	}
+
+	if err := b.Put([]byte(c.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("capec -> %s", c.ID))
+	}
+
+	return nil
+}
+
+func putCWEFile(tx *bolt.Tx, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+
+	var w cweTypes.CWE
+	if err := json.UnmarshalRead(f, &w); err != nil {
+		return errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if w.ID == "" {
+		return errors.Errorf("cwe record at %s has empty id", path)
+	}
+
+	b, err := tx.CreateBucketIfNotExists([]byte("cwe"))
+	if err != nil {
+		return errors.Wrapf(err, "create %q bucket", "cwe")
+	}
+
+	m := make(map[sourceTypes.SourceID]cweTypes.CWE)
+	if bs := b.Get([]byte(w.ID)); len(bs) > 0 {
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("cwe -> %s", w.ID))
+		}
+	}
+	m[w.DataSource.ID] = w
+
+	bs, err := util.Marshal(m)
+	if err != nil {
+		return errors.Wrapf(err, "marshal cwe %s", w.ID)
+	}
+
+	if err := b.Put([]byte(w.ID), bs); err != nil {
+		return errors.Wrapf(err, "put %q", fmt.Sprintf("cwe -> %s", w.ID))
+	}
+
+	return nil
+}
+
+func (c *Connection) GetAttack(kind kindTypes.Kind, id string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
+	var m map[sourceTypes.SourceID]attackTypes.Attack
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		parent := tx.Bucket([]byte("attack"))
+		if parent == nil {
+			return errors.Errorf("%q is not exists", "attack")
+		}
+		// Per-Kind sub-buckets are created lazily by putAttackFile,
+		// so a missing one means "no record of this kind has been
+		// loaded yet" — surface it as a regular not-found. The
+		// error message stops at the kind so callers (and bbolt
+		// CLI inspectors) can tell this branch apart from the
+		// id-not-in-bucket branch a few lines down.
+		b := parent.Bucket([]byte(string(kind)))
+		if b == nil {
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s", kind))
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", fmt.Sprintf("attack -> %s -> %s", kind, id))
+		}
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("attack -> %s -> %s", kind, id))
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
+func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
+	var m map[sourceTypes.SourceID]capecTypes.CAPEC
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("capec"))
+		if b == nil {
+			return errors.Errorf("%q is not exists", "capec")
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", fmt.Sprintf("capec -> %s", id))
+		}
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("capec -> %s", id))
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
+func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
+	var m map[sourceTypes.SourceID]cweTypes.CWE
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("cwe"))
+		if b == nil {
+			return errors.Errorf("%q is not exists", "cwe")
+		}
+		bs := b.Get([]byte(id))
+		if len(bs) == 0 {
+			return errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", fmt.Sprintf("cwe -> %s", id))
+		}
+		if err := util.Unmarshal(bs, &m); err != nil {
+			return errors.Wrapf(err, "unmarshal %q", fmt.Sprintf("cwe -> %s", id))
+		}
+		return nil
+	}); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return m, nil
+}
+
 func (c *Connection) GetRoot(id dataTypes.RootID) (dbTypes.VulnerabilityData, error) {
 	var d dbTypes.VulnerabilityData
 	if err := c.conn.View(func(tx *bolt.Tx) error {
@@ -742,7 +955,7 @@ func (c *Connection) GetEcosystems() ([]ecosystemTypes.Ecosystem, error) {
 	if err := c.conn.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
 			switch n := string(name); n {
-			case "metadata", "vulnerability", "datasource":
+			case "metadata", "vulnerability", "attack", "capec", "cwe", "datasource":
 			default:
 				es = append(es, ecosystemTypes.Ecosystem(name))
 			}
@@ -930,6 +1143,28 @@ func (c *Connection) Initialize() error {
 			return errors.Wrapf(err, "create %q", "vulnerability -> vulnerability")
 		}
 
+		// attack:<Kind>:<Attack ID>, capec:<CAPEC ID>, cwe:<CWE ID>
+		// are first-class catalog buckets parallel to vulnerability;
+		// pre-create the parents here so GetX paths get an
+		// "empty-bucket" answer instead of a missing-parent surprise
+		// on a freshly-initialized db. The per-Kind ATT&CK sub-buckets
+		// stay lazy — putAttackFile creates them on first Put.
+		if _, err := tx.CreateBucket([]byte("attack")); err != nil {
+			return errors.Wrapf(err, "create %q", "attack")
+		}
+
+		if _, err := tx.CreateBucket([]byte("capec")); err != nil {
+			return errors.Wrapf(err, "create %q", "capec")
+		}
+
+		if _, err := tx.CreateBucket([]byte("cwe")); err != nil {
+			return errors.Wrapf(err, "create %q", "cwe")
+		}
+
+		// datasource is per-record provenance, kept last so the
+		// catalog buckets (vulnerability / attack / capec / cwe)
+		// stay grouped together — matches the boltdb layout
+		// header comments above and GetEcosystems's exclusion list.
 		if _, err := tx.CreateBucket([]byte("datasource")); err != nil {
 			return errors.Wrapf(err, "create %q", "datasource")
 		}

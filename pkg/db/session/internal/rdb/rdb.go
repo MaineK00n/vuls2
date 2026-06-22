@@ -7,6 +7,10 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
+	capecTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/capec"
+	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -117,6 +121,18 @@ func (c *Connection) GetDetection(ecosystem ecosystemTypes.Ecosystem, rootID dat
 }
 
 func (c *Connection) GetMicrosoftKB(kbid string) (map[sourceTypes.SourceID]microsoftkbTypes.KB, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetAttack(_ kindTypes.Kind, _ string) (map[sourceTypes.SourceID]attackTypes.Attack, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetCAPEC(id string) (map[sourceTypes.SourceID]capecTypes.CAPEC, error) {
+	return nil, errors.New("not implemented yet")
+}
+
+func (c *Connection) GetCWE(id string) (map[sourceTypes.SourceID]cweTypes.CWE, error) {
 	return nil, errors.New("not implemented yet")
 }
 

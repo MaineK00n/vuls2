@@ -1,0 +1,8 @@
+{
+  "id": "T1047",
+  "kind": "mitigation",
+  "name": "Windows Management Instrumentation Mitigation",
+  "description": "Pre-2019 1:1 course-of-action stub that shares the T#### id with its live Technique counterpart. Use the Kind discriminator to retrieve the right record.",
+  "deprecated": true,
+  "data_source": {"id": "mitre-attack"}
+}

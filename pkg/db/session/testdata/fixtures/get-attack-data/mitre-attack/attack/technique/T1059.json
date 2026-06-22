@@ -1,0 +1,14 @@
+{
+  "id": "T1059",
+  "kind": "technique",
+  "name": "Command and Scripting Interpreter",
+  "description": "Adversaries may abuse command and script interpreters to execute commands, scripts, or binaries.",
+  "domains": ["enterprise"],
+  "technique": {
+    "platforms": ["Linux", "Windows", "macOS"],
+    "tactics": [{"shortname": "execution", "id": "TA0002"}],
+    "mitigations": [{"id": "M1038", "description": "Manage execution prevention."}],
+    "subtechniques": ["T1059.001"]
+  },
+  "data_source": {"id": "mitre-attack"}
+}

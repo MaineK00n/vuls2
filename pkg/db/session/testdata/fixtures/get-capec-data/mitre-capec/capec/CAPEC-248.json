@@ -1,0 +1,11 @@
+{
+  "id": "CAPEC-248",
+  "name": "Command Injection",
+  "description": "An adversary looking to execute a command of their choosing, injects new items into an existing command.",
+  "abstraction": "Meta",
+  "status": "Stable",
+  "typical_severity": "Very High",
+  "domains": ["Software"],
+  "parent_of": ["CAPEC-66"],
+  "data_source": {"id": "mitre-capec"}
+}

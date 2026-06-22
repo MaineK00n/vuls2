@@ -1,0 +1,12 @@
+{
+  "id": "CWE-20",
+  "kind": "weakness",
+  "name": "Improper Input Validation",
+  "status": "Stable",
+  "description": "The product receives input but does not validate or incorrectly validates that the input has the properties required to process the data safely and correctly.",
+  "weakness": {
+    "abstraction": "Class",
+    "structure": "Simple"
+  },
+  "data_source": {"id": "mitre-cwe"}
+}
