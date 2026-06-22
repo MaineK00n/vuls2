@@ -1,0 +1,16 @@
+{
+  "id": "CWE-89",
+  "kind": "weakness",
+  "name": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+  "status": "Stable",
+  "description": "The product constructs all or part of an SQL command using externally-influenced input.",
+  "weakness": {
+    "abstraction": "Base",
+    "structure": "Simple",
+    "related_weaknesses": [
+      {"nature": "ChildOf", "cweid": "CWE-20", "view_id": "1000", "ordinal": "Primary"}
+    ],
+    "related_attack_patterns": ["CAPEC-66"]
+  },
+  "data_source": {"id": "mitre-cwe"}
+}

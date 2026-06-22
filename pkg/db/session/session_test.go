@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
+	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -1995,6 +1996,341 @@ func TestSession_GetVulnerability(t *testing.T) {
 
 				if !reflect.DeepEqual(m, tt.want) {
 					t.Errorf("Conn.GetVulnerability() cache = %v, want %v", m, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// writeGolden marshals v to path when UPDATE_GOLDEN=1 is set, so the
+// golden fixture round-trip stays a one-command refresh instead of a
+// hand-edit. Returns true when the golden was just written so the
+// caller can skip the (now tautological) compare.
+func writeGolden(t *testing.T, path string, v any) bool {
+	t.Helper()
+	if os.Getenv("UPDATE_GOLDEN") != "1" {
+		return false
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create %s: %v", path, err)
+	}
+	defer f.Close()
+	if err := json.MarshalWrite(f, v, json.Deterministic(true)); err != nil {
+		t.Fatalf("encode %s: %v", path, err)
+	}
+	return true
+}
+
+func TestSession_GetAttackData(t *testing.T) {
+	type args struct {
+		kind kindTypes.Kind
+		id   string
+	}
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		args    args
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "non-existent technique id",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args:    args{kind: kindTypes.Technique, id: "T9999"},
+			wantErr: errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", "attack -> technique -> T9999"), "get attack"),
+		},
+		{
+			name:    "non-existent kind",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args:    args{kind: kindTypes.Asset, id: "A0001"},
+			wantErr: errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundAttack, "%q not found", "attack -> asset"), "get attack"),
+		},
+		{
+			name:    "happy technique with refs",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{kind: kindTypes.Technique, id: "T1059"},
+			want: "testdata/golden/get-attack-data/technique-T1059.json",
+		},
+		{
+			name:    "composite key: technique T1047 (live)",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{kind: kindTypes.Technique, id: "T1047"},
+			want: "testdata/golden/get-attack-data/technique-T1047.json",
+		},
+		{
+			name:    "composite key: mitigation T1047 (legacy stub)",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{kind: kindTypes.Mitigation, id: "T1047"},
+			want: "testdata/golden/get-attack-data/mitigation-T1047.json",
+		},
+		{
+			name:    "tactic with technique refs",
+			fixture: "testdata/fixtures/get-attack-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{kind: kindTypes.Tactic, id: "TA0002"},
+			want: "testdata/golden/get-attack-data/tactic-TA0002.json",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			got, err := s.GetAttackData(tt.args.kind, tt.args.id)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetAttackData() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetAttackData() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetAttackData() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if writeGolden(t, tt.want, got) {
+					return
+				}
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.AttackData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.EquateEmpty(),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetAttackData() data mismatch (-want +got):\n%s", diff)
+				}
+
+			}
+		})
+	}
+}
+
+func TestSession_GetCAPECData(t *testing.T) {
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		id      string
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "non-existent id",
+			fixture: "testdata/fixtures/get-capec-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:      "CAPEC-9999",
+			wantErr: errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundCAPEC, "%q not found", "capec -> CAPEC-9999"), "get capec"),
+		},
+		{
+			name:    "happy with ChildOf ref",
+			fixture: "testdata/fixtures/get-capec-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CAPEC-66",
+			want: "testdata/golden/get-capec-data/CAPEC-66.json",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			got, err := s.GetCAPECData(tt.id)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetCAPECData() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetCAPECData() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetCAPECData() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if writeGolden(t, tt.want, got) {
+					return
+				}
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.CAPECData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.EquateEmpty(),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetCAPECData() data mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestSession_GetCWEData(t *testing.T) {
+	tests := []struct {
+		name    string
+		fixture string
+		config  session.Config
+		id      string
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "non-existent id",
+			fixture: "testdata/fixtures/get-cwe-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:      "CWE-9999",
+			wantErr: errors.Wrapf(errors.Wrapf(dbTypes.ErrNotFoundCWE, "%q not found", "cwe -> CWE-9999"), "get cwe"),
+		},
+		{
+			name:    "happy weakness with RelatedWeakness ref",
+			fixture: "testdata/fixtures/get-cwe-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-89",
+			want: "testdata/golden/get-cwe-data/CWE-89.json",
+		},
+		{
+			name:    "happy category with Members ref",
+			fixture: "testdata/fixtures/get-cwe-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-707",
+			want: "testdata/golden/get-cwe-data/CWE-707.json",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := test.PopulateDB(tt.config, tt.fixture); err != nil {
+				t.Fatalf("populate db. error = %v", err)
+			}
+
+			s, err := tt.config.New()
+			if err != nil {
+				t.Fatalf("new session. error = %v", err)
+			}
+
+			if err := s.Storage().Open(); err != nil {
+				t.Fatalf("open db connection. error = %v", err)
+			}
+			defer s.Storage().Close()
+
+			got, err := s.GetCWEData(tt.id)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Session.GetCWEData() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Session.GetCWEData() expected error has not occurred: %v", tt.wantErr)
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Session.GetCWEData() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if writeGolden(t, tt.want, got) {
+					return
+				}
+				f, err := os.Open(tt.want)
+				if err != nil {
+					t.Fatalf("open %s. err: %v", tt.want, err)
+				}
+				defer f.Close()
+
+				var want dbTypes.CWEData
+				if err := json.UnmarshalRead(f, &want); err != nil {
+					t.Fatalf("unmarshal %s. err: %v", tt.want, err)
+				}
+
+				if diff := gocmp.Diff(want, got,
+					gocmpopts.EquateEmpty(),
+					gocmpopts.SortSlices(func(x, y datasourceTypes.DataSource) bool { return x.ID < y.ID }),
+				); diff != "" {
+					t.Errorf("Session.GetCWEData() data mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})

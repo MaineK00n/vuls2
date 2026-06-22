@@ -1,0 +1,11 @@
+{
+  "id": "M1038",
+  "kind": "mitigation",
+  "name": "Execution Prevention",
+  "description": "Block execution of code on a system through application control, and/or script blocking.",
+  "domains": ["enterprise"],
+  "mitigation": {
+    "techniques_mitigated": [{"id": "T1059", "description": "Manage execution prevention."}]
+  },
+  "data_source": {"id": "mitre-attack"}
+}

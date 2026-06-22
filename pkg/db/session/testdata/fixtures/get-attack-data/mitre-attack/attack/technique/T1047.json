@@ -1,0 +1,12 @@
+{
+  "id": "T1047",
+  "kind": "technique",
+  "name": "Windows Management Instrumentation",
+  "description": "Adversaries may abuse Windows Management Instrumentation (WMI) to execute malicious commands and payloads.",
+  "domains": ["enterprise"],
+  "technique": {
+    "platforms": ["Windows"],
+    "tactics": [{"shortname": "execution", "id": "TA0002"}]
+  },
+  "data_source": {"id": "mitre-attack"}
+}

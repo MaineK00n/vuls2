@@ -1,0 +1,14 @@
+{
+  "id": "T1059.001",
+  "kind": "technique",
+  "name": "PowerShell",
+  "description": "Adversaries may abuse PowerShell commands and scripts for execution.",
+  "domains": ["enterprise"],
+  "technique": {
+    "platforms": ["Windows"],
+    "tactics": [{"shortname": "execution", "id": "TA0002"}],
+    "is_subtechnique": true,
+    "parent": "T1059"
+  },
+  "data_source": {"id": "mitre-attack"}
+}

@@ -1,0 +1,14 @@
+{
+  "id": "CAPEC-66",
+  "name": "SQL Injection",
+  "description": "This attack exploits target software that constructs SQL statements based on user input.",
+  "abstraction": "Standard",
+  "status": "Stable",
+  "likelihood_of_attack": "High",
+  "typical_severity": "Very High",
+  "domains": ["Software"],
+  "related_cwes": ["CWE-89"],
+  "related_attacks": ["T1059"],
+  "child_of": ["CAPEC-248"],
+  "data_source": {"id": "mitre-capec"}
+}

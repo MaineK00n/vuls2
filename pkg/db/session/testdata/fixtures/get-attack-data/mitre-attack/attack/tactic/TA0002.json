@@ -1,0 +1,12 @@
+{
+  "id": "TA0002",
+  "kind": "tactic",
+  "name": "Execution",
+  "description": "The adversary is trying to run malicious code.",
+  "domains": ["enterprise"],
+  "tactic": {
+    "shortname": "execution",
+    "techniques": ["T1047", "T1059", "T1059.001"]
+  },
+  "data_source": {"id": "mitre-attack"}
+}
