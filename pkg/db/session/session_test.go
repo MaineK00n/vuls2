@@ -2002,29 +2002,6 @@ func TestSession_GetVulnerability(t *testing.T) {
 	}
 }
 
-// writeGolden marshals v to path when UPDATE_GOLDEN=1 is set, so the
-// golden fixture round-trip stays a one-command refresh instead of a
-// hand-edit. Returns true when the golden was just written so the
-// caller can skip the (now tautological) compare.
-func writeGolden(t *testing.T, path string, v any) bool {
-	t.Helper()
-	if os.Getenv("UPDATE_GOLDEN") != "1" {
-		return false
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("create %s: %v", path, err)
-	}
-	defer f.Close()
-	if err := json.MarshalWrite(f, v, json.Deterministic(true)); err != nil {
-		t.Fatalf("encode %s: %v", path, err)
-	}
-	return true
-}
-
 func TestSession_GetAttackData(t *testing.T) {
 	type args struct {
 		kind kindTypes.Kind
@@ -2132,9 +2109,6 @@ func TestSession_GetAttackData(t *testing.T) {
 					t.Errorf("Session.GetAttackData() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if writeGolden(t, tt.want, got) {
-					return
-				}
 				f, err := os.Open(tt.want)
 				if err != nil {
 					t.Fatalf("open %s. err: %v", tt.want, err)
@@ -2217,9 +2191,6 @@ func TestSession_GetCAPECData(t *testing.T) {
 					t.Errorf("Session.GetCAPECData() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if writeGolden(t, tt.want, got) {
-					return
-				}
 				f, err := os.Open(tt.want)
 				if err != nil {
 					t.Fatalf("open %s. err: %v", tt.want, err)
@@ -2312,9 +2283,6 @@ func TestSession_GetCWEData(t *testing.T) {
 					t.Errorf("Session.GetCWEData() error mismatch: want %v, got %v", tt.wantErr, err)
 				}
 			default:
-				if writeGolden(t, tt.want, got) {
-					return
-				}
 				f, err := os.Open(tt.want)
 				if err != nil {
 					t.Fatalf("open %s. err: %v", tt.want, err)
