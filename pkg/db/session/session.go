@@ -583,8 +583,8 @@ func (s Session) GetAttackData(kind kindTypes.Kind, id string) (dbTypes.AttackDa
 		d.Contents[sid] = dbTypes.ToAttackContent(a, refCache[sid])
 	}
 
-	for id := range sourceIDs {
-		ds, err := s.Storage().GetDataSource(id)
+	for sid := range sourceIDs {
+		ds, err := s.Storage().GetDataSource(sid)
 		if err != nil {
 			return dbTypes.AttackData{}, errors.Wrap(err, "get datasource")
 		}
@@ -641,8 +641,8 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 		d.Contents[sid] = dbTypes.ToCAPECContent(c, refCache[sid])
 	}
 
-	for id := range sourceIDs {
-		ds, err := s.Storage().GetDataSource(id)
+	for sid := range sourceIDs {
+		ds, err := s.Storage().GetDataSource(sid)
 		if err != nil {
 			return dbTypes.CAPECData{}, errors.Wrap(err, "get datasource")
 		}
@@ -699,8 +699,8 @@ func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 		d.Contents[sid] = dbTypes.ToCWEContent(w, refCache[sid])
 	}
 
-	for id := range sourceIDs {
-		ds, err := s.Storage().GetDataSource(id)
+	for sid := range sourceIDs {
+		ds, err := s.Storage().GetDataSource(sid)
 		if err != nil {
 			return dbTypes.CWEData{}, errors.Wrap(err, "get datasource")
 		}
