@@ -235,6 +235,27 @@ func TestWalkCriteria(t *testing.T) {
 			want: []string{"a:cisco:unified_communications_manager", "a:vendor:product"},
 		},
 		{
+			name: "cpe with matches",
+			args: args{
+				ca: criteriaTypes.Criteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.Criterion{
+						{
+							Type: criterionTypes.CriterionTypeCPE,
+							CPE: &ccTypes.Criterion{
+								CPE: "cpe:2.3:o:paloaltonetworks:pan-os:*:*:*:*:*:*:*:*",
+								CPEMatches: []ccTypes.CPE{
+									"cpe:2.3:o:paloaltonetworks:pan-os:10.1.0:*:*:*:*:*:*:*",
+									"cpe:2.3:o:palo_alto_networks:pan-os:10.1.0:*:*:*:*:*:*:*",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: []string{"o:paloaltonetworks:pan\\-os", "o:paloaltonetworks:pan\\-os", "o:palo_alto_networks:pan\\-os"},
+		},
+		{
 			name: "kb",
 			args: args{
 				ca: criteriaTypes.Criteria{
