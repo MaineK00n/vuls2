@@ -67,12 +67,17 @@ func WalkCriteria(ca criteriaTypes.Criteria) ([]string, error) {
 			// data mixes vendor spellings, e.g. paloaltonetworks vs
 			// palo_alto_networks), so every PVP the criterion can accept must
 			// be indexed, not just the main CPE's.
-			for _, c := range append([]ccTypes.CPE{cn.CPE.CPE}, cn.CPE.CPEMatches...) {
-				wfn, err := naming.UnbindFS(string(c))
+			p, err := cpePVP(cn.CPE.CPE)
+			if err != nil {
+				return nil, errors.Wrap(err, "part:vendor:product")
+			}
+			pkgs = append(pkgs, p)
+			for _, m := range cn.CPE.CPEMatches {
+				p, err := cpePVP(m)
 				if err != nil {
-					return nil, errors.Wrapf(err, "unbind %q", string(c))
+					return nil, errors.Wrap(err, "part:vendor:product")
 				}
-				pkgs = append(pkgs, fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)))
+				pkgs = append(pkgs, p)
 			}
 		default:
 			return nil, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", []criterionTypes.CriterionType{criterionTypes.CriterionTypeVersion, criterionTypes.CriterionTypeNoneExist, criterionTypes.CriterionTypeKB, criterionTypes.CriterionTypeCPE}, cn.Type)
@@ -80,4 +85,13 @@ func WalkCriteria(ca criteriaTypes.Criteria) ([]string, error) {
 	}
 
 	return pkgs, nil
+}
+
+// cpePVP returns the "part:vendor:product" index key of a CPE formatted string.
+func cpePVP(c ccTypes.CPE) (string, error) {
+	wfn, err := naming.UnbindFS(string(c))
+	if err != nil {
+		return "", errors.Wrapf(err, "unbind %q", string(c))
+	}
+	return fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct)), nil
 }
