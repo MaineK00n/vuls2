@@ -150,7 +150,12 @@ func Fetch(opts ...Option) error {
 	}
 	defer r.Close()
 
-	d, err := zstd.NewReader(content.NewVerifyReader(r, *l))
+	// In lowMem mode the decoder keeps the history buffer barely larger than
+	// the frame window, so once it fills up, decoding copies the whole window
+	// (128 MiB for our level 22 databases) forward for every ~1 MiB of output.
+	// Buying a second window of memory up front reduces that to one copy per
+	// window of output, making decompression of the DB more than 10x faster.
+	d, err := zstd.NewReader(content.NewVerifyReader(r, *l), zstd.WithDecoderLowmem(false))
 	if err != nil {
 		return errors.Wrap(err, "new zstd reader")
 	}
