@@ -150,7 +150,11 @@ func Fetch(opts ...Option) error {
 	}
 	defer r.Close()
 
-	d, err := zstd.NewReader(content.NewVerifyReader(r, *l))
+	// With the default lowMem mode, the decoder allocates only 1 MiB of slack
+	// beyond the frame's window (128 MiB for the level 22 databases), so it
+	// memmoves the whole window for every ~1 MiB of output. Trading roughly
+	// window-size more memory for that removes a >10x slowdown in decompression.
+	d, err := zstd.NewReader(content.NewVerifyReader(r, *l), zstd.WithDecoderLowmem(false))
 	if err != nil {
 		return errors.Wrap(err, "new zstd reader")
 	}
