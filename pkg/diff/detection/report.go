@@ -10,18 +10,35 @@ import (
 	"github.com/pkg/errors"
 )
 
+// maxDetailIDs caps each Added/Removed ID list in the Details section, so a
+// badly broken DB (e.g. a whole source family disappearing from a large
+// fixture) cannot drown the report the CI step summary is built from.
+const maxDetailIDs = 500
+
+// reportRow flattens (file, family) for rendering and sorting.
+type reportRow struct {
+	Name string
+	FamilyDiff
+}
+
 // generateReport writes a Markdown report for detection diff to w.
-// It returns whether all files passed and any write error.
+// It returns whether all (file, family) pairs passed and any write error.
 func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	if len(diffm) == 0 {
 		return true, errors.New("no files to compare")
 	}
 
-	diffs := slices.Collect(maps.Values(diffm))
-	// Sort: FAIL first, then by rate desc, then by name asc.
+	var rows []reportRow
+	for _, d := range slices.Collect(maps.Values(diffm)) {
+		for _, fd := range d.Families {
+			rows = append(rows, reportRow{Name: d.Name, FamilyDiff: fd})
+		}
+	}
+
+	// Sort: FAIL first, then by rate desc, then by name asc, family asc.
 	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
 	// FAIL rows first keeps triage focused on what actually blocks promotion.
-	slices.SortFunc(diffs, func(a, b FileDiff) int {
+	slices.SortFunc(rows, func(a, b reportRow) int {
 		return cmp.Or(
 			func() int {
 				switch {
@@ -35,9 +52,10 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 			}(),
 			cmp.Compare(b.ChangeRate, a.ChangeRate),
 			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Family, b.Family),
 		)
 	})
-	pass := !slices.ContainsFunc(diffs, func(d FileDiff) bool { return !d.Pass })
+	pass := !slices.ContainsFunc(rows, func(r reportRow) bool { return !r.Pass })
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: Detection
 
@@ -45,16 +63,16 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 
 **Result**: %s
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
 `, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
-	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %.1f%% | %.1f%% | %s |\n",
-			d.Name, len(d.BaselineIDs), len(d.TargetIDs), len(d.Added), len(d.Removed), d.ChangeRate,
-			d.Threshold, resultLabel(d.Pass)); err != nil {
+	for _, r := range rows {
+		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %.1f%% | %.1f%% | %s |\n",
+			r.Name, r.Family, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed), r.ChangeRate,
+			r.Threshold, resultLabel(r.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -63,32 +81,32 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 		return false, errors.Wrap(err, "write separator")
 	}
 
-	// Details for FAIL files
-	var failDiffs []FileDiff
-	for _, d := range diffs {
-		if !d.Pass {
-			failDiffs = append(failDiffs, d)
+	// Details for FAIL (file, family) pairs
+	var failRows []reportRow
+	for _, r := range rows {
+		if !r.Pass {
+			failRows = append(failRows, r)
 		}
 	}
 
-	if len(failDiffs) > 0 {
+	if len(failRows) > 0 {
 		if _, err := fmt.Fprintf(w, "## Details (FAIL files)\n\n"); err != nil {
 			return false, errors.Wrap(err, "write details header")
 		}
-		for _, d := range failDiffs {
-			if _, err := fmt.Fprintf(w, "### %s (%.1f%%)\n\n", d.Name, d.ChangeRate); err != nil {
-				return false, errors.Wrapf(err, "write file header %s", d.Name)
+		for _, r := range failRows {
+			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Name, r.Family, r.ChangeRate); err != nil {
+				return false, errors.Wrapf(err, "write file header %s/%s", r.Name, r.Family)
 			}
-			if len(d.Added) > 0 {
-				slices.Sort(d.Added)
-				if err := writeIDList(w, "Added IDs", d.Added); err != nil {
-					return false, errors.Wrapf(err, "write added IDs %s", d.Name)
+			if len(r.Added) > 0 {
+				slices.Sort(r.Added)
+				if err := writeIDList(w, "Added IDs", r.Added); err != nil {
+					return false, errors.Wrapf(err, "write added IDs %s/%s", r.Name, r.Family)
 				}
 			}
-			if len(d.Removed) > 0 {
-				slices.Sort(d.Removed)
-				if err := writeIDList(w, "Removed IDs", d.Removed); err != nil {
-					return false, errors.Wrapf(err, "write removed IDs %s", d.Name)
+			if len(r.Removed) > 0 {
+				slices.Sort(r.Removed)
+				if err := writeIDList(w, "Removed IDs", r.Removed); err != nil {
+					return false, errors.Wrapf(err, "write removed IDs %s/%s", r.Name, r.Family)
 				}
 			}
 		}
@@ -104,8 +122,8 @@ func resultLabel(pass bool) string {
 	return "**FAIL**"
 }
 
-// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
-// It is a no-op when ids is empty.
+// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs,
+// truncated to maxDetailIDs entries. It is a no-op when ids is empty.
 func writeIDList(w io.Writer, label string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -113,9 +131,14 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	if _, err := fmt.Fprintf(w, "#### %s (%d)\n\n", label, len(ids)); err != nil {
 		return errors.Wrap(err, "write header")
 	}
-	for _, id := range ids {
+	for _, id := range ids[:min(len(ids), maxDetailIDs)] {
 		if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
 			return errors.Wrap(err, "write id")
+		}
+	}
+	if len(ids) > maxDetailIDs {
+		if _, err := fmt.Fprintf(w, "- ... and %d more\n", len(ids)-maxDetailIDs); err != nil {
+			return errors.Wrap(err, "write truncation marker")
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {

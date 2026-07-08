@@ -74,10 +74,130 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
+func TestDetectionMethodFamily(t *testing.T) {
+	tests := []struct {
+		method string
+		want   string
+	}{
+		// The three match tiers collapse into one family per source so a
+		// tier flip does not register as a cross-family add+remove.
+		{method: "NvdExactVersionMatch", want: "Nvd"},
+		{method: "NvdRoughVersionMatch", want: "Nvd"},
+		{method: "NvdVendorProductMatch", want: "Nvd"},
+		{method: "VulncheckExactVersionMatch", want: "Vulncheck"},
+		{method: "JvnVendorProductMatch", want: "Jvn"},
+		{method: "FortinetRoughVersionMatch", want: "Fortinet"},
+		{method: "PaloaltoExactVersionMatch", want: "Paloalto"},
+		{method: "CiscoVendorProductMatch", want: "Cisco"},
+		// Windows has two method strings for one detection path.
+		{method: "WindowsUpdateSearch", want: "Windows"},
+		{method: "WindowsRoughMatch", want: "Windows"},
+		// OS-package methods pass through verbatim.
+		{method: "OvalMatch", want: "OvalMatch"},
+		{method: "DebianSecurityTrackerMatch", want: "DebianSecurityTrackerMatch"},
+		{method: "UbuntuAPIMatch", want: "UbuntuAPIMatch"},
+		{method: "unknown", want: "unknown"},
+		// A bare tier suffix must not collapse to an empty family.
+		{method: "ExactVersionMatch", want: "ExactVersionMatch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			if got := detection.DetectionMethodFamily(tt.method); got != tt.want {
+				t.Errorf("DetectionMethodFamily(%q) = %q, want %q", tt.method, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollectFamilies(t *testing.T) {
+	type args struct {
+		scannedCves map[string]detection.VulnInfo
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string][]string
+	}{
+		{
+			name: "empty",
+			args: args{scannedCves: map[string]detection.VulnInfo{}},
+			want: map[string][]string{},
+		},
+		{
+			name: "multi-family CVE lands in each family",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {Confidences: []detection.Confidence{
+						{DetectionMethod: "NvdExactVersionMatch"},
+						{DetectionMethod: "CiscoExactVersionMatch"},
+					}},
+					"CVE-2026-0002": {Confidences: []detection.Confidence{
+						{DetectionMethod: "NvdVendorProductMatch"},
+					}},
+				},
+			},
+			want: map[string][]string{
+				"Nvd":   {"CVE-2026-0001", "CVE-2026-0002"},
+				"Cisco": {"CVE-2026-0001"},
+			},
+		},
+		{
+			// Two confidences from different tiers of the same source must
+			// dedupe into one entry per family.
+			name: "tier flip dedupes within family",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {Confidences: []detection.Confidence{
+						{DetectionMethod: "NvdExactVersionMatch"},
+						{DetectionMethod: "NvdVendorProductMatch"},
+					}},
+				},
+			},
+			want: map[string][]string{
+				"Nvd": {"CVE-2026-0001"},
+			},
+		},
+		{
+			name: "no confidences buckets under unknown",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {},
+				},
+			},
+			want: map[string][]string{
+				"unknown": {"CVE-2026-0001"},
+			},
+		},
+		{
+			// Map iteration order is random; the output lists must be sorted.
+			name: "IDs sorted within family",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0003": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
+					"CVE-2026-0001": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
+					"CVE-2026-0002": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
+				},
+			},
+			want: map[string][]string{
+				"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detection.CollectFamilies(tt.args.scannedCves)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("CollectFamilies() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestDiffDetection(t *testing.T) {
 	type args struct {
 		d         detection.FileDiff
 		threshold float64
+		resolve   func(family string) float64 // nil means constant args.threshold
 	}
 	tests := []struct {
 		name string
@@ -89,18 +209,26 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "redhat_9",
-				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-				ChangeRate:  0,
-				Threshold:   10,
-				Pass:        true,
+				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+				Families: []detection.FamilyDiff{
+					{
+						Family:      "OvalMatch",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:  0,
+						Threshold:   10,
+						Pass:        true,
+					},
+				},
+				Pass: true,
 			},
 		},
 		{
@@ -108,24 +236,34 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name: "redhat_9",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
-					TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"}},
+					TargetIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
 				},
 				threshold: 25,
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
-				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
-				TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
-					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
-				Added:      []string{"CVE-2026-0011"},
-				Removed:    []string{"CVE-2026-0010"},
-				ChangeRate: 20,
-				Threshold:  25,
-				Pass:       true,
+				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"}},
+				TargetIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
+				Families: []detection.FamilyDiff{
+					{
+						Family: "OvalMatch",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
+						TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
+						Added:      []string{"CVE-2026-0011"},
+						Removed:    []string{"CVE-2026-0010"},
+						ChangeRate: 20,
+						Threshold:  25,
+						Pass:       true,
+					},
+				},
+				Pass: true,
 			},
 		},
 		{
@@ -133,77 +271,177 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "ubuntu_22.04",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-					TargetIDs:   []string{"CVE-2026-0001"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "ubuntu_22.04",
-				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-				TargetIDs:   []string{"CVE-2026-0001"},
-				Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-				ChangeRate:  75,
-				Threshold:   10,
-				Pass:        false,
+				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
+				Families: []detection.FamilyDiff{
+					{
+						Family:      "OvalMatch",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:   []string{"CVE-2026-0001"},
+						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:  75,
+						Threshold:   10,
+						Pass:        false,
+					},
+				},
+				Pass: false,
 			},
 		},
 		{
-			name: "large addition exceeds limit",
+			// The motivating case for per-family granularity: the small Cisco
+			// family disappears while the big Nvd family is unchanged. The
+			// union of CVE IDs would barely move (Cisco CVEs are also detected
+			// by Nvd), but the per-family diff fails loudly.
+			name: "small family loss not masked by large family",
 			args: args{
 				d: detection.FileDiff{
-					Name:        "ubuntu_22.04",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+					Name: "cpe_cisco",
+					BaselineIDs: map[string][]string{
+						"Nvd":   {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"Cisco": {"CVE-2026-0001", "CVE-2026-0002"},
+					},
+					TargetIDs: map[string][]string{
+						"Nvd": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+					},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
-				Name:        "ubuntu_22.04",
-				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
-				Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
-				ChangeRate:  200,
-				Threshold:   10,
-				Pass:        false,
+				Name: "cpe_cisco",
+				BaselineIDs: map[string][]string{
+					"Nvd":   {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+					"Cisco": {"CVE-2026-0001", "CVE-2026-0002"},
+				},
+				TargetIDs: map[string][]string{
+					"Nvd": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+				},
+				Families: []detection.FamilyDiff{
+					{
+						Family:      "Cisco",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:  100,
+						Threshold:   10,
+						Pass:        false,
+					},
+					{
+						Family:      "Nvd",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:  0,
+						Threshold:   10,
+						Pass:        true,
+					},
+				},
+				Pass: false,
 			},
 		},
 		{
-			name: "empty baseline triggers 100% change",
+			// A per-family threshold lifts exactly that family while the
+			// other stays on the default.
+			name: "per-family threshold lifts only its family",
+			args: args{
+				d: detection.FileDiff{
+					Name: "cpe_jvn",
+					BaselineIDs: map[string][]string{
+						"Jvn": {"CVE-2026-0001", "CVE-2026-0002"},
+						"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+					},
+					TargetIDs: map[string][]string{
+						"Jvn": {"CVE-2026-0001", "CVE-2026-0003"},
+						"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+					},
+				},
+				threshold: 10,
+				resolve: func(family string) float64 {
+					if family == "Jvn" {
+						return 150
+					}
+					return 10
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_jvn",
+				BaselineIDs: map[string][]string{
+					"Jvn": {"CVE-2026-0001", "CVE-2026-0002"},
+					"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+				},
+				TargetIDs: map[string][]string{
+					"Jvn": {"CVE-2026-0001", "CVE-2026-0003"},
+					"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+				},
+				Families: []detection.FamilyDiff{
+					{
+						Family:      "Jvn",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0003"},
+						Added:       []string{"CVE-2026-0003"},
+						Removed:     []string{"CVE-2026-0002"},
+						ChangeRate:  100,
+						Threshold:   150,
+						Pass:        true,
+					},
+					{
+						Family:      "Nvd",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:  0,
+						Threshold:   10,
+						Pass:        true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			name: "family only in target triggers 100% change",
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
-					BaselineIDs: []string{},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+					BaselineIDs: map[string][]string{},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "redhat_9",
-				BaselineIDs: []string{},
-				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-				Added:       []string{"CVE-2026-0001", "CVE-2026-0002"},
-				ChangeRate:  100,
-				Threshold:   10,
-				Pass:        false,
+				BaselineIDs: map[string][]string{},
+				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+				Families: []detection.FamilyDiff{
+					{
+						Family:     "OvalMatch",
+						TargetIDs:  []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Added:      []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate: 100,
+						Threshold:  10,
+						Pass:       false,
+					},
+				},
+				Pass: false,
 			},
 		},
 		{
-			name: "both empty avoids zero division",
+			name: "both empty pass with no families",
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
-					BaselineIDs: []string{},
-					TargetIDs:   []string{},
+					BaselineIDs: map[string][]string{},
+					TargetIDs:   map[string][]string{},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "redhat_9",
-				BaselineIDs: []string{},
-				TargetIDs:   []string{},
-				ChangeRate:  0,
-				Threshold:   10,
+				BaselineIDs: map[string][]string{},
+				TargetIDs:   map[string][]string{},
+				Families:    []detection.FamilyDiff{},
 				Pass:        true,
 			},
 		},
@@ -214,26 +452,38 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "debian_13",
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
 				},
 				threshold: 80,
 			},
 			want: detection.FileDiff{
 				Name:        "debian_13",
-				BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-				TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-				Added:       []string{"CVE-2026-0003"},
-				ChangeRate:  50,
-				Threshold:   80,
-				Pass:        true,
+				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+				Families: []detection.FamilyDiff{
+					{
+						Family:      "OvalMatch",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						Added:       []string{"CVE-2026-0003"},
+						ChangeRate:  50,
+						Threshold:   80,
+						Pass:        true,
+					},
+				},
+				Pass: true,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.DiffDetection(tt.args.d, tt.args.threshold)
+			resolve := tt.args.resolve
+			if resolve == nil {
+				resolve = func(string) float64 { return tt.args.threshold }
+			}
+			got := detection.DiffDetection(tt.args.d, resolve)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("DiffDetection() mismatch (-want +got):\n%s", diff)
 			}
@@ -256,21 +506,33 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						Name: "redhat_9",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:  0,
+								Threshold:   10,
+								Pass:        true,
+							},
+						},
+						Pass: true,
 					},
 					"ubuntu_22.04": {
-						Name:        "ubuntu_22.04",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						ChangeRate:  75.0,
-						Threshold:   10,
-						Pass:        false,
+						Name: "ubuntu_22.04",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								TargetIDs:   []string{"CVE-2026-0001"},
+								Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								ChangeRate:  75.0,
+								Threshold:   10,
+								Pass:        false,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -281,14 +543,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| ubuntu_22.04 | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
-| redhat_9 | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| ubuntu_22.04 | OvalMatch | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
+| redhat_9 | OvalMatch | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 ## Details (FAIL files)
 
-### ubuntu_22.04 (75.0%)
+### ubuntu_22.04 / OvalMatch (75.0%)
 
 #### Removed IDs (3)
 
@@ -299,16 +561,76 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
+			// The motivating scenario: within one cpe fixture, a failing small
+			// family sorts above the passing large family and is reported as
+			// its own row.
+			name: "small family failure not masked by large family",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"cpe_cisco": {
+						Name: "cpe_cisco",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "Cisco",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:  100,
+								Threshold:   10,
+								Pass:        false,
+							},
+							{
+								Family:      "Nvd",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								ChangeRate:  0,
+								Threshold:   10,
+								Pass:        true,
+							},
+						},
+						Pass: false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: **FAIL**
+
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| cpe_cisco | Cisco | 2 | 0 | 0 | 2 | 100.0% | 10.0% | **FAIL** |
+| cpe_cisco | Nvd | 4 | 4 | 0 | 0 | 0.0% | 10.0% | PASS |
+
+## Details (FAIL files)
+
+### cpe_cisco / Cisco (100.0%)
+
+#### Removed IDs (2)
+
+- CVE-2026-0001
+- CVE-2026-0002
+
+`,
+		},
+		{
 			name: "all pass",
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						Name: "redhat_9",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001"},
+								TargetIDs:   []string{"CVE-2026-0001"},
+								ChangeRate:  0,
+								Threshold:   10,
+								Pass:        true,
+							},
+						},
+						Pass: true,
 					},
 				},
 			},
@@ -319,9 +641,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| redhat_9 | OvalMatch | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -330,21 +652,33 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"debian_13": {
-						Name:        "debian_13",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-						Added:       []string{"CVE-2026-0003"},
-						ChangeRate:  50,
-						Threshold:   80,
-						Pass:        true,
+						Name: "debian_13",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+								Added:       []string{"CVE-2026-0003"},
+								ChangeRate:  50,
+								Threshold:   80,
+								Pass:        true,
+							},
+						},
+						Pass: true,
 					},
 					"redhat_9": {
-						Name:        "redhat_9",
-						BaselineIDs: []string{"CVE-2026-0001"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						Name: "redhat_9",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001"},
+								TargetIDs:   []string{"CVE-2026-0001"},
+								ChangeRate:  0,
+								Threshold:   10,
+								Pass:        true,
+							},
+						},
+						Pass: true,
 					},
 				},
 			},
@@ -355,10 +689,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| debian_13 | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
-| redhat_9 | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| debian_13 | OvalMatch | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
+| redhat_9 | OvalMatch | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -370,24 +704,36 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"alpha": {
-						Name:        "alpha",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
-						Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
-						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  250,
-						Threshold:   300,
-						Pass:        true,
+						Name: "alpha",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+								Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:  250,
+								Threshold:   300,
+								Pass:        true,
+							},
+						},
+						Pass: true,
 					},
 					"beta": {
-						Name:        "beta",
-						BaselineIDs: []string{"CVE-2026-1001", "CVE-2026-1002"},
-						TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
-						Added:       []string{"CVE-2026-1003"},
-						Removed:     []string{"CVE-2026-1002"},
-						ChangeRate:  100,
-						Threshold:   0,
-						Pass:        false,
+						Name: "beta",
+						Families: []detection.FamilyDiff{
+							{
+								Family:      "OvalMatch",
+								BaselineIDs: []string{"CVE-2026-1001", "CVE-2026-1002"},
+								TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
+								Added:       []string{"CVE-2026-1003"},
+								Removed:     []string{"CVE-2026-1002"},
+								ChangeRate:  100,
+								Threshold:   0,
+								Pass:        false,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -398,14 +744,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|----------|--------|-------|---------|-------------|-----------|--------|
-| beta | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
-| alpha | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| beta | OvalMatch | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
+| alpha | OvalMatch | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
 
 ## Details (FAIL files)
 
-### beta (100.0%)
+### beta / OvalMatch (100.0%)
 
 #### Added IDs (1)
 
@@ -452,14 +798,14 @@ func TestDiff(t *testing.T) {
 			case "redhat_9":
 				result[name] = detection.FileDiff{
 					Name:        name,
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-					TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
 				}
 			case "ubuntu_2204":
 				result[name] = detection.FileDiff{
 					Name:        name,
-					BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-					TargetIDs:   []string{"CVE-2026-0001"},
+					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
 				}
 			}
 		}
@@ -524,10 +870,10 @@ func TestDiff(t *testing.T) {
 			// inline resolve+diffDetection loop in Diff. ubuntu_2204 in
 			// fakeDetect produces a 66.7% change rate (baseline 3 IDs,
 			// target 1, two removed) which would FAIL the 10% default. The
-			// "ubuntu_2204=70" override lifts only that file above its rate
-			// so the whole Diff returns nil. If Diff stops forwarding the
-			// option, the override has no effect and ubuntu_2204 fails again.
-			name: "override forwarded through to per-file resolution",
+			// "ubuntu_2204=70" override lifts every family in that file above
+			// its rate so the whole Diff returns nil. If Diff stops forwarding
+			// the option, the override has no effect and ubuntu_2204 fails again.
+			name: "file override forwarded through to per-family resolution",
 			args: args{
 				dir:                          scanDir,
 				detectFunc:                   fakeDetect,
@@ -535,6 +881,33 @@ func TestDiff(t *testing.T) {
 				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204": 70},
 			},
 			wantErr: false,
+		},
+		{
+			// The "<file>/<family>" key form resolves for a specific family.
+			name: "file/family override forwarded through",
+			args: args{
+				dir:                          scanDir,
+				detectFunc:                   fakeDetect,
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204/OvalMatch": 70},
+			},
+			wantErr: false,
+		},
+		{
+			// "<file>/<family>" takes precedence over the file-wide key: the
+			// generous file-wide 70 is overridden back down to 10 for the
+			// only family present, so the file fails again.
+			name: "file/family override beats file override",
+			args: args{
+				dir:                 scanDir,
+				detectFunc:          fakeDetect,
+				changeRateThreshold: 10,
+				changeRateThresholdOverrides: map[string]float64{
+					"ubuntu_2204":           70,
+					"ubuntu_2204/OvalMatch": 10,
+				},
+			},
+			wantErr: true,
 		},
 		{
 			// An override entry that matches no file in the diffm must fall

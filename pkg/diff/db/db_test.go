@@ -2,8 +2,10 @@ package db_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -11,6 +13,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 
 	db "github.com/MaineK00n/vuls2/pkg/diff/db"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -95,6 +98,7 @@ func TestDiffEcosystem(t *testing.T) {
 		baselineFixture string
 		targetFixture   string
 		ecosystem       ecosystemTypes.Ecosystem
+		resolve         func(sourceTypes.SourceID) float64 // nil means constant 0
 	}
 	tests := []struct {
 		name string
@@ -109,13 +113,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:          "alma:8",
-				BaselineKeys:       1,
-				TargetKeys:         1,
-				BaselineCriterions: 6,
-				TargetCriterions:   6,
-				MatchedCriterions:  6,
-				Pass:               true,
+				Ecosystem: "alma:8",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:           "alma-errata",
+						BaselineKeys:       1,
+						TargetKeys:         1,
+						BaselineCriterions: 6,
+						TargetCriterions:   6,
+						MatchedCriterions:  6,
+						Pass:               true,
+					},
+				},
+				Pass: true,
 			},
 		},
 		{
@@ -126,14 +136,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:           "alma:8",
-				BaselineKeys:        1,
-				TargetKeys:          1,
-				Added:               []string{"ALSA-2019:3708"},
-				Removed:             []string{"ALSA-2024:0113"},
-				BaselineCriterions:  6,
-				TargetCriterions:    6,
-				DetectionChangeRate: 200,
+				Ecosystem: "alma:8",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:            "alma-errata",
+						BaselineKeys:        1,
+						TargetKeys:          1,
+						Added:               []string{"ALSA-2019:3708"},
+						Removed:             []string{"ALSA-2024:0113"},
+						BaselineCriterions:  6,
+						TargetCriterions:    6,
+						DetectionChangeRate: 200,
+					},
+				},
 			},
 		},
 		{
@@ -144,14 +159,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:           "alma:8",
-				BaselineKeys:        1,
-				TargetKeys:          1,
-				Changed:             []string{"ALSA-2024:0113"},
-				BaselineCriterions:  6,
-				TargetCriterions:    6,
-				MatchedCriterions:   5,
-				DetectionChangeRate: float64(6-5+6-5) / float64(6) * 100,
+				Ecosystem: "alma:8",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:            "alma-errata",
+						BaselineKeys:        1,
+						TargetKeys:          1,
+						Changed:             []string{"ALSA-2024:0113"},
+						BaselineCriterions:  6,
+						TargetCriterions:    6,
+						MatchedCriterions:   5,
+						DetectionChangeRate: float64(6-5+6-5) / float64(6) * 100,
+					},
+				},
 			},
 		},
 		{
@@ -162,11 +182,16 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:           "alma:8",
-				BaselineKeys:        1,
-				Removed:             []string{"ALSA-2024:0113"},
-				BaselineCriterions:  6,
-				DetectionChangeRate: 100,
+				Ecosystem: "alma:8",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:            "alma-errata",
+						BaselineKeys:        1,
+						Removed:             []string{"ALSA-2024:0113"},
+						BaselineCriterions:  6,
+						DetectionChangeRate: 100,
+					},
+				},
 			},
 		},
 		{
@@ -177,14 +202,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "alma:8",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:           "alma:8",
-				BaselineKeys:        1,
-				TargetKeys:          2,
-				Added:               []string{"ALSA-2019:3708"},
-				BaselineCriterions:  6,
-				TargetCriterions:    12,
-				MatchedCriterions:   6,
-				DetectionChangeRate: 100,
+				Ecosystem: "alma:8",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:            "alma-errata",
+						BaselineKeys:        1,
+						TargetKeys:          2,
+						Added:               []string{"ALSA-2019:3708"},
+						BaselineCriterions:  6,
+						TargetCriterions:    12,
+						MatchedCriterions:   6,
+						DetectionChangeRate: 100,
+					},
+				},
 			},
 		},
 		{
@@ -195,14 +225,113 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "test:change",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:           "test:change",
-				BaselineKeys:        2,
-				TargetKeys:          2,
-				Changed:             []string{"ROOT-0001", "ROOT-0002"},
-				BaselineCriterions:  6,
-				TargetCriterions:    2,
-				MatchedCriterions:   0,
-				DetectionChangeRate: float64(6-0+2-0) / float64(6) * 100,
+				Ecosystem: "test:change",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:            "test-source",
+						BaselineKeys:        2,
+						TargetKeys:          2,
+						Changed:             []string{"ROOT-0001", "ROOT-0002"},
+						BaselineCriterions:  6,
+						TargetCriterions:    2,
+						MatchedCriterions:   0,
+						DetectionChangeRate: float64(6-0+2-0) / float64(6) * 100,
+					},
+				},
+			},
+		},
+		{
+			// The motivating case for per-source granularity: two sources share
+			// one root ID; only the changed one may fail, the unchanged one
+			// must pass, and a source newly appearing in target is strict-failed.
+			name: "multi-source: only changed source fails",
+			args: args{
+				baselineFixture: "testdata/fixtures/multi-source-baseline",
+				targetFixture:   "testdata/fixtures/multi-source-target",
+				ecosystem:       "test:multi",
+			},
+			want: db.EcosystemDiff{
+				Ecosystem: "test:multi",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:           "test-source",
+						BaselineKeys:       1,
+						TargetKeys:         1,
+						BaselineCriterions: 1,
+						TargetCriterions:   1,
+						MatchedCriterions:  1,
+						Pass:               true,
+					},
+					{
+						SourceID:            "test-source-2",
+						BaselineKeys:        1,
+						TargetKeys:          1,
+						Changed:             []string{"ROOT-0001"},
+						BaselineCriterions:  1,
+						TargetCriterions:    1,
+						DetectionChangeRate: 200,
+					},
+					{
+						SourceID:            "test-source-3",
+						TargetKeys:          1,
+						Added:               []string{"ROOT-0001"},
+						TargetCriterions:    1,
+						DetectionChangeRate: 100,
+					},
+				},
+			},
+		},
+		{
+			name: "multi-source: per-source thresholds lift failing sources",
+			args: args{
+				baselineFixture: "testdata/fixtures/multi-source-baseline",
+				targetFixture:   "testdata/fixtures/multi-source-target",
+				ecosystem:       "test:multi",
+				resolve: func(src sourceTypes.SourceID) float64 {
+					switch src {
+					case "test-source-2":
+						return 250
+					case "test-source-3":
+						return 150
+					default:
+						return 0
+					}
+				},
+			},
+			want: db.EcosystemDiff{
+				Ecosystem: "test:multi",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:           "test-source",
+						BaselineKeys:       1,
+						TargetKeys:         1,
+						BaselineCriterions: 1,
+						TargetCriterions:   1,
+						MatchedCriterions:  1,
+						Pass:               true,
+					},
+					{
+						SourceID:            "test-source-2",
+						BaselineKeys:        1,
+						TargetKeys:          1,
+						Changed:             []string{"ROOT-0001"},
+						BaselineCriterions:  1,
+						TargetCriterions:    1,
+						DetectionChangeRate: 200,
+						Threshold:           250,
+						Pass:                true,
+					},
+					{
+						SourceID:            "test-source-3",
+						TargetKeys:          1,
+						Added:               []string{"ROOT-0001"},
+						TargetCriterions:    1,
+						DetectionChangeRate: 100,
+						Threshold:           150,
+						Pass:                true,
+					},
+				},
+				Pass: true,
 			},
 		},
 		{
@@ -213,13 +342,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "microsoft",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:      "microsoft",
-				BaselineKBKeys: 2,
-				TargetKBKeys:   2,
-				BaselineKBs:    2,
-				TargetKBs:      2,
-				MatchedKBs:     2,
-				Pass:           true,
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:       "microsoft-cvrf",
+						BaselineKBKeys: 2,
+						TargetKBKeys:   2,
+						BaselineKBs:    2,
+						TargetKBs:      2,
+						MatchedKBs:     2,
+						Pass:           true,
+					},
+				},
+				Pass: true,
 			},
 		},
 		{
@@ -230,14 +365,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "microsoft",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:      "microsoft",
-				BaselineKBKeys: 2,
-				TargetKBKeys:   3,
-				AddedKBs:       []string{"KB5001222"},
-				BaselineKBs:    2,
-				TargetKBs:      3,
-				MatchedKBs:     2,
-				KBChangeRate:   50,
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:       "microsoft-cvrf",
+						BaselineKBKeys: 2,
+						TargetKBKeys:   3,
+						AddedKBs:       []string{"KB5001222"},
+						BaselineKBs:    2,
+						TargetKBs:      3,
+						MatchedKBs:     2,
+						KBChangeRate:   50,
+					},
+				},
 			},
 		},
 		{
@@ -248,14 +388,19 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "microsoft",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:      "microsoft",
-				BaselineKBKeys: 2,
-				TargetKBKeys:   2,
-				ChangedKBs:     []string{"KB5001111"},
-				BaselineKBs:    2,
-				TargetKBs:      2,
-				MatchedKBs:     1,
-				KBChangeRate:   100,
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:       "microsoft-cvrf",
+						BaselineKBKeys: 2,
+						TargetKBKeys:   2,
+						ChangedKBs:     []string{"KB5001111"},
+						BaselineKBs:    2,
+						TargetKBs:      2,
+						MatchedKBs:     1,
+						KBChangeRate:   100,
+					},
+				},
 			},
 		},
 		{
@@ -266,11 +411,16 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "microsoft",
 			},
 			want: db.EcosystemDiff{
-				Ecosystem:      "microsoft",
-				BaselineKBKeys: 2,
-				RemovedKBs:     []string{"KB5001000", "KB5001111"},
-				BaselineKBs:    2,
-				KBChangeRate:   100,
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:       "microsoft-cvrf",
+						BaselineKBKeys: 2,
+						RemovedKBs:     []string{"KB5001000", "KB5001111"},
+						BaselineKBs:    2,
+						KBChangeRate:   100,
+					},
+				},
 			},
 		},
 	}
@@ -305,7 +455,12 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, 0)
+			resolve := tt.args.resolve
+			if resolve == nil {
+				resolve = func(sourceTypes.SourceID) float64 { return 0 }
+			}
+
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, resolve)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -358,9 +513,9 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// target-replaced gives alma:8 a 200% detection change rate; with the
-			// default threshold 10% this normally fails.
-			name: "override lifts ecosystem above threshold",
+			// target-replaced gives alma:8/alma-errata a 200% detection change
+			// rate; with the default threshold 10% this normally fails.
+			name: "ecosystem override lifts its sources above threshold",
 			args: args{
 				baselineFixtures:             []string{"testdata/fixtures/baseline"},
 				targetFixtures:               []string{"testdata/fixtures/target-replaced"},
@@ -391,6 +546,50 @@ func TestDiffBoltDB(t *testing.T) {
 				changeRateThresholdOverrides: map[string]float64{"unknown:99": 50},
 			},
 			wantErr: false,
+		},
+		{
+			// multi-source rates: test-source 0%, test-source-2 200% (changed),
+			// test-source-3 100% (new source in target). An ecosystem-wide
+			// override is the default for all its sources.
+			name: "ecosystem override covers all sources",
+			args: args{
+				baselineFixtures:             []string{"testdata/fixtures/multi-source-baseline"},
+				targetFixtures:               []string{"testdata/fixtures/multi-source-target"},
+				changeRateThreshold:          10,
+				changeRateThresholdOverrides: map[string]float64{"test:multi": 250},
+			},
+			wantErr: false,
+		},
+		{
+			// Per-source overrides lift exactly the failing sources while the
+			// unchanged source stays on the default threshold.
+			name: "per-source overrides lift failing sources",
+			args: args{
+				baselineFixtures:    []string{"testdata/fixtures/multi-source-baseline"},
+				targetFixtures:      []string{"testdata/fixtures/multi-source-target"},
+				changeRateThreshold: 10,
+				changeRateThresholdOverrides: map[string]float64{
+					"test:multi/test-source-2": 250,
+					"test:multi/test-source-3": 150,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			// A source-specific override takes precedence over a generous
+			// ecosystem-wide override: test-source-2 (200%) fails at 100 even
+			// though the ecosystem override of 300 would pass it.
+			name: "source override beats ecosystem override",
+			args: args{
+				baselineFixtures:    []string{"testdata/fixtures/multi-source-baseline"},
+				targetFixtures:      []string{"testdata/fixtures/multi-source-target"},
+				changeRateThreshold: 10,
+				changeRateThresholdOverrides: map[string]float64{
+					"test:multi":               300,
+					"test:multi/test-source-2": 100,
+				},
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -424,12 +623,10 @@ func TestCompareCriterions(t *testing.T) {
 		target   string
 	}
 	tests := []struct {
-		name         string
-		args         args
-		wantBaseline int
-		wantTarget   int
-		wantMatched  int
-		wantErr      bool
+		name    string
+		args    args
+		want    map[sourceTypes.SourceID]db.Counts
+		wantErr bool
 	}{
 		{
 			name: "identical",
@@ -445,9 +642,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "criteria removed",
@@ -464,9 +661,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 2,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 2, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "criteria added in target",
@@ -483,9 +680,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   2,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 2, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "operator changed only (criterions identical)",
@@ -501,9 +698,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "criterion type changed",
@@ -519,11 +716,13 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			},
 		},
 		{
+			// The per-source split: src2's removal is visible as its own
+			// entry instead of being folded into a summed total.
 			name: "source removed",
 			args: args{
 				baseline: `{
@@ -540,9 +739,32 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 2,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+				"src2": {Baseline: 1, InBaseline: true},
+			},
+		},
+		{
+			name: "source added",
+			args: args{
+				baseline: `{
+					"src1": [
+						{"criteria": {"criterions": [{"type": "version"}]}}
+					]
+				}`,
+				target: `{
+					"src1": [
+						{"criteria": {"criterions": [{"type": "version"}]}}
+					],
+					"src2": [
+						{"criteria": {"criterions": [{"type": "version"}]}}
+					]
+				}`,
+			},
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+				"src2": {Target: 1, InTarget: true},
+			},
 		},
 		{
 			name: "target invalid data",
@@ -554,10 +776,7 @@ func TestCompareCriterions(t *testing.T) {
 				}`,
 				target: `not json`,
 			},
-			wantBaseline: 0,
-			wantTarget:   0,
-			wantMatched:  0,
-			wantErr:      true,
+			wantErr: true,
 		},
 		{
 			name: "baseline invalid data",
@@ -569,10 +788,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 0,
-			wantTarget:   0,
-			wantMatched:  0,
-			wantErr:      true,
+			wantErr: true,
 		},
 		{
 			name: "empty baseline",
@@ -584,9 +800,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 0,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Target: 1, InTarget: true},
+			},
 		},
 		{
 			name: "kb criterion identical",
@@ -602,9 +818,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "kb criterion changed",
@@ -620,25 +836,22 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseline, target, matched, err := db.CompareCriterions([]byte(tt.args.baseline), []byte(tt.args.target))
+			got, err := db.CompareCriterions([]byte(tt.args.baseline), []byte(tt.args.target))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("CompareCriterions() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if baseline != tt.wantBaseline {
-				t.Errorf("baseline = %d, want %d", baseline, tt.wantBaseline)
+			if tt.wantErr {
+				return
 			}
-			if target != tt.wantTarget {
-				t.Errorf("target = %d, want %d", target, tt.wantTarget)
-			}
-			if matched != tt.wantMatched {
-				t.Errorf("matched = %d, want %d", matched, tt.wantMatched)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("CompareCriterions() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -651,18 +864,18 @@ func TestCountCriterions(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    int
+		want    map[sourceTypes.SourceID]int
 		wantErr bool
 	}{
 		{
 			name: "empty",
 			args: args{data: `{}`},
-			want: 0,
+			want: map[sourceTypes.SourceID]int{},
 		},
 		{
 			name: "no conditions",
 			args: args{data: `{"src1":[]}`},
-			want: 0,
+			want: map[sourceTypes.SourceID]int{"src1": 0},
 		},
 		{
 			name: "one criterion",
@@ -671,7 +884,7 @@ func TestCountCriterions(t *testing.T) {
 					{"criteria": {"criterions": [{"type": "version"}]}}
 				]
 			}`},
-			want: 1,
+			want: map[sourceTypes.SourceID]int{"src1": 1},
 		},
 		{
 			name: "nested criteria counts all leaf criterions",
@@ -683,10 +896,10 @@ func TestCountCriterions(t *testing.T) {
 					]}}
 				]
 			}`},
-			want: 3,
+			want: map[sourceTypes.SourceID]int{"src1": 3},
 		},
 		{
-			name: "multiple sources",
+			name: "multiple sources counted separately",
 			args: args{data: `{
 				"src1": [
 					{"criteria": {"criterions": [{"type": "version"}]}}
@@ -695,7 +908,7 @@ func TestCountCriterions(t *testing.T) {
 					{"criteria": {"criterions": [{"type": "version"}, {"type": "version"}]}}
 				]
 			}`},
-			want: 3,
+			want: map[sourceTypes.SourceID]int{"src1": 1, "src2": 2},
 		},
 		{
 			name: "multiple conditions per source",
@@ -705,7 +918,7 @@ func TestCountCriterions(t *testing.T) {
 					{"criteria": {"criterions": [{"type": "version"}]}}
 				]
 			}`},
-			want: 2,
+			want: map[sourceTypes.SourceID]int{"src1": 2},
 		},
 		{
 			name: "kb criterion",
@@ -714,7 +927,7 @@ func TestCountCriterions(t *testing.T) {
 					{"criteria": {"criterions": [{"type": "kb", "kb": {"product": "Windows 11", "kb_id": "KB5001234"}}]}}
 				]
 			}`},
-			want: 1,
+			want: map[sourceTypes.SourceID]int{"src1": 1},
 		},
 		{
 			name:    "invalid json",
@@ -728,8 +941,11 @@ func TestCountCriterions(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("CountCriterions() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if got != tt.want {
-				t.Errorf("CountCriterions() = %d, want %d", got, tt.want)
+			if tt.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("CountCriterions() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -741,12 +957,10 @@ func TestCompareKBs(t *testing.T) {
 		target   string
 	}
 	tests := []struct {
-		name         string
-		args         args
-		wantBaseline int
-		wantTarget   int
-		wantMatched  int
-		wantErr      bool
+		name    string
+		args    args
+		want    map[sourceTypes.SourceID]db.Counts
+		wantErr bool
 	}{
 		{
 			name: "identical single source",
@@ -766,9 +980,9 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "products differ",
@@ -786,9 +1000,9 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "products reordered still match after Sort",
@@ -806,9 +1020,9 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "superseded_by differs only",
@@ -831,9 +1045,9 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   1,
-			wantMatched:  0,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			},
 		},
 		{
 			name: "source added in target",
@@ -846,9 +1060,10 @@ func TestCompareKBs(t *testing.T) {
 					"src2": {"kb_id": "KB5001234"}
 				}`,
 			},
-			wantBaseline: 1,
-			wantTarget:   2,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+				"src2": {Target: 1, InTarget: true},
+			},
 		},
 		{
 			name: "source removed in target",
@@ -861,9 +1076,10 @@ func TestCompareKBs(t *testing.T) {
 					"src1": {"kb_id": "KB5001234"}
 				}`,
 			},
-			wantBaseline: 2,
-			wantTarget:   1,
-			wantMatched:  1,
+			want: map[sourceTypes.SourceID]db.Counts{
+				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+				"src2": {Baseline: 1, InBaseline: true},
+			},
 		},
 		{
 			name: "baseline invalid data",
@@ -888,18 +1104,15 @@ func TestCompareKBs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseline, target, matched, err := db.CompareKBs([]byte(tt.args.baseline), []byte(tt.args.target))
+			got, err := db.CompareKBs([]byte(tt.args.baseline), []byte(tt.args.target))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("CompareKBs() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if baseline != tt.wantBaseline {
-				t.Errorf("baseline = %d, want %d", baseline, tt.wantBaseline)
+			if tt.wantErr {
+				return
 			}
-			if target != tt.wantTarget {
-				t.Errorf("target = %d, want %d", target, tt.wantTarget)
-			}
-			if matched != tt.wantMatched {
-				t.Errorf("matched = %d, want %d", matched, tt.wantMatched)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("CompareKBs() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -912,20 +1125,20 @@ func TestCountKBs(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    int
+		want    map[sourceTypes.SourceID]int
 		wantErr bool
 	}{
 		{
 			name: "empty",
 			args: args{data: `{}`},
-			want: 0,
+			want: map[sourceTypes.SourceID]int{},
 		},
 		{
 			name: "one source",
 			args: args{data: `{
 				"src1": {"kb_id": "KB5001234"}
 			}`},
-			want: 1,
+			want: map[sourceTypes.SourceID]int{"src1": 1},
 		},
 		{
 			name: "multiple sources",
@@ -933,7 +1146,7 @@ func TestCountKBs(t *testing.T) {
 				"src1": {"kb_id": "KB5001234"},
 				"src2": {"kb_id": "KB5001234"}
 			}`},
-			want: 2,
+			want: map[sourceTypes.SourceID]int{"src1": 1, "src2": 1},
 		},
 		{
 			name:    "invalid json",
@@ -947,8 +1160,11 @@ func TestCountKBs(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("CountKBs() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if got != tt.want {
-				t.Errorf("CountKBs() = %d, want %d", got, tt.want)
+			if tt.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("CountKBs() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -969,28 +1185,40 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:           "redhat:9",
-						BaselineKeys:        100,
-						TargetKeys:          100,
-						BaselineCriterions:  500,
-						TargetCriterions:    500,
-						MatchedCriterions:   500,
-						DetectionChangeRate: 0,
-						Threshold:           10,
-						Pass:                true,
+						Ecosystem: "redhat:9",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "redhat-ovalv2",
+								BaselineKeys:        100,
+								TargetKeys:          100,
+								BaselineCriterions:  500,
+								TargetCriterions:    500,
+								MatchedCriterions:   500,
+								DetectionChangeRate: 0,
+								Threshold:           10,
+								Pass:                true,
+							},
+						},
+						Pass: true,
 					},
 					{
-						Ecosystem:           "ubuntu:22.04",
-						BaselineKeys:        800,
-						TargetKeys:          200,
-						BaselineCriterions:  4000,
-						TargetCriterions:    2000,
-						MatchedCriterions:   1000,
-						Removed:             []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
-						Changed:             []string{"CVE-2024-0004"},
-						DetectionChangeRate: 75.0,
-						Threshold:           10,
-						Pass:                false,
+						Ecosystem: "ubuntu:22.04",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "ubuntu-oval",
+								BaselineKeys:        800,
+								TargetKeys:          200,
+								BaselineCriterions:  4000,
+								TargetCriterions:    2000,
+								MatchedCriterions:   1000,
+								Removed:             []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
+								Changed:             []string{"CVE-2024-0004"},
+								DetectionChangeRate: 75.0,
+								Threshold:           10,
+								Pass:                false,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -1001,21 +1229,21 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| ubuntu:22.04 | 75.0% | 0.0% | 10.0% | **FAIL** |
-| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| ubuntu:22.04 | ubuntu-oval | 75.0% | 0.0% | 10.0% | **FAIL** |
+| redhat:9 | redhat-ovalv2 | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| ubuntu:22.04 | 800 | 200 | 0 | 3 | 1 | 4000 | 2000 | 1000 |
-| redhat:9 | 100 | 100 | 0 | 0 | 0 | 500 | 500 | 500 |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| ubuntu:22.04 | ubuntu-oval | 800 | 200 | 0 | 3 | 1 | 4000 | 2000 | 1000 |
+| redhat:9 | redhat-ovalv2 | 100 | 100 | 0 | 0 | 0 | 500 | 500 | 500 |
 
-## Details (FAIL ecosystems)
+## Details (FAIL sources)
 
-### ubuntu:22.04 (75.0%)
+### ubuntu:22.04 / ubuntu-oval (75.0%)
 
 #### Removed Root IDs (3)
 
@@ -1030,59 +1258,40 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
-			name: "pass all ecosystems",
+			// The motivating scenario for per-source rows: within the single
+			// cpe ecosystem, a huge passing source must not mask a small
+			// failing one — the failing small source sorts first.
+			name: "small source failure not masked by large source",
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:           "alma:8",
-						BaselineKeys:        50,
-						TargetKeys:          52,
-						Added:               []string{"ALSA-2025-0001", "ALSA-2025-0002"},
-						BaselineCriterions:  200,
-						TargetCriterions:    210,
-						MatchedCriterions:   200,
-						DetectionChangeRate: 4.8,
-						Threshold:           10,
-						Pass:                true,
-					},
-				},
-			},
-			wantPass: true,
-			wantReport: `# Diff Report: DB
-
-## Summary
-
-**Result**: PASS
-
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| alma:8 | 4.8% | 0.0% | 10.0% | PASS |
-
-## Detection
-
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| alma:8 | 50 | 52 | 2 | 0 | 0 | 200 | 210 | 200 |
-
-`,
-		},
-		{
-			name: "fail with kb changes",
-			args: args{
-				diffs: []db.EcosystemDiff{
-					{
-						Ecosystem:      "microsoft",
-						BaselineKBKeys: 10,
-						TargetKBKeys:   10,
-						BaselineKBs:    10,
-						TargetKBs:      10,
-						MatchedKBs:     3,
-						ChangedKBs:     []string{"KB5001", "KB5002"},
-						AddedKBs:       []string{"KB5003"},
-						RemovedKBs:     []string{"KB4000"},
-						KBChangeRate:   140.0,
-						Threshold:      10,
-						Pass:           false,
+						Ecosystem: "cpe",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "cisco-json",
+								BaselineKeys:        50,
+								TargetKeys:          50,
+								BaselineCriterions:  100,
+								TargetCriterions:    100,
+								MatchedCriterions:   70,
+								Changed:             []string{"CVE-2024-1000"},
+								DetectionChangeRate: 60.0,
+								Threshold:           10,
+								Pass:                false,
+							},
+							{
+								SourceID:            "nvd-feed-cve-v2",
+								BaselineKeys:        300000,
+								TargetKeys:          300000,
+								BaselineCriterions:  300000,
+								TargetCriterions:    300000,
+								MatchedCriterions:   299700,
+								DetectionChangeRate: 0.2,
+								Threshold:           10,
+								Pass:                true,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -1093,19 +1302,117 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| microsoft | 0.0% | 140.0% | 10.0% | **FAIL** |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| cpe | cisco-json | 60.0% | 0.0% | 10.0% | **FAIL** |
+| cpe | nvd-feed-cve-v2 | 0.2% | 0.0% | 10.0% | PASS |
+
+## Detection
+
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| cpe | cisco-json | 50 | 50 | 0 | 0 | 1 | 100 | 100 | 70 |
+| cpe | nvd-feed-cve-v2 | 300000 | 300000 | 0 | 0 | 0 | 300000 | 300000 | 299700 |
+
+## Details (FAIL sources)
+
+### cpe / cisco-json (60.0%)
+
+#### Changed Root IDs (1)
+
+- CVE-2024-1000
+
+`,
+		},
+		{
+			name: "pass all ecosystems",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem: "alma:8",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "alma-errata",
+								BaselineKeys:        50,
+								TargetKeys:          52,
+								Added:               []string{"ALSA-2025-0001", "ALSA-2025-0002"},
+								BaselineCriterions:  200,
+								TargetCriterions:    210,
+								MatchedCriterions:   200,
+								DetectionChangeRate: 4.8,
+								Threshold:           10,
+								Pass:                true,
+							},
+						},
+						Pass: true,
+					},
+				},
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: PASS
+
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| alma:8 | alma-errata | 4.8% | 0.0% | 10.0% | PASS |
+
+## Detection
+
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| alma:8 | alma-errata | 50 | 52 | 2 | 0 | 0 | 200 | 210 | 200 |
+
+`,
+		},
+		{
+			name: "fail with kb changes",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem: "microsoft",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:       "microsoft-cvrf",
+								BaselineKBKeys: 10,
+								TargetKBKeys:   10,
+								BaselineKBs:    10,
+								TargetKBs:      10,
+								MatchedKBs:     3,
+								ChangedKBs:     []string{"KB5001", "KB5002"},
+								AddedKBs:       []string{"KB5003"},
+								RemovedKBs:     []string{"KB4000"},
+								KBChangeRate:   140.0,
+								Threshold:      10,
+								Pass:           false,
+							},
+						},
+						Pass: false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: **FAIL**
+
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| microsoft | microsoft-cvrf | 0.0% | 140.0% | 10.0% | **FAIL** |
 
 ## KB
 
-| Ecosystem | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| microsoft | 10 | 10 | 1 | 1 | 2 | 10 | 10 | 3 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
+| microsoft | microsoft-cvrf | 10 | 10 | 1 | 1 | 2 | 10 | 10 | 3 |
 
-## Details (FAIL ecosystems)
+## Details (FAIL sources)
 
-### microsoft (0.0%)
+### microsoft / microsoft-cvrf (0.0%)
 
 #### Added KB IDs (1)
 
@@ -1127,24 +1434,36 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:          "alma:8",
-						BaselineKeys:       10,
-						TargetKeys:         10,
-						BaselineCriterions: 50,
-						TargetCriterions:   50,
-						MatchedCriterions:  50,
-						Threshold:          10,
-						Pass:               true,
+						Ecosystem: "alma:8",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:           "alma-errata",
+								BaselineKeys:       10,
+								TargetKeys:         10,
+								BaselineCriterions: 50,
+								TargetCriterions:   50,
+								MatchedCriterions:  50,
+								Threshold:          10,
+								Pass:               true,
+							},
+						},
+						Pass: true,
 					},
 					{
-						Ecosystem:      "microsoft",
-						BaselineKBKeys: 5,
-						TargetKBKeys:   5,
-						BaselineKBs:    5,
-						TargetKBs:      5,
-						MatchedKBs:     5,
-						Threshold:      10,
-						Pass:           true,
+						Ecosystem: "microsoft",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:       "microsoft-cvrf",
+								BaselineKBKeys: 5,
+								TargetKBKeys:   5,
+								BaselineKBs:    5,
+								TargetKBs:      5,
+								MatchedKBs:     5,
+								Threshold:      10,
+								Pass:           true,
+							},
+						},
+						Pass: true,
 					},
 				},
 			},
@@ -1155,22 +1474,22 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| alma:8 | 0.0% | 0.0% | 10.0% | PASS |
-| microsoft | 0.0% | 0.0% | 10.0% | PASS |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| alma:8 | alma-errata | 0.0% | 0.0% | 10.0% | PASS |
+| microsoft | microsoft-cvrf | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| alma:8 | 10 | 10 | 0 | 0 | 0 | 50 | 50 | 50 |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| alma:8 | alma-errata | 10 | 10 | 0 | 0 | 0 | 50 | 50 | 50 |
 
 ## KB
 
-| Ecosystem | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| microsoft | 5 | 5 | 0 | 0 | 0 | 5 | 5 | 5 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
+| microsoft | microsoft-cvrf | 5 | 5 | 0 | 0 | 0 | 5 | 5 | 5 |
 
 `,
 		},
@@ -1183,22 +1502,28 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:           "mixed:1",
-						BaselineKeys:        100,
-						TargetKeys:          100,
-						BaselineCriterions:  10000,
-						TargetCriterions:    10050,
-						MatchedCriterions:   9950,
-						BaselineKBKeys:      5,
-						TargetKBKeys:        5,
-						BaselineKBs:         5,
-						TargetKBs:           5,
-						MatchedKBs:          3,
-						ChangedKBs:          []string{"KB1", "KB2"},
-						DetectionChangeRate: 1.5,
-						KBChangeRate:        80.0,
-						Threshold:           10,
-						Pass:                false,
+						Ecosystem: "mixed:1",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "mixed-source",
+								BaselineKeys:        100,
+								TargetKeys:          100,
+								BaselineCriterions:  10000,
+								TargetCriterions:    10050,
+								MatchedCriterions:   9950,
+								BaselineKBKeys:      5,
+								TargetKBKeys:        5,
+								BaselineKBs:         5,
+								TargetKBs:           5,
+								MatchedKBs:          3,
+								ChangedKBs:          []string{"KB1", "KB2"},
+								DetectionChangeRate: 1.5,
+								KBChangeRate:        80.0,
+								Threshold:           10,
+								Pass:                false,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -1209,25 +1534,25 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| mixed:1 | 1.5% | 80.0% | 10.0% | **FAIL** |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| mixed:1 | mixed-source | 1.5% | 80.0% | 10.0% | **FAIL** |
 
 ## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| mixed:1 | 100 | 100 | 0 | 0 | 0 | 10000 | 10050 | 9950 |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| mixed:1 | mixed-source | 100 | 100 | 0 | 0 | 0 | 10000 | 10050 | 9950 |
 
 ## KB
 
-| Ecosystem | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| mixed:1 | 5 | 5 | 0 | 0 | 2 | 5 | 5 | 3 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
+| mixed:1 | mixed-source | 5 | 5 | 0 | 0 | 2 | 5 | 5 | 3 |
 
-## Details (FAIL ecosystems)
+## Details (FAIL sources)
 
-### mixed:1 (1.5%)
+### mixed:1 / mixed-source (1.5%)
 
 #### Changed KB IDs (2)
 
@@ -1241,26 +1566,38 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:           "ubuntu:26.04",
-						BaselineKeys:        100,
-						TargetKeys:          100,
-						BaselineCriterions:  500,
-						TargetCriterions:    500,
-						MatchedCriterions:   400,
-						Changed:             []string{"CVE-2026-9999"},
-						DetectionChangeRate: 40.0,
-						Threshold:           50,
-						Pass:                true,
+						Ecosystem: "ubuntu:26.04",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "ubuntu-oval",
+								BaselineKeys:        100,
+								TargetKeys:          100,
+								BaselineCriterions:  500,
+								TargetCriterions:    500,
+								MatchedCriterions:   400,
+								Changed:             []string{"CVE-2026-9999"},
+								DetectionChangeRate: 40.0,
+								Threshold:           50,
+								Pass:                true,
+							},
+						},
+						Pass: true,
 					},
 					{
-						Ecosystem:          "redhat:9",
-						BaselineKeys:       50,
-						TargetKeys:         50,
-						BaselineCriterions: 200,
-						TargetCriterions:   200,
-						MatchedCriterions:  200,
-						Threshold:          10,
-						Pass:               true,
+						Ecosystem: "redhat:9",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:           "redhat-ovalv2",
+								BaselineKeys:       50,
+								TargetKeys:         50,
+								BaselineCriterions: 200,
+								TargetCriterions:   200,
+								MatchedCriterions:  200,
+								Threshold:          10,
+								Pass:               true,
+							},
+						},
+						Pass: true,
 					},
 				},
 			},
@@ -1271,17 +1608,17 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| ubuntu:26.04 | 40.0% | 0.0% | 50.0% | PASS |
-| redhat:9 | 0.0% | 0.0% | 10.0% | PASS |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| ubuntu:26.04 | ubuntu-oval | 40.0% | 0.0% | 50.0% | PASS |
+| redhat:9 | redhat-ovalv2 | 0.0% | 0.0% | 10.0% | PASS |
 
 ## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| ubuntu:26.04 | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 400 |
-| redhat:9 | 50 | 50 | 0 | 0 | 0 | 200 | 200 | 200 |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| ubuntu:26.04 | ubuntu-oval | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 400 |
+| redhat:9 | redhat-ovalv2 | 50 | 50 | 0 | 0 | 0 | 200 | 200 | 200 |
 
 `,
 		},
@@ -1293,28 +1630,40 @@ func TestGenerateReport(t *testing.T) {
 			args: args{
 				diffs: []db.EcosystemDiff{
 					{
-						Ecosystem:           "alpha:1",
-						BaselineKeys:        100,
-						TargetKeys:          100,
-						BaselineCriterions:  500,
-						TargetCriterions:    500,
-						MatchedCriterions:   200,
-						Changed:             []string{"CVE-2026-AAAA"},
-						DetectionChangeRate: 120,
-						Threshold:           150,
-						Pass:                true,
+						Ecosystem: "alpha:1",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "src-alpha",
+								BaselineKeys:        100,
+								TargetKeys:          100,
+								BaselineCriterions:  500,
+								TargetCriterions:    500,
+								MatchedCriterions:   200,
+								Changed:             []string{"CVE-2026-AAAA"},
+								DetectionChangeRate: 120,
+								Threshold:           150,
+								Pass:                true,
+							},
+						},
+						Pass: true,
 					},
 					{
-						Ecosystem:           "beta:2",
-						BaselineKeys:        50,
-						TargetKeys:          50,
-						BaselineCriterions:  200,
-						TargetCriterions:    200,
-						MatchedCriterions:   195,
-						Changed:             []string{"CVE-2026-BBBB"},
-						DetectionChangeRate: 5,
-						Threshold:           0,
-						Pass:                false,
+						Ecosystem: "beta:2",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:            "src-beta",
+								BaselineKeys:        50,
+								TargetKeys:          50,
+								BaselineCriterions:  200,
+								TargetCriterions:    200,
+								MatchedCriterions:   195,
+								Changed:             []string{"CVE-2026-BBBB"},
+								DetectionChangeRate: 5,
+								Threshold:           0,
+								Pass:                false,
+							},
+						},
+						Pass: false,
 					},
 				},
 			},
@@ -1325,21 +1674,21 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
-| beta:2 | 5.0% | 0.0% | 0.0% | **FAIL** |
-| alpha:1 | 120.0% | 0.0% | 150.0% | PASS |
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| beta:2 | src-beta | 5.0% | 0.0% | 0.0% | **FAIL** |
+| alpha:1 | src-alpha | 120.0% | 0.0% | 150.0% | PASS |
 
 ## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
-| beta:2 | 50 | 50 | 0 | 0 | 1 | 200 | 200 | 195 |
-| alpha:1 | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 200 |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| beta:2 | src-beta | 50 | 50 | 0 | 0 | 1 | 200 | 200 | 195 |
+| alpha:1 | src-alpha | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 200 |
 
-## Details (FAIL ecosystems)
+## Details (FAIL sources)
 
-### beta:2 (5.0%)
+### beta:2 / src-beta (5.0%)
 
 #### Changed Root IDs (1)
 
@@ -1363,5 +1712,48 @@ func TestGenerateReport(t *testing.T) {
 				t.Errorf("GenerateReport() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestGenerateReportTruncatesLongIDLists(t *testing.T) {
+	ids := make([]string, 502)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("CVE-2026-%04d", i)
+	}
+	diffs := []db.EcosystemDiff{
+		{
+			Ecosystem: "cpe",
+			Sources: []db.SourceDiff{
+				{
+					SourceID:            "nvd-feed-cve-v2",
+					BaselineKeys:        502,
+					BaselineCriterions:  502,
+					Removed:             ids,
+					DetectionChangeRate: 100,
+					Threshold:           10,
+					Pass:                false,
+				},
+			},
+			Pass: false,
+		},
+	}
+
+	var buf bytes.Buffer
+	gotPass, err := db.GenerateReport(&buf, diffs)
+	if err != nil {
+		t.Fatalf("GenerateReport() error = %v", err)
+	}
+	if gotPass {
+		t.Error("GenerateReport() pass = true, want false")
+	}
+	got := buf.String()
+	if !strings.Contains(got, "#### Removed Root IDs (502)") {
+		t.Error("report should state the full list length")
+	}
+	if !strings.Contains(got, "- ... and 2 more\n") {
+		t.Error("report should truncate the list with a trailer")
+	}
+	if strings.Contains(got, ids[501]) {
+		t.Errorf("report should not contain the truncated ID %s", ids[501])
 	}
 }

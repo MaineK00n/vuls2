@@ -22,7 +22,7 @@ func NewCmd() *cobra.Command {
 		Use:   "db <baseline-db> <target-db>",
 		Short: "compare detection data directly between two vuls DBs",
 		Example: heredoc.Doc(`
-		# fail when any ecosystem drifts more than 10%
+		# fail when any data source in any ecosystem drifts more than 10%
 		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
 
 		# relax ubuntu:26.04 (new-distro churn) and fedora:45 individually,
@@ -32,10 +32,16 @@ func NewCmd() *cobra.Command {
 		    --change-rate-threshold-override ubuntu:26.04=25 \
 		    --change-rate-threshold-override fedora:45=15
 
+		# relax a single data source within an ecosystem;
+		# <ecosystem>/<source> takes precedence over <ecosystem>
+		$ vuls diff db ./baseline.db ./target.db \
+		    --change-rate-threshold 10 \
+		    --change-rate-threshold-override cpe/cisco-json=30
+
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
 		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
+		    --change-rate-threshold-override 'ubuntu:26.04=25,cpe/cisco-json=30'
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -52,9 +58,9 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per ecosystem; exit non-zero if exceeded")
+	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (ecosystem, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
-		"per-ecosystem override of the threshold; format: <ecosystem>=<rate> (repeatable; comma-separated entries also accepted)")
+		"override of the threshold; format: <ecosystem>=<rate> (all sources in the ecosystem) or <ecosystem>/<source>=<rate> (single source, wins over the ecosystem key) (repeatable; comma-separated entries also accepted)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

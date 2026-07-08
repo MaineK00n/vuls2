@@ -48,6 +48,17 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
+			// Locks the slash-qualified key syntax: keys are opaque to Parse,
+			// so <ecosystem>/<source> (diff db) and <file>/<family> (diff
+			// detection) pass through unchanged.
+			name:    "slash-qualified keys pass through",
+			entries: []string{"cpe/cisco-json=30", "cpe_jvn/Jvn=25"},
+			want: map[string]float64{
+				"cpe/cisco-json": 30,
+				"cpe_jvn/Jvn":    25,
+			},
+		},
+		{
 			name:    "explicit zero kept",
 			entries: []string{"strict-target=0"},
 			want:    map[string]float64{"strict-target": 0},

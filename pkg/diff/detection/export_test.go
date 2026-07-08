@@ -12,8 +12,15 @@ func (o detectFuncOption) apply(opts *options) {
 	opts.detectFunc = o.f
 }
 
+type (
+	VulnInfo   = vulnInfo
+	Confidence = confidence
+)
+
 var (
-	Subtract       = subtract
-	DiffDetection  = diffDetection
-	GenerateReport = generateReport
+	Subtract              = subtract
+	DiffDetection         = diffDetection
+	GenerateReport        = generateReport
+	DetectionMethodFamily = detectionMethodFamily
+	CollectFamilies       = collectFamilies
 )

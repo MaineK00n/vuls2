@@ -46,11 +46,13 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 	opts.changeRateThresholdOverrides = map[string]float64(o)
 }
 
-// WithChangeRateThresholdOverrides supplies per-file overrides of the change
-// rate threshold. Keys are scan-result file basenames (without the `.json`
-// extension, e.g. "debian_13"); values are percentages. Missing keys fall
-// back to the default supplied via WithChangeRateThreshold. A nil or empty
-// map preserves prior behavior.
+// WithChangeRateThresholdOverrides supplies overrides of the change rate
+// threshold. Keys are either a scan-result file basename (without the `.json`
+// extension, e.g. "debian_13"), which applies to every source family detected
+// in that file, or "<file>/<family>" (e.g. "cpe_jvn/Jvn"), which applies to a
+// single source family and takes precedence over the file-wide key. Values
+// are percentages. Missing keys fall back to the default supplied via
+// WithChangeRateThreshold. A nil or empty map preserves prior behavior.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
@@ -75,17 +77,37 @@ func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
 }
 
-// FileDiff holds the comparison result for a single scan result file.
-type FileDiff struct {
-	Name        string
+// FamilyDiff holds the comparison result for a single source family within a
+// scan result file. Comparing per family prevents a large source (e.g. NVD in
+// a cpe fixture, whose CPE configurations also cover cisco/fortinet products)
+// from masking the disappearance of a small source's detections when only the
+// union of CVE IDs is compared.
+type FamilyDiff struct {
+	Family      string
 	BaselineIDs []string
 	TargetIDs   []string
 	Added       []string
 	Removed     []string
 	ChangeRate  float64
 
-	// Threshold actually applied to this file (post override resolution).
+	// Threshold actually applied to this (file, family) pair (post override
+	// resolution: "<file>/<family>" > "<file>" > default).
 	Threshold float64
+
+	Pass bool
+}
+
+// FileDiff holds the comparison result for a single scan result file, broken
+// down per source family. A file Passes only when every family passes.
+type FileDiff struct {
+	Name string
+
+	// Raw per-family CVE ID collections from the baseline and target runs.
+	BaselineIDs map[string][]string
+	TargetIDs   map[string][]string
+
+	// Per-family diffs computed by diffDetection, sorted by Family.
+	Families []FamilyDiff
 
 	Pass bool
 }
@@ -126,11 +148,17 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		// Resolve via the canonical map key, not d.Name — the two should
 		// always match in practice but coupling resolution to the key keeps
 		// override lookups consistent across the codebase.
-		threshold := o.changeRateThreshold
-		if v, ok := o.changeRateThresholdOverrides[name]; ok {
-			threshold = v
+		// Precedence: "<file>/<family>" > "<file>" > default.
+		resolveThreshold := func(family string) float64 {
+			if v, ok := o.changeRateThresholdOverrides[name+"/"+family]; ok {
+				return v
+			}
+			if v, ok := o.changeRateThresholdOverrides[name]; ok {
+				return v
+			}
+			return o.changeRateThreshold
 		}
-		diffm[name] = diffDetection(d, threshold)
+		diffm[name] = diffDetection(d, resolveThreshold)
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -138,10 +166,10 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "generate report")
 	}
 	if !pass {
-		// Resolved per-file threshold is rendered per row in the report's
-		// Threshold column, so the exit error stays threshold-free to avoid
-		// implying the default was the one that tripped.
-		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one scan-result file; see report for details")
+		// Resolved per-(file, family) threshold is rendered per row in the
+		// report's Threshold column, so the exit error stays threshold-free to
+		// avoid implying the default was the one that tripped.
+		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one (scan-result file, source family); see report for details")
 	}
 	return nil
 }
@@ -189,7 +217,7 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 	type result struct {
 		role string
 		name string
-		ids  []string
+		ids  map[string][]string // family → CVE IDs
 	}
 
 	total := len(tasks)
@@ -210,7 +238,7 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 				return errors.Wrapf(err, "vuls0 report %s/%s", t.role, t.name)
 			}
 			resChan <- result{role: t.role, name: t.name, ids: ids}
-			slog.Debug("vuls0 detect done", "role", t.role, "name", t.name, "cves", len(ids))
+			slog.Debug("vuls0 detect done", "role", t.role, "name", t.name, "families", len(ids))
 			return nil
 		})
 	}
@@ -238,8 +266,19 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 	return diffm, nil
 }
 
-// runVuls0Report runs vuls0 report on a single scan result file and returns detected CVE IDs.
-func runVuls0Report(ctx context.Context, binary, dbpath, scanResultPath string) ([]string, error) {
+// vulnInfo is the minimal projection of a vuls0 models.VulnInfo needed to
+// attribute a detected CVE to source families.
+type vulnInfo struct {
+	Confidences []confidence `json:"confidences"`
+}
+
+type confidence struct {
+	DetectionMethod string `json:"detectionMethod"`
+}
+
+// runVuls0Report runs vuls0 report on a single scan result file and returns
+// detected CVE IDs grouped by source family.
+func runVuls0Report(ctx context.Context, binary, dbpath, scanResultPath string) (map[string][]string, error) {
 	tmpDir, err := os.MkdirTemp("", "diff-vuls0-*")
 	if err != nil {
 		return nil, errors.Wrap(err, "mkdtemp")
@@ -311,42 +350,107 @@ skipUpdate = true
 	defer f.Close()
 
 	var sr struct {
-		ScannedCves map[string]struct{} `json:"scannedCves"`
+		ScannedCves map[string]vulnInfo `json:"scannedCves"`
 	}
 	if err := json.UnmarshalRead(f, &sr); err != nil {
 		return nil, errors.Wrapf(err, "decode %s", dst)
 	}
 
-	return slices.Collect(maps.Keys(sr.ScannedCves)), nil
+	return collectFamilies(sr.ScannedCves), nil
 }
 
-// diffDetection fills in the diff fields of a single FileDiff against the
-// supplied resolved threshold. Override resolution is the caller's
-// responsibility. Parallels `diffEcosystem` on the db side.
-//
-// Only CVE IDs are compared; per-CVE content (confidence, affected packages,
-// CVSS, exploit/KEV metadata, etc.) is not diffed. Content-only changes are
-// therefore invisible. This is sufficient for regression detection (missing or
-// extra CVEs), but not for validating data source migrations where IDs stay
-// the same but metadata differs.
-func diffDetection(d FileDiff, threshold float64) FileDiff {
-	d.Added = subtract(d.TargetIDs, d.BaselineIDs)
-	d.Removed = subtract(d.BaselineIDs, d.TargetIDs)
-
-	// changeRate can exceed 100% when additions outnumber baseline entries.
-	// This is intentional — capping at 100 would hide the magnitude of large additions.
-	d.ChangeRate = func() float64 {
-		switch {
-		case len(d.BaselineIDs) > 0:
-			return float64(len(d.Added)+len(d.Removed)) / float64(len(d.BaselineIDs)) * 100
-		case len(d.Added)+len(d.Removed) > 0:
-			return 100
-		default:
-			return 0
+// collectFamilies groups detected CVE IDs by source family, derived from each
+// CVE's confidences. Confidences are appended only by detection paths in
+// vuls0 (enrichment adds cveContents but never confidences), so they are a
+// clean per-source detection signal. A CVE detected by multiple families is
+// counted under each. A CVE without confidences lands in "unknown".
+// ID lists are sorted for deterministic diff output.
+func collectFamilies(scannedCves map[string]vulnInfo) map[string][]string {
+	m := make(map[string][]string)
+	for cve, vi := range scannedCves {
+		families := make(map[string]struct{})
+		for _, c := range vi.Confidences {
+			families[detectionMethodFamily(c.DetectionMethod)] = struct{}{}
 		}
-	}()
-	d.Threshold = threshold
-	d.Pass = d.ChangeRate <= threshold
+		if len(families) == 0 {
+			families["unknown"] = struct{}{}
+		}
+		for f := range families {
+			m[f] = append(m[f], cve)
+		}
+	}
+	for _, ids := range m {
+		slices.Sort(ids)
+	}
+	return m
+}
+
+// detectionMethodFamily maps a vuls0 confidences[].detectionMethod string to
+// a source family. The three match-tier suffixes are collapsed so a tier flip
+// (e.g. cpematch expansion demoting ExactVersionMatch to VendorProductMatch)
+// registers as a content change within one family, not as an add+remove
+// across two. Unrecognized methods pass through verbatim (e.g. "OvalMatch",
+// "DebianSecurityTrackerMatch", "UbuntuAPIMatch").
+func detectionMethodFamily(method string) string {
+	for _, suffix := range []string{"ExactVersionMatch", "RoughVersionMatch", "VendorProductMatch"} {
+		if prefix, ok := strings.CutSuffix(method, suffix); ok && prefix != "" {
+			return prefix // "Nvd", "Vulncheck", "Jvn", "Fortinet", "Paloalto", "Cisco"
+		}
+	}
+	switch method {
+	case "WindowsUpdateSearch", "WindowsRoughMatch":
+		return "Windows"
+	default:
+		return method
+	}
+}
+
+// diffDetection fills in the per-family diff fields of a single FileDiff.
+// Override resolution is the caller's responsibility — resolveThreshold is
+// applied verbatim per family. Parallels `diffEcosystem` on the db side.
+//
+// Only (CVE ID, family) pairs are compared; per-CVE content (confidence
+// score, affected packages, CVSS, exploit/KEV metadata, etc.) is not diffed.
+// Content-only changes are therefore invisible. This is sufficient for
+// regression detection (missing or extra CVEs per source family), but not for
+// validating data source migrations where IDs stay the same but metadata
+// differs.
+func diffDetection(d FileDiff, resolveThreshold func(family string) float64) FileDiff {
+	families := make(map[string]struct{}, max(len(d.BaselineIDs), len(d.TargetIDs)))
+	for f := range d.BaselineIDs {
+		families[f] = struct{}{}
+	}
+	for f := range d.TargetIDs {
+		families[f] = struct{}{}
+	}
+
+	d.Families = make([]FamilyDiff, 0, len(families))
+	for _, family := range slices.Sorted(maps.Keys(families)) {
+		fd := FamilyDiff{
+			Family:      family,
+			BaselineIDs: d.BaselineIDs[family],
+			TargetIDs:   d.TargetIDs[family],
+		}
+		fd.Added = subtract(fd.TargetIDs, fd.BaselineIDs)
+		fd.Removed = subtract(fd.BaselineIDs, fd.TargetIDs)
+
+		// changeRate can exceed 100% when additions outnumber baseline entries.
+		// This is intentional — capping at 100 would hide the magnitude of large additions.
+		fd.ChangeRate = func() float64 {
+			switch {
+			case len(fd.BaselineIDs) > 0:
+				return float64(len(fd.Added)+len(fd.Removed)) / float64(len(fd.BaselineIDs)) * 100
+			case len(fd.Added)+len(fd.Removed) > 0:
+				return 100
+			default:
+				return 0
+			}
+		}()
+		fd.Threshold = resolveThreshold(family)
+		fd.Pass = fd.ChangeRate <= fd.Threshold
+		d.Families = append(d.Families, fd)
+	}
+	d.Pass = !slices.ContainsFunc(d.Families, func(fd FamilyDiff) bool { return !fd.Pass })
 	return d
 }
 
