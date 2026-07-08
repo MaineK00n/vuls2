@@ -90,7 +90,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	}
 
 	if len(failRows) > 0 {
-		if _, err := fmt.Fprintf(w, "## Details (FAIL files)\n\n"); err != nil {
+		if _, err := fmt.Fprintf(w, "## Details (FAIL sources)\n\n"); err != nil {
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, r := range failRows {

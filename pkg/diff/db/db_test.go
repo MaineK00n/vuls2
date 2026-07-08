@@ -1412,7 +1412,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL sources)
 
-### microsoft / microsoft-cvrf (0.0%)
+### microsoft / microsoft-cvrf (140.0%)
 
 #### Added KB IDs (1)
 
@@ -1552,7 +1552,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Details (FAIL sources)
 
-### mixed:1 / mixed-source (1.5%)
+### mixed:1 / mixed-source (80.0%)
 
 #### Changed KB IDs (2)
 

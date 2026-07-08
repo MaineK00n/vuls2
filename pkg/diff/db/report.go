@@ -152,7 +152,10 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, r := range failRows {
-			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Ecosystem, r.SourceID, r.DetectionChangeRate); err != nil {
+			// A source can fail on either rate (e.g. microsoft on KB alone),
+			// so the headline shows whichever signal is larger — same rule as
+			// the summary sort.
+			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Ecosystem, r.SourceID, max(r.DetectionChangeRate, r.KBChangeRate)); err != nil {
 				return false, errors.Wrapf(err, "write source header %s/%s", r.Ecosystem, r.SourceID)
 			}
 			for _, l := range []struct {

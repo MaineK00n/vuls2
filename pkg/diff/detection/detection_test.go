@@ -548,7 +548,7 @@ func TestGenerateReport(t *testing.T) {
 | ubuntu_22.04 | OvalMatch | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
 | redhat_9 | OvalMatch | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
 
-## Details (FAIL files)
+## Details (FAIL sources)
 
 ### ubuntu_22.04 / OvalMatch (75.0%)
 
@@ -603,7 +603,7 @@ func TestGenerateReport(t *testing.T) {
 | cpe_cisco | Cisco | 2 | 0 | 0 | 2 | 100.0% | 10.0% | **FAIL** |
 | cpe_cisco | Nvd | 4 | 4 | 0 | 0 | 0.0% | 10.0% | PASS |
 
-## Details (FAIL files)
+## Details (FAIL sources)
 
 ### cpe_cisco / Cisco (100.0%)
 
@@ -749,7 +749,7 @@ func TestGenerateReport(t *testing.T) {
 | beta | OvalMatch | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
 | alpha | OvalMatch | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
 
-## Details (FAIL files)
+## Details (FAIL sources)
 
 ### beta / OvalMatch (100.0%)
 
