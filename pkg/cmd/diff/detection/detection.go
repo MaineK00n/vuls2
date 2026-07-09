@@ -40,14 +40,14 @@ func NewCmd() *cobra.Command {
 		    --change-rate-threshold 5 \
 		    --change-rate-threshold-override debian_13=8
 
-		# relax a single source family within a file;
-		# <file>/<family> takes precedence over <file>
+		# relax a single data source within a file;
+		# <file>/<source> takes precedence over <file>
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
 		    --change-rate-threshold 5 \
-		    --change-rate-threshold-override cpe_jvn/Jvn=25
+		    --change-rate-threshold-override cpe_jvn/jvn-feed-rss=25
 
 		# repeated and comma-separated forms are interchangeable
 		$ vuls diff detection \
@@ -55,7 +55,7 @@ func NewCmd() *cobra.Command {
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
 		    --change-rate-threshold 5 \
-		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/Jvn=25'
+		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/jvn-feed-rss=25'
 		`),
 		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -82,9 +82,9 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, source family); exit non-zero if exceeded")
+	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
-		"override of the threshold; format: <file-basename>=<rate> (all source families in the file) or <file-basename>/<family>=<rate> (single family, e.g. cpe_jvn/Jvn, wins over the file key) (repeatable; comma-separated entries also accepted)")
+		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

@@ -14,13 +14,12 @@ func (o detectFuncOption) apply(opts *options) {
 
 type (
 	VulnInfo   = vulnInfo
-	Confidence = confidence
+	CveContent = cveContent
 )
 
 var (
-	Subtract              = subtract
-	DiffDetection         = diffDetection
-	GenerateReport        = generateReport
-	DetectionMethodFamily = detectionMethodFamily
-	CollectFamilies       = collectFamilies
+	Subtract       = subtract
+	DiffDetection  = diffDetection
+	GenerateReport = generateReport
+	CollectSources = collectSources
 )

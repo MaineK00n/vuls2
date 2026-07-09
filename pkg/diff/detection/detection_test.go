@@ -74,49 +74,15 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
-func TestDetectionMethodFamily(t *testing.T) {
-	tests := []struct {
-		method string
-		want   string
-	}{
-		// The three match tiers collapse into one family per source so a
-		// tier flip does not register as a cross-family add+remove.
-		{method: "NvdExactVersionMatch", want: "Nvd"},
-		{method: "NvdRoughVersionMatch", want: "Nvd"},
-		{method: "NvdVendorProductMatch", want: "Nvd"},
-		{method: "VulncheckExactVersionMatch", want: "Vulncheck"},
-		{method: "JvnVendorProductMatch", want: "Jvn"},
-		{method: "FortinetRoughVersionMatch", want: "Fortinet"},
-		{method: "PaloaltoExactVersionMatch", want: "Paloalto"},
-		{method: "CiscoVendorProductMatch", want: "Cisco"},
-		// Windows has two method strings for one detection path.
-		{method: "WindowsUpdateSearch", want: "Windows"},
-		{method: "WindowsRoughMatch", want: "Windows"},
-		// OS-package methods pass through verbatim.
-		{method: "OvalMatch", want: "OvalMatch"},
-		{method: "DebianSecurityTrackerMatch", want: "DebianSecurityTrackerMatch"},
-		{method: "UbuntuAPIMatch", want: "UbuntuAPIMatch"},
-		{method: "unknown", want: "unknown"},
-		// A bare tier suffix must not collapse to an empty family.
-		{method: "ExactVersionMatch", want: "ExactVersionMatch"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.method, func(t *testing.T) {
-			if got := detection.DetectionMethodFamily(tt.method); got != tt.want {
-				t.Errorf("DetectionMethodFamily(%q) = %q, want %q", tt.method, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCollectFamilies(t *testing.T) {
+func TestCollectSources(t *testing.T) {
 	type args struct {
 		scannedCves map[string]detection.VulnInfo
 	}
 	tests := []struct {
-		name string
-		args args
-		want map[string][]string
+		name    string
+		args    args
+		want    map[string][]string
+		wantErr bool
 	}{
 		{
 			name: "empty",
@@ -124,70 +90,127 @@ func TestCollectFamilies(t *testing.T) {
 			want: map[string][]string{},
 		},
 		{
-			name: "multi-family CVE lands in each family",
+			// Sibling feed variants (fortinet-csaf vs fortinet-cvrf) map to
+			// the SAME cveContents type in vuls0, so only the vuls2-sources
+			// marker can keep them apart — the very reason the marker is the
+			// grouping key.
+			name: "sibling sources under one content type stay distinct",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
-					"CVE-2026-0001": {Confidences: []detection.Confidence{
-						{DetectionMethod: "NvdExactVersionMatch"},
-						{DetectionMethod: "CiscoExactVersionMatch"},
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"fortinet": {
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"fortinet-csaf"}]`}},
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"fortinet-cvrf"}]`}},
+						},
 					}},
-					"CVE-2026-0002": {Confidences: []detection.Confidence{
-						{DetectionMethod: "NvdVendorProductMatch"},
+					"CVE-2026-0002": {CveContents: map[string][]detection.CveContent{
+						"fortinet": {
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"fortinet-csaf"}]`}},
+						},
 					}},
 				},
 			},
 			want: map[string][]string{
-				"Nvd":   {"CVE-2026-0001", "CVE-2026-0002"},
-				"Cisco": {"CVE-2026-0001"},
+				"fortinet-csaf": {"CVE-2026-0001", "CVE-2026-0002"},
+				"fortinet-cvrf": {"CVE-2026-0001"},
 			},
 		},
 		{
-			// Two confidences from different tiers of the same source must
-			// dedupe into one entry per family.
-			name: "tier flip dedupes within family",
+			// A merged content carries a multi-element source list; every
+			// element counts, deduped against other contents of the same CVE.
+			name: "merged multi-source marker",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
-					"CVE-2026-0001": {Confidences: []detection.Confidence{
-						{DetectionMethod: "NvdExactVersionMatch"},
-						{DetectionMethod: "NvdVendorProductMatch"},
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"nvd": {
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"nvd-feed-cve-v2","root_id":"CVE-2026-0001"},{"source_id":"vulncheck-nist-nvd2"}]`}},
+						},
+						"cisco": {
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"cisco-json"}]`}},
+						},
 					}},
 				},
 			},
 			want: map[string][]string{
-				"Nvd": {"CVE-2026-0001"},
+				"nvd-feed-cve-v2":     {"CVE-2026-0001"},
+				"vulncheck-nist-nvd2": {"CVE-2026-0001"},
+				"cisco-json":          {"CVE-2026-0001"},
 			},
 		},
 		{
-			name: "no confidences buckets under unknown",
+			// Enrichment-added contents carry no vuls2-sources marker and must
+			// not create a bucket — otherwise every CVE would also count under
+			// the enrichment sources (NVD, MITRE, ...), recreating the masking
+			// this diff exists to remove.
+			name: "unmarked enrichment content ignored",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
-					"CVE-2026-0001": {},
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"debian_security_tracker": {
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"debian-security-tracker-api"}]`}},
+						},
+						"nvd":   {{}},
+						"mitre": {{Optional: map[string]string{"other-key": "x"}}},
+					}},
 				},
 			},
 			want: map[string][]string{
-				"unknown": {"CVE-2026-0001"},
+				"debian-security-tracker-api": {"CVE-2026-0001"},
+			},
+		},
+		{
+			name: "no marked content buckets under unknown",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"nvd": {{}},
+					}},
+					"CVE-2026-0002": {},
+				},
+			},
+			want: map[string][]string{
+				"unknown": {"CVE-2026-0001", "CVE-2026-0002"},
 			},
 		},
 		{
 			// Map iteration order is random; the output lists must be sorted.
-			name: "IDs sorted within family",
+			name: "IDs sorted within source",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
-					"CVE-2026-0003": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
-					"CVE-2026-0001": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
-					"CVE-2026-0002": {Confidences: []detection.Confidence{{DetectionMethod: "OvalMatch"}}},
+					"CVE-2026-0003": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
+					"CVE-2026-0002": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
 				},
 			},
 			want: map[string][]string{
-				"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+				"alma-errata": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 			},
+		},
+		{
+			// A corrupt marker is a bug in the producing vuls0, not something
+			// to paper over inside a CI guard.
+			name: "corrupt marker errors",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"nvd": {{Optional: map[string]string{"vuls2-sources": `not json`}}},
+					}},
+				},
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.CollectFamilies(tt.args.scannedCves)
+			got, err := detection.CollectSources(tt.args.scannedCves)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("CollectSources() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("CollectFamilies() mismatch (-want +got):\n%s", diff)
+				t.Errorf("CollectSources() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -197,7 +220,7 @@ func TestDiffDetection(t *testing.T) {
 	type args struct {
 		d         detection.FileDiff
 		threshold float64
-		resolve   func(family string) float64 // nil means constant args.threshold
+		resolve   func(sourceID string) float64 // nil means constant args.threshold
 	}
 	tests := []struct {
 		name string
@@ -209,18 +232,18 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					BaselineIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "redhat_9",
-				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-				Families: []detection.FamilyDiff{
+				BaselineIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				TargetIDs:   map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				Sources: []detection.SourceDiff{
 					{
-						Family:      "OvalMatch",
+						SourceID:    "redhat-csaf",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 						ChangeRate:  0,
@@ -236,22 +259,22 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name: "redhat_9",
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					BaselineIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"}},
-					TargetIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+					TargetIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
 				},
 				threshold: 25,
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
-				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+				BaselineIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"}},
-				TargetIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
+				TargetIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 					"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
-				Families: []detection.FamilyDiff{
+				Sources: []detection.SourceDiff{
 					{
-						Family: "OvalMatch",
+						SourceID: "redhat-csaf",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
 						TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
@@ -271,18 +294,18 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "ubuntu_22.04",
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
+					BaselineIDs: map[string][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					TargetIDs:   map[string][]string{"ubuntu-oval": {"CVE-2026-0001"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "ubuntu_22.04",
-				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
-				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
-				Families: []detection.FamilyDiff{
+				BaselineIDs: map[string][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+				TargetIDs:   map[string][]string{"ubuntu-oval": {"CVE-2026-0001"}},
+				Sources: []detection.SourceDiff{
 					{
-						Family:      "OvalMatch",
+						SourceID:    "ubuntu-oval",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						TargetIDs:   []string{"CVE-2026-0001"},
 						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
@@ -295,20 +318,20 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			// The motivating case for per-family granularity: the small Cisco
-			// family disappears while the big Nvd family is unchanged. The
-			// union of CVE IDs would barely move (Cisco CVEs are also detected
-			// by Nvd), but the per-family diff fails loudly.
-			name: "small family loss not masked by large family",
+			// The motivating case for per-source granularity: the small
+			// cisco-json source disappears while the big NVD source is
+			// unchanged. The union of CVE IDs would barely move (cisco CVEs
+			// are also detected by NVD), but the per-source diff fails loudly.
+			name: "small source loss not masked by large source",
 			args: args{
 				d: detection.FileDiff{
 					Name: "cpe_cisco",
 					BaselineIDs: map[string][]string{
-						"Nvd":   {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						"Cisco": {"CVE-2026-0001", "CVE-2026-0002"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"cisco-json":      {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 					TargetIDs: map[string][]string{
-						"Nvd": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					},
 				},
 				threshold: 10,
@@ -316,15 +339,15 @@ func TestDiffDetection(t *testing.T) {
 			want: detection.FileDiff{
 				Name: "cpe_cisco",
 				BaselineIDs: map[string][]string{
-					"Nvd":   {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-					"Cisco": {"CVE-2026-0001", "CVE-2026-0002"},
+					"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+					"cisco-json":      {"CVE-2026-0001", "CVE-2026-0002"},
 				},
 				TargetIDs: map[string][]string{
-					"Nvd": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+					"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 				},
-				Families: []detection.FamilyDiff{
+				Sources: []detection.SourceDiff{
 					{
-						Family:      "Cisco",
+						SourceID:    "cisco-json",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
 						ChangeRate:  100,
@@ -332,7 +355,7 @@ func TestDiffDetection(t *testing.T) {
 						Pass:        false,
 					},
 					{
-						Family:      "Nvd",
+						SourceID:    "nvd-feed-cve-v2",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						ChangeRate:  0,
@@ -344,24 +367,24 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			// A per-family threshold lifts exactly that family while the
+			// A per-source threshold lifts exactly that source while the
 			// other stays on the default.
-			name: "per-family threshold lifts only its family",
+			name: "per-source threshold lifts only its source",
 			args: args{
 				d: detection.FileDiff{
 					Name: "cpe_jvn",
 					BaselineIDs: map[string][]string{
-						"Jvn": {"CVE-2026-0001", "CVE-2026-0002"},
-						"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+						"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0002"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 					TargetIDs: map[string][]string{
-						"Jvn": {"CVE-2026-0001", "CVE-2026-0003"},
-						"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+						"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0003"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 				},
 				threshold: 10,
-				resolve: func(family string) float64 {
-					if family == "Jvn" {
+				resolve: func(sourceID string) float64 {
+					if sourceID == "jvn-feed-rss" {
 						return 150
 					}
 					return 10
@@ -370,16 +393,16 @@ func TestDiffDetection(t *testing.T) {
 			want: detection.FileDiff{
 				Name: "cpe_jvn",
 				BaselineIDs: map[string][]string{
-					"Jvn": {"CVE-2026-0001", "CVE-2026-0002"},
-					"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+					"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0002"},
+					"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 				},
 				TargetIDs: map[string][]string{
-					"Jvn": {"CVE-2026-0001", "CVE-2026-0003"},
-					"Nvd": {"CVE-2026-0001", "CVE-2026-0002"},
+					"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0003"},
+					"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 				},
-				Families: []detection.FamilyDiff{
+				Sources: []detection.SourceDiff{
 					{
-						Family:      "Jvn",
+						SourceID:    "jvn-feed-rss",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0003"},
 						Added:       []string{"CVE-2026-0003"},
@@ -389,7 +412,7 @@ func TestDiffDetection(t *testing.T) {
 						Pass:        true,
 					},
 					{
-						Family:      "Nvd",
+						SourceID:    "nvd-feed-cve-v2",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 						ChangeRate:  0,
@@ -401,22 +424,22 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			name: "family only in target triggers 100% change",
+			name: "source only in target triggers 100% change",
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
 					BaselineIDs: map[string][]string{},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
 				threshold: 10,
 			},
 			want: detection.FileDiff{
 				Name:        "redhat_9",
 				BaselineIDs: map[string][]string{},
-				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-				Families: []detection.FamilyDiff{
+				TargetIDs:   map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				Sources: []detection.SourceDiff{
 					{
-						Family:     "OvalMatch",
+						SourceID:   "redhat-csaf",
 						TargetIDs:  []string{"CVE-2026-0001", "CVE-2026-0002"},
 						Added:      []string{"CVE-2026-0001", "CVE-2026-0002"},
 						ChangeRate: 100,
@@ -428,7 +451,7 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			name: "both empty pass with no families",
+			name: "both empty pass with no sources",
 			args: args{
 				d: detection.FileDiff{
 					Name:        "redhat_9",
@@ -441,7 +464,7 @@ func TestDiffDetection(t *testing.T) {
 				Name:        "redhat_9",
 				BaselineIDs: map[string][]string{},
 				TargetIDs:   map[string][]string{},
-				Families:    []detection.FamilyDiff{},
+				Sources:     []detection.SourceDiff{},
 				Pass:        true,
 			},
 		},
@@ -452,18 +475,18 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				d: detection.FileDiff{
 					Name:        "debian_13",
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+					BaselineIDs: map[string][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
 				},
 				threshold: 80,
 			},
 			want: detection.FileDiff{
 				Name:        "debian_13",
-				BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-				TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
-				Families: []detection.FamilyDiff{
+				BaselineIDs: map[string][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002"}},
+				TargetIDs:   map[string][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+				Sources: []detection.SourceDiff{
 					{
-						Family:      "OvalMatch",
+						SourceID:    "debian-security-tracker-api",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 						Added:       []string{"CVE-2026-0003"},
@@ -507,9 +530,9 @@ func TestGenerateReport(t *testing.T) {
 				diffs: map[string]detection.FileDiff{
 					"redhat_9": {
 						Name: "redhat_9",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
 								ChangeRate:  0,
@@ -521,9 +544,9 @@ func TestGenerateReport(t *testing.T) {
 					},
 					"ubuntu_22.04": {
 						Name: "ubuntu_22.04",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "ubuntu-oval",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 								TargetIDs:   []string{"CVE-2026-0001"},
 								Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
@@ -545,12 +568,12 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| ubuntu_22.04 | OvalMatch | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
-| redhat_9 | OvalMatch | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
+| ubuntu_22.04 | ubuntu-oval | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
+| redhat_9 | redhat-csaf | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 ## Details (FAIL sources)
 
-### ubuntu_22.04 / OvalMatch (75.0%)
+### ubuntu_22.04 / ubuntu-oval (75.0%)
 
 #### Removed IDs (3)
 
@@ -562,16 +585,16 @@ func TestGenerateReport(t *testing.T) {
 		},
 		{
 			// The motivating scenario: within one cpe fixture, a failing small
-			// family sorts above the passing large family and is reported as
+			// source sorts above the passing large source and is reported as
 			// its own row.
-			name: "small family failure not masked by large family",
+			name: "small source failure not masked by large source",
 			args: args{
 				diffs: map[string]detection.FileDiff{
 					"cpe_cisco": {
 						Name: "cpe_cisco",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "Cisco",
+								SourceID:    "cisco-json",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
 								ChangeRate:  100,
@@ -579,7 +602,7 @@ func TestGenerateReport(t *testing.T) {
 								Pass:        false,
 							},
 							{
-								Family:      "Nvd",
+								SourceID:    "nvd-feed-cve-v2",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 								ChangeRate:  0,
@@ -600,12 +623,12 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| cpe_cisco | Cisco | 2 | 0 | 0 | 2 | 100.0% | 10.0% | **FAIL** |
-| cpe_cisco | Nvd | 4 | 4 | 0 | 0 | 0.0% | 10.0% | PASS |
+| cpe_cisco | cisco-json | 2 | 0 | 0 | 2 | 100.0% | 10.0% | **FAIL** |
+| cpe_cisco | nvd-feed-cve-v2 | 4 | 4 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 ## Details (FAIL sources)
 
-### cpe_cisco / Cisco (100.0%)
+### cpe_cisco / cisco-json (100.0%)
 
 #### Removed IDs (2)
 
@@ -620,9 +643,9 @@ func TestGenerateReport(t *testing.T) {
 				diffs: map[string]detection.FileDiff{
 					"redhat_9": {
 						Name: "redhat_9",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001"},
 								TargetIDs:   []string{"CVE-2026-0001"},
 								ChangeRate:  0,
@@ -643,7 +666,7 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| redhat_9 | OvalMatch | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -653,9 +676,9 @@ func TestGenerateReport(t *testing.T) {
 				diffs: map[string]detection.FileDiff{
 					"debian_13": {
 						Name: "debian_13",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "debian-security-tracker-api",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 								Added:       []string{"CVE-2026-0003"},
@@ -668,9 +691,9 @@ func TestGenerateReport(t *testing.T) {
 					},
 					"redhat_9": {
 						Name: "redhat_9",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001"},
 								TargetIDs:   []string{"CVE-2026-0001"},
 								ChangeRate:  0,
@@ -691,8 +714,8 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| debian_13 | OvalMatch | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
-| redhat_9 | OvalMatch | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| debian_13 | debian-security-tracker-api | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
 
 `,
 		},
@@ -705,9 +728,9 @@ func TestGenerateReport(t *testing.T) {
 				diffs: map[string]detection.FileDiff{
 					"alpha": {
 						Name: "alpha",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "alma-errata",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
 								Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
@@ -721,9 +744,9 @@ func TestGenerateReport(t *testing.T) {
 					},
 					"beta": {
 						Name: "beta",
-						Families: []detection.FamilyDiff{
+						Sources: []detection.SourceDiff{
 							{
-								Family:      "OvalMatch",
+								SourceID:    "alma-errata",
 								BaselineIDs: []string{"CVE-2026-1001", "CVE-2026-1002"},
 								TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
 								Added:       []string{"CVE-2026-1003"},
@@ -746,12 +769,12 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| beta | OvalMatch | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
-| alpha | OvalMatch | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
+| beta | alma-errata | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
+| alpha | alma-errata | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
 
 ## Details (FAIL sources)
 
-### beta / OvalMatch (100.0%)
+### beta / alma-errata (100.0%)
 
 #### Added IDs (1)
 
@@ -798,14 +821,14 @@ func TestDiff(t *testing.T) {
 			case "redhat_9":
 				result[name] = detection.FileDiff{
 					Name:        name,
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002"}},
+					BaselineIDs: map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+					TargetIDs:   map[string][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				}
 			case "ubuntu_2204":
 				result[name] = detection.FileDiff{
 					Name:        name,
-					BaselineIDs: map[string][]string{"OvalMatch": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
-					TargetIDs:   map[string][]string{"OvalMatch": {"CVE-2026-0001"}},
+					BaselineIDs: map[string][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+					TargetIDs:   map[string][]string{"ubuntu-oval": {"CVE-2026-0001"}},
 				}
 			}
 		}
@@ -870,10 +893,10 @@ func TestDiff(t *testing.T) {
 			// inline resolve+diffDetection loop in Diff. ubuntu_2204 in
 			// fakeDetect produces a 66.7% change rate (baseline 3 IDs,
 			// target 1, two removed) which would FAIL the 10% default. The
-			// "ubuntu_2204=70" override lifts every family in that file above
+			// "ubuntu_2204=70" override lifts every source in that file above
 			// its rate so the whole Diff returns nil. If Diff stops forwarding
 			// the option, the override has no effect and ubuntu_2204 fails again.
-			name: "file override forwarded through to per-family resolution",
+			name: "file override forwarded through to per-source resolution",
 			args: args{
 				dir:                          scanDir,
 				detectFunc:                   fakeDetect,
@@ -883,28 +906,28 @@ func TestDiff(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// The "<file>/<family>" key form resolves for a specific family.
-			name: "file/family override forwarded through",
+			// The "<file>/<source>" key form resolves for a specific source.
+			name: "file/source override forwarded through",
 			args: args{
 				dir:                          scanDir,
 				detectFunc:                   fakeDetect,
 				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204/OvalMatch": 70},
+				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204/ubuntu-oval": 70},
 			},
 			wantErr: false,
 		},
 		{
-			// "<file>/<family>" takes precedence over the file-wide key: the
+			// "<file>/<source>" takes precedence over the file-wide key: the
 			// generous file-wide 70 is overridden back down to 10 for the
-			// only family present, so the file fails again.
-			name: "file/family override beats file override",
+			// only source present, so the file fails again.
+			name: "file/source override beats file override",
 			args: args{
 				dir:                 scanDir,
 				detectFunc:          fakeDetect,
 				changeRateThreshold: 10,
 				changeRateThresholdOverrides: map[string]float64{
-					"ubuntu_2204":           70,
-					"ubuntu_2204/OvalMatch": 10,
+					"ubuntu_2204":             70,
+					"ubuntu_2204/ubuntu-oval": 10,
 				},
 			},
 			wantErr: true,
