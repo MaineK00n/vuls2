@@ -15,9 +15,7 @@ import (
 	"github.com/pkg/errors"
 	progressbar "github.com/schollz/progressbar/v3"
 	bolt "go.etcd.io/bbolt"
-	oras "oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -106,8 +104,6 @@ func Fetch(opts ...Option) error {
 
 	ctx := context.TODO()
 
-	ms := memory.New()
-
 	repo, err := remote.NewRepository(options.repository)
 	if err != nil {
 		return errors.Wrapf(err, "create client for %s", options.repository)
@@ -116,12 +112,17 @@ func Fetch(opts ...Option) error {
 		return errors.Errorf("unexpected repository format. expected: %q, actual: %q", []string{"<repository>@<digest>", "<repository>:<tag>", "<repository>:<tag>@<digest>"}, options.repository)
 	}
 
-	manifestDescriptor, err := oras.Copy(ctx, repo, repo.Reference.Reference, ms, repo.Reference.Reference, oras.DefaultCopyOptions)
+	// Only the manifest is needed here; the DB layer itself is streamed
+	// directly from the remote repository below. Copying the whole artifact
+	// into an in-memory store would load the entire (multi-hundred-MiB) DB
+	// into RAM and, since oras-go v2.6.1, fails with "invalid descriptor size"
+	// because the memory store rejects blobs larger than 32 MiB.
+	manifestDescriptor, err := repo.Resolve(ctx, repo.Reference.Reference)
 	if err != nil {
-		return errors.Wrapf(err, "copy from %s", options.repository)
+		return errors.Wrapf(err, "resolve %s", options.repository)
 	}
 
-	r, err := ms.Fetch(ctx, manifestDescriptor)
+	r, err := repo.Fetch(ctx, manifestDescriptor)
 	if err != nil {
 		return errors.Wrap(err, "fetch manifest")
 	}
