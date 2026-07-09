@@ -588,8 +588,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 // in the corresponding value map at all — a source may be present with zero
 // units, which is still presence for Added/Removed/Changed classification.
 type counts struct {
-	Baseline, Target, Matched int
-	InBaseline, InTarget      bool
+	Baseline   int
+	Target     int
+	Matched    int
+	InBaseline bool
+	InTarget   bool
 }
 
 // compareCriterions structurally compares detection data at the Criterion (leaf) level,
