@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
@@ -465,7 +466,9 @@ func TestDiffEcosystem(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			// Sources carries no order guarantee (the report sorts for
+			// presentation), so compare it order-insensitively.
+			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b db.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
 				t.Errorf("DiffEcosystem() mismatch (-want +got):\n%s", diff)
 			}
 		})

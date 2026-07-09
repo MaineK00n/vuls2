@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,7 +106,8 @@ type FileDiff struct {
 	BaselineIDs map[string][]string
 	TargetIDs   map[string][]string
 
-	// Per-source diffs computed by diffDetection, sorted by SourceID.
+	// Per-source diffs computed by diffDetection, in no particular order;
+	// the report sorts for presentation.
 	Sources []SourceDiff
 
 	Pass bool
@@ -149,17 +149,9 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		// Resolve via the canonical map key, not d.Name — the two should
 		// always match in practice but coupling resolution to the key keeps
 		// override lookups consistent across the codebase.
-		// Precedence: "<file>/<source>" > "<file>" > default.
-		resolveThreshold := func(sourceID string) float64 {
-			if v, ok := o.changeRateThresholdOverrides[name+"/"+sourceID]; ok {
-				return v
-			}
-			if v, ok := o.changeRateThresholdOverrides[name]; ok {
-				return v
-			}
-			return o.changeRateThreshold
-		}
-		diffm[name] = diffDetection(d, resolveThreshold)
+		diffm[name] = diffDetection(d, func(sourceID string) float64 {
+			return resolveThreshold(o.changeRateThresholdOverrides, o.changeRateThreshold, name, sourceID)
+		})
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -173,6 +165,18 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one (scan-result file, data source); see report for details")
 	}
 	return nil
+}
+
+// resolveThreshold resolves the change-rate threshold for one (file, source)
+// pair. Precedence: "<file>/<source>" override > "<file>" override > default.
+func resolveThreshold(overrides map[string]float64, def float64, name, sourceID string) float64 {
+	if v, ok := overrides[fmt.Sprintf("%s/%s", name, sourceID)]; ok {
+		return v
+	}
+	if v, ok := overrides[name]; ok {
+		return v
+	}
+	return def
 }
 
 // listScanResults lists *.json files in the directory.
@@ -419,8 +423,8 @@ func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error
 }
 
 // diffDetection fills in the per-source diff fields of a single FileDiff.
-// Override resolution is the caller's responsibility — resolveThreshold is
-// applied verbatim per source. Parallels `diffEcosystem` on the db side.
+// Override resolution is the caller's responsibility — resolve is applied
+// verbatim per source. Parallels `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
 // score, affected packages, CVSS, exploit/KEV metadata, etc.) is not diffed.
@@ -428,7 +432,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
-func diffDetection(d FileDiff, resolveThreshold func(sourceID string) float64) FileDiff {
+func diffDetection(d FileDiff, resolve func(sourceID string) float64) FileDiff {
 	sources := make(map[string]struct{}, max(len(d.BaselineIDs), len(d.TargetIDs)))
 	for s := range d.BaselineIDs {
 		sources[s] = struct{}{}
@@ -438,7 +442,7 @@ func diffDetection(d FileDiff, resolveThreshold func(sourceID string) float64) F
 	}
 
 	d.Sources = make([]SourceDiff, 0, len(sources))
-	for _, sourceID := range slices.Sorted(maps.Keys(sources)) {
+	for sourceID := range sources {
 		sd := SourceDiff{
 			SourceID:    sourceID,
 			BaselineIDs: d.BaselineIDs[sourceID],
@@ -459,7 +463,7 @@ func diffDetection(d FileDiff, resolveThreshold func(sourceID string) float64) F
 				return 0
 			}
 		}()
-		sd.Threshold = resolveThreshold(sourceID)
+		sd.Threshold = resolve(sourceID)
 		sd.Pass = sd.ChangeRate <= sd.Threshold
 		d.Sources = append(d.Sources, sd)
 	}

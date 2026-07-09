@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 
 	"github.com/MaineK00n/vuls2/pkg/diff/detection"
@@ -535,7 +536,9 @@ func TestDiffDetection(t *testing.T) {
 				resolve = func(string) float64 { return tt.args.threshold }
 			}
 			got := detection.DiffDetection(tt.args.d, resolve)
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			// Sources carries no order guarantee (the report sorts for
+			// presentation), so compare it order-insensitively.
+			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
 				t.Errorf("DiffDetection() mismatch (-want +got):\n%s", diff)
 			}
 		})

@@ -5,9 +5,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/v2"
+	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"os"
 	"runtime"
 	"slices"
@@ -133,7 +133,7 @@ type SourceDiff struct {
 // down per data source. An ecosystem Passes only when every source passes.
 type EcosystemDiff struct {
 	Ecosystem ecosystemTypes.Ecosystem
-	Sources   []SourceDiff // sorted by SourceID
+	Sources   []SourceDiff // unordered; the report sorts for presentation
 	Pass      bool
 }
 
@@ -211,22 +211,14 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 	// New ecosystems in the target are feature additions, not regressions,
 	// so they are intentionally excluded from change rate calculation.
 	for _, eco := range baselineEcos {
-		// Resolve the per-source threshold here so diffEcosystem stays a
-		// pure per-target function that doesn't need the overrides map.
-		// Precedence: "<ecosystem>/<source>" > "<ecosystem>" > default.
-		resolveThreshold := func(src sourceTypes.SourceID) float64 {
-			if v, ok := overrides[string(eco)+"/"+string(src)]; ok {
-				return v
-			}
-			if v, ok := overrides[string(eco)]; ok {
-				return v
-			}
-			return changeRateThreshold
-		}
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, resolveThreshold)
+			// Bind override resolution here so diffEcosystem stays a pure
+			// per-target function that doesn't need the overrides map.
+			d, err := diffEcosystem(baselineDB, targetDB, eco, func(src sourceTypes.SourceID) float64 {
+				return resolveThreshold(overrides, changeRateThreshold, eco, src)
+			})
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -247,6 +239,19 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 		results = append(results, d)
 	}
 	return results, nil
+}
+
+// resolveThreshold resolves the change-rate threshold for one
+// (ecosystem, source) pair.
+// Precedence: "<ecosystem>/<source>" override > "<ecosystem>" override > default.
+func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTypes.Ecosystem, src sourceTypes.SourceID) float64 {
+	if v, ok := overrides[fmt.Sprintf("%s/%s", eco, src)]; ok {
+		return v
+	}
+	if v, ok := overrides[string(eco)]; ok {
+		return v
+	}
+	return def
 }
 
 // changeRate computes a per-bucket change rate as a percentage:
@@ -287,8 +292,8 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Override resolution is the
-// caller's responsibility — this function applies resolveThreshold verbatim.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, resolveThreshold func(sourceTypes.SourceID) float64) (EcosystemDiff, error) {
+// caller's responsibility — this function applies resolve verbatim.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, resolve func(sourceTypes.SourceID) float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]*SourceDiff)
 
@@ -326,11 +331,10 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	}
 
 	diff.Sources = make([]SourceDiff, 0, len(agg))
-	for _, src := range slices.Sorted(maps.Keys(agg)) {
-		sd := agg[src]
+	for src, sd := range agg {
 		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
 		sd.KBChangeRate = changeRate(sd.BaselineKBs, sd.TargetKBs, sd.MatchedKBs)
-		sd.Threshold = resolveThreshold(src)
+		sd.Threshold = resolve(src)
 		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
 		diff.Sources = append(diff.Sources, *sd)
 	}
