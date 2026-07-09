@@ -378,7 +378,7 @@ skipUpdate = true
 // a source_id) is an error — vuls0 always writes at least one entry with a
 // non-empty source_id, so anything else signals a marker format change that
 // must fail loudly rather than silently mis-attribute detections.
-// ID lists are sorted for deterministic diff output.
+// ID lists carry no order guarantee; the report sorts for presentation.
 func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error) {
 	m := make(map[string][]string)
 	for cve, vi := range scannedCves {
@@ -410,9 +410,6 @@ func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error
 		for s := range sources {
 			m[s] = append(m[s], cve)
 		}
-	}
-	for _, ids := range m {
-		slices.Sort(ids)
 	}
 	return m, nil
 }

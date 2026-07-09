@@ -176,20 +176,6 @@ func TestCollectSources(t *testing.T) {
 			},
 		},
 		{
-			// Map iteration order is random; the output lists must be sorted.
-			name: "IDs sorted within source",
-			args: args{
-				scannedCves: map[string]detection.VulnInfo{
-					"CVE-2026-0003": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
-					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
-					"CVE-2026-0002": {CveContents: map[string][]detection.CveContent{"alma": {{Optional: map[string]string{"vuls2-sources": `[{"source_id":"alma-errata"}]`}}}}},
-				},
-			},
-			want: map[string][]string{
-				"alma-errata": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-			},
-		},
-		{
 			// A corrupt marker is a bug in the producing vuls0, not something
 			// to paper over inside a CI guard.
 			name: "corrupt marker errors",
@@ -238,7 +224,9 @@ func TestCollectSources(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
+			// ID lists carry no order guarantee (the report sorts for
+			// presentation), so compare them order-insensitively.
+			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("CollectSources() mismatch (-want +got):\n%s", diff)
 			}
 		})
