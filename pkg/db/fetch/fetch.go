@@ -114,7 +114,7 @@ func Fetch(opts ...Option) error {
 
 	// Only the manifest is needed here; the DB layer itself is streamed
 	// directly from the remote repository below. Copying the whole artifact
-	// into an in-memory store would load the entire (multi-hundred-MiB) DB
+	// into an in-memory store would load the entire (multi-gigabyte) DB
 	// into RAM and, since oras-go v2.6.1, fails with "invalid descriptor size"
 	// because the memory store rejects blobs larger than 32 MiB.
 	manifestDescriptor, err := repo.Resolve(ctx, repo.Reference.Reference)
