@@ -201,6 +201,32 @@ func TestCollectSources(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// vuls0 always writes at least one entry, so a well-formed but
+			// empty list signals a marker format change — fail loudly instead
+			// of silently falling back to "unknown".
+			name: "empty marker list errors",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"nvd": {{Optional: map[string]string{"vuls2-sources": `[]`}}},
+					}},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			// Same for an entry that parses but carries no source_id.
+			name: "marker entry without source_id errors",
+			args: args{
+				scannedCves: map[string]detection.VulnInfo{
+					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
+						"nvd": {{Optional: map[string]string{"vuls2-sources": `[{"root_id":"CVE-2026-0001"}]`}}},
+					}},
+				},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
