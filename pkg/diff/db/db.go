@@ -291,7 +291,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // resolved from overrides via resolveThreshold, falling back to threshold.
 func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
-	agg := make(map[sourceTypes.SourceID]*SourceDiff)
+	agg := make(map[sourceTypes.SourceID]SourceDiff)
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
 		return targetDB.View(func(ttx *bolt.Tx) error {
@@ -328,30 +328,21 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 
 	diff.Sources = make([]SourceDiff, 0, len(agg))
 	for sid, sd := range agg {
+		sd.SourceID = sid
 		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
 		sd.KBChangeRate = changeRate(sd.BaselineKBs, sd.TargetKBs, sd.MatchedKBs)
 		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
 		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
-		diff.Sources = append(diff.Sources, *sd)
+		diff.Sources = append(diff.Sources, sd)
 	}
 	diff.Pass = !slices.ContainsFunc(diff.Sources, func(s SourceDiff) bool { return !s.Pass })
 	return diff, nil
 }
 
-// sourceDiff returns the accumulator entry for sid, creating it on first use.
-func sourceDiff(agg map[sourceTypes.SourceID]*SourceDiff, sid sourceTypes.SourceID) *SourceDiff {
-	sd, ok := agg[sid]
-	if !ok {
-		sd = &SourceDiff{SourceID: sid}
-		agg[sid] = sd
-	}
-	return sd
-}
-
 // updateDetectionDiff merge-joins two `<ecosystem>/detection` buckets on sorted
 // cursors and accumulates per-source Detection-related counts into agg. Either
 // bucket may be nil.
-func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDiff) error {
+func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
 	if bDet == nil && tDet == nil {
 		return nil
 	}
@@ -363,10 +354,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(k))
 				sd.TargetCriterions += n
+				agg[sid] = sd
 			}
 			return nil
 		})
@@ -379,10 +371,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
 				sd.BaselineCriterions += n
+				agg[sid] = sd
 			}
 			return nil
 		})
@@ -411,10 +404,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(bk))
 				sd.BaselineCriterions += n
+				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
 		case +1: // target-only → Added
@@ -423,10 +417,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(tk))
 				sd.TargetCriterions += n
+				agg[sid] = sd
 			}
 			tk, tv = tc.Next()
 		case 0: // both present → compare per source
@@ -435,7 +430,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
 			}
 			for sid, cnt := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				if cnt.InBaseline {
 					sd.BaselineKeys++
 					sd.BaselineCriterions += cnt.Baseline
@@ -455,6 +450,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 				case cnt.InTarget:
 					sd.Added = append(sd.Added, string(bk))
 				}
+				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
 			tk, tv = tc.Next()
@@ -468,7 +464,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 
 // updateKBDiff merge-joins two `<ecosystem>/kb` buckets on sorted cursors and
 // accumulates per-source KB-related counts into agg. Either bucket may be nil.
-func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDiff) error {
+func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
 	if bKB == nil && tKB == nil {
 		return nil
 	}
@@ -480,10 +476,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(k))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(k))
 				sd.TargetKBs += n
+				agg[sid] = sd
 			}
 			return nil
 		})
@@ -496,10 +493,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(k))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
 				sd.BaselineKBs += n
+				agg[sid] = sd
 			}
 			return nil
 		})
@@ -527,10 +525,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(bk))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
 				sd.BaselineKBs += n
+				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
 		case +1:
@@ -539,10 +538,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(tk))
 			}
 			for sid, n := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(tk))
 				sd.TargetKBs += n
+				agg[sid] = sd
 			}
 			tk, tv = tc.Next()
 		case 0:
@@ -551,7 +551,7 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
 			}
 			for sid, cnt := range m {
-				sd := sourceDiff(agg, sid)
+				sd := agg[sid]
 				if cnt.InBaseline {
 					sd.BaselineKBKeys++
 					sd.BaselineKBs += cnt.Baseline
@@ -571,6 +571,7 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 				case cnt.InTarget:
 					sd.AddedKBs = append(sd.AddedKBs, string(bk))
 				}
+				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
 			tk, tv = tc.Next()

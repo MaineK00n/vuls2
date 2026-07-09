@@ -16,8 +16,8 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 
-	db "github.com/MaineK00n/vuls2/pkg/diff/db"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
+	db "github.com/MaineK00n/vuls2/pkg/diff/db"
 )
 
 // populateDB creates a BoltDB at dbPath populated from fixture directories.
