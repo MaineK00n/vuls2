@@ -249,7 +249,7 @@ func TestDiffDetection(t *testing.T) {
 	type args struct {
 		d         detection.FileDiff
 		threshold float64
-		resolve   func(sourceID string) float64 // nil means constant args.threshold
+		overrides map[string]float64
 	}
 	tests := []struct {
 		name string
@@ -412,12 +412,7 @@ func TestDiffDetection(t *testing.T) {
 					},
 				},
 				threshold: 10,
-				resolve: func(sourceID string) float64 {
-					if sourceID == "jvn-feed-rss" {
-						return 150
-					}
-					return 10
-				},
+				overrides: map[string]float64{"cpe_jvn/jvn-feed-rss": 150},
 			},
 			want: detection.FileDiff{
 				Name: "cpe_jvn",
@@ -531,11 +526,7 @@ func TestDiffDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolve := tt.args.resolve
-			if resolve == nil {
-				resolve = func(string) float64 { return tt.args.threshold }
-			}
-			got := detection.DiffDetection(tt.args.d, resolve)
+			got := detection.DiffDetection(tt.args.d, tt.args.overrides, tt.args.threshold)
 			// Sources carries no order guarantee (the report sorts for
 			// presentation), so compare it order-insensitively.
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {

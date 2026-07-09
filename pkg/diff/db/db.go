@@ -214,11 +214,7 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			// Bind override resolution here so diffEcosystem stays a pure
-			// per-target function that doesn't need the overrides map.
-			d, err := diffEcosystem(baselineDB, targetDB, eco, func(src sourceTypes.SourceID) float64 {
-				return resolveThreshold(overrides, changeRateThreshold, eco, src)
-			})
+			d, err := diffEcosystem(baselineDB, targetDB, eco, overrides, changeRateThreshold)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -244,8 +240,8 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 // resolveThreshold resolves the change-rate threshold for one
 // (ecosystem, source) pair.
 // Precedence: "<ecosystem>/<source>" override > "<ecosystem>" override > default.
-func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTypes.Ecosystem, src sourceTypes.SourceID) float64 {
-	if v, ok := overrides[fmt.Sprintf("%s/%s", eco, src)]; ok {
+func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTypes.Ecosystem, sid sourceTypes.SourceID) float64 {
+	if v, ok := overrides[fmt.Sprintf("%s/%s", eco, sid)]; ok {
 		return v
 	}
 	if v, ok := overrides[string(eco)]; ok {
@@ -291,9 +287,9 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently, accumulating counts per data
-// source. Either sub-bucket may be absent. Override resolution is the
-// caller's responsibility — this function applies resolve verbatim.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, resolve func(sourceTypes.SourceID) float64) (EcosystemDiff, error) {
+// source. Either sub-bucket may be absent. Per-source thresholds are
+// resolved from overrides via resolveThreshold, falling back to threshold.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]*SourceDiff)
 
@@ -331,10 +327,10 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	}
 
 	diff.Sources = make([]SourceDiff, 0, len(agg))
-	for src, sd := range agg {
+	for sid, sd := range agg {
 		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
 		sd.KBChangeRate = changeRate(sd.BaselineKBs, sd.TargetKBs, sd.MatchedKBs)
-		sd.Threshold = resolve(src)
+		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
 		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
 		diff.Sources = append(diff.Sources, *sd)
 	}
@@ -342,12 +338,12 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	return diff, nil
 }
 
-// sourceDiff returns the accumulator entry for src, creating it on first use.
-func sourceDiff(agg map[sourceTypes.SourceID]*SourceDiff, src sourceTypes.SourceID) *SourceDiff {
-	sd, ok := agg[src]
+// sourceDiff returns the accumulator entry for sid, creating it on first use.
+func sourceDiff(agg map[sourceTypes.SourceID]*SourceDiff, sid sourceTypes.SourceID) *SourceDiff {
+	sd, ok := agg[sid]
 	if !ok {
-		sd = &SourceDiff{SourceID: src}
-		agg[src] = sd
+		sd = &SourceDiff{SourceID: sid}
+		agg[sid] = sd
 	}
 	return sd
 }
@@ -366,8 +362,8 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(k))
 				sd.TargetCriterions += n
@@ -382,8 +378,8 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
 				sd.BaselineCriterions += n
@@ -414,8 +410,8 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(bk))
 				sd.BaselineCriterions += n
@@ -426,8 +422,8 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(tk))
 				sd.TargetCriterions += n
@@ -438,8 +434,8 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]*
 			if err != nil {
 				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
 			}
-			for src, cnt := range m {
-				sd := sourceDiff(agg, src)
+			for sid, cnt := range m {
+				sd := sourceDiff(agg, sid)
 				if cnt.InBaseline {
 					sd.BaselineKeys++
 					sd.BaselineCriterions += cnt.Baseline
@@ -483,8 +479,8 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(k))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(k))
 				sd.TargetKBs += n
@@ -499,8 +495,8 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(k))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
 				sd.BaselineKBs += n
@@ -530,8 +526,8 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(bk))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
 				sd.BaselineKBs += n
@@ -542,8 +538,8 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(tk))
 			}
-			for src, n := range m {
-				sd := sourceDiff(agg, src)
+			for sid, n := range m {
+				sd := sourceDiff(agg, sid)
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(tk))
 				sd.TargetKBs += n
@@ -554,8 +550,8 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]*SourceDif
 			if err != nil {
 				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
 			}
-			for src, cnt := range m {
-				sd := sourceDiff(agg, src)
+			for sid, cnt := range m {
+				sd := sourceDiff(agg, sid)
 				if cnt.InBaseline {
 					sd.BaselineKBKeys++
 					sd.BaselineKBs += cnt.Baseline
@@ -632,18 +628,18 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 	}
 
 	m := make(map[sourceTypes.SourceID]counts, max(len(bm), len(tm)))
-	for src := range bm {
-		m[src] = counts{InBaseline: true}
+	for sid := range bm {
+		m[sid] = counts{InBaseline: true}
 	}
-	for src := range tm {
-		c := m[src]
+	for sid := range tm {
+		c := m[sid]
 		c.InTarget = true
-		m[src] = c
+		m[sid] = c
 	}
 
-	for src, c := range m {
-		bCns := flattenAndSort(bm[src])
-		tCns := flattenAndSort(tm[src])
+	for sid, c := range m {
+		bCns := flattenAndSort(bm[sid])
+		tCns := flattenAndSort(tm[sid])
 
 		c.Baseline = len(bCns)
 		c.Target = len(tCns)
@@ -664,7 +660,7 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 				return nil, errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, cr)
 			}
 		}
-		m[src] = c
+		m[sid] = c
 	}
 	return m, nil
 }
@@ -711,12 +707,12 @@ func countCriterions(data []byte) (map[sourceTypes.SourceID]int, error) {
 		return nil, errors.Wrap(err, "unmarshal detection data")
 	}
 	ns := make(map[sourceTypes.SourceID]int, len(m))
-	for src, conds := range m {
+	for sid, conds := range m {
 		n := 0
 		for _, c := range conds {
 			n += countLeafCriterions(c.Criteria)
 		}
-		ns[src] = n
+		ns[sid] = n
 	}
 	return ns, nil
 }
@@ -744,22 +740,22 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]count
 	}
 
 	m := make(map[sourceTypes.SourceID]counts, max(len(bm), len(tm)))
-	for src, bKB := range bm {
+	for sid, bKB := range bm {
 		c := counts{InBaseline: true, Baseline: 1}
-		if tKB, ok := tm[src]; ok {
+		if tKB, ok := tm[sid]; ok {
 			bKB.Sort()
 			tKB.Sort()
 			if microsoftkbTypes.Compare(bKB, tKB) == 0 {
 				c.Matched = 1
 			}
 		}
-		m[src] = c
+		m[sid] = c
 	}
-	for src := range tm {
-		c := m[src]
+	for sid := range tm {
+		c := m[sid]
 		c.InTarget = true
 		c.Target = 1
-		m[src] = c
+		m[sid] = c
 	}
 	return m, nil
 }
@@ -775,8 +771,8 @@ func countKBs(data []byte) (map[sourceTypes.SourceID]int, error) {
 		return nil, errors.Wrap(err, "unmarshal KB data")
 	}
 	ns := make(map[sourceTypes.SourceID]int, len(m))
-	for src := range m {
-		ns[src] = 1
+	for sid := range m {
+		ns[sid] = 1
 	}
 	return ns, nil
 }

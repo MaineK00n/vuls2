@@ -99,7 +99,7 @@ func TestDiffEcosystem(t *testing.T) {
 		baselineFixture string
 		targetFixture   string
 		ecosystem       ecosystemTypes.Ecosystem
-		resolve         func(sourceTypes.SourceID) float64 // nil means constant 0
+		overrides       map[string]float64 // resolved against a default threshold of 0
 	}
 	tests := []struct {
 		name string
@@ -288,15 +288,9 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/multi-source-baseline",
 				targetFixture:   "testdata/fixtures/multi-source-target",
 				ecosystem:       "test:multi",
-				resolve: func(src sourceTypes.SourceID) float64 {
-					switch src {
-					case "test-source-2":
-						return 250
-					case "test-source-3":
-						return 150
-					default:
-						return 0
-					}
+				overrides: map[string]float64{
+					"test:multi/test-source-2": 250,
+					"test:multi/test-source-3": 150,
 				},
 			},
 			want: db.EcosystemDiff{
@@ -456,12 +450,7 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			resolve := tt.args.resolve
-			if resolve == nil {
-				resolve = func(sourceTypes.SourceID) float64 { return 0 }
-			}
-
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, resolve)
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, tt.args.overrides, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
