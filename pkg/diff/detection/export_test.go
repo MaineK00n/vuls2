@@ -1,6 +1,6 @@
 package detection
 
-type DetectFunc = func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
+type DetectFunc = func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]CVEIDs, error)
 
 func WithDetectFunc(f DetectFunc) Option {
 	return detectFuncOption{f: f}
@@ -15,6 +15,7 @@ func (o detectFuncOption) apply(opts *options) {
 type (
 	VulnInfo   = vulnInfo
 	CveContent = cveContent
+	CVEIDs     = cveIDs
 )
 
 var (

@@ -24,7 +24,7 @@ type options struct {
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
 	writer                       io.Writer
-	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error)
+	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
 type Option interface {
@@ -104,15 +104,19 @@ type SourceDiff struct {
 type FileDiff struct {
 	Name string
 
-	// Raw per-source CVE ID collections from the baseline and target runs.
-	BaselineIDs map[sourceTypes.SourceID][]string
-	TargetIDs   map[sourceTypes.SourceID][]string
-
 	// Per-source diffs computed by diffDetection, in no particular order;
 	// the report sorts for presentation.
 	Sources []SourceDiff
 
 	Pass bool
+}
+
+// cveIDs carries the raw per-source CVE ID collections of one scan result
+// file between the collection phase (two vuls0 runs) and diffDetection,
+// which reorganizes them into per-source SourceDiff entries.
+type cveIDs struct {
+	Baseline map[sourceTypes.SourceID][]string
+	Target   map[sourceTypes.SourceID][]string
 }
 
 // Diff compares detection results between baseline and target pairs of (binary, DB).
@@ -142,13 +146,14 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		"baseline-binary", baselineBin, "baseline-db", baselineDB,
 		"target-binary", targetBin, "target-db", targetDB)
 
-	diffm, err := o.detectFunc(baselineBin, baselineDB, targetBin, targetDB, files)
+	idm, err := o.detectFunc(baselineBin, baselineDB, targetBin, targetDB, files)
 	if err != nil {
 		return errors.Wrap(err, "detect")
 	}
 
-	for name, d := range diffm {
-		diffm[name] = diffDetection(d, o.changeRateThresholdOverrides, o.changeRateThreshold)
+	diffm := make(map[string]FileDiff, len(idm))
+	for name, ids := range idm {
+		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold)
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -199,7 +204,7 @@ func listScanResults(dir string) (map[string]string, error) {
 
 // detectAll runs vuls0 detection for all scan result files against both
 // baseline and target (binary, DB) pairs in a single worker pool.
-func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]FileDiff, error) {
+func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error) {
 	type task struct {
 		role   string
 		name   string
@@ -250,22 +255,19 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 	}
 	close(resChan)
 
-	diffm := make(map[string]FileDiff, len(files))
-	for name := range files {
-		diffm[name] = FileDiff{Name: name}
-	}
+	idm := make(map[string]cveIDs, len(files))
 	for r := range resChan {
-		d := diffm[r.name]
+		ids := idm[r.name]
 		switch r.role {
 		case "baseline":
-			d.BaselineIDs = r.ids
+			ids.Baseline = r.ids
 		case "target":
-			d.TargetIDs = r.ids
+			ids.Target = r.ids
 		}
-		diffm[r.name] = d
+		idm[r.name] = ids
 	}
 
-	return diffm, nil
+	return idm, nil
 }
 
 // vulnInfo is the minimal projection of a vuls0 models.VulnInfo needed to
@@ -416,10 +418,10 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 	return m, nil
 }
 
-// diffDetection fills in the per-source diff fields of a single FileDiff.
-// Per-source thresholds are resolved from overrides via resolveThreshold,
-// keyed by d.Name, falling back to threshold. Parallels `diffEcosystem` on
-// the db side.
+// diffDetection builds the FileDiff of one scan result file from its raw
+// per-source CVE ID collections. Per-source thresholds are resolved from
+// overrides via resolveThreshold, falling back to threshold. Parallels
+// `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
 // score, affected packages, CVSS, exploit/KEV metadata, etc.) is not diffed.
@@ -427,26 +429,29 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
-func diffDetection(d FileDiff, overrides map[string]float64, threshold float64) FileDiff {
-	sources := make(map[sourceTypes.SourceID]struct{}, max(len(d.BaselineIDs), len(d.TargetIDs)))
-	for s := range d.BaselineIDs {
+func diffDetection(name string, ids cveIDs, overrides map[string]float64, threshold float64) FileDiff {
+	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
+	for s := range ids.Baseline {
 		sources[s] = struct{}{}
 	}
-	for s := range d.TargetIDs {
+	for s := range ids.Target {
 		sources[s] = struct{}{}
 	}
 
-	d.Sources = make([]SourceDiff, 0, len(sources))
+	d := FileDiff{
+		Name:    name,
+		Sources: make([]SourceDiff, 0, len(sources)),
+	}
 	for sid := range sources {
 		sd := SourceDiff{
 			SourceID:    sid,
-			BaselineIDs: d.BaselineIDs[sid],
-			TargetIDs:   d.TargetIDs[sid],
+			BaselineIDs: ids.Baseline[sid],
+			TargetIDs:   ids.Target[sid],
 		}
 		sd.Added = subtract(sd.TargetIDs, sd.BaselineIDs)
 		sd.Removed = subtract(sd.BaselineIDs, sd.TargetIDs)
 		sd.ChangeRate = changeRate(len(sd.BaselineIDs), len(sd.Added), len(sd.Removed))
-		sd.Threshold = resolveThreshold(overrides, threshold, d.Name, sid)
+		sd.Threshold = resolveThreshold(overrides, threshold, name, sid)
 		sd.Pass = sd.ChangeRate <= sd.Threshold
 		d.Sources = append(d.Sources, sd)
 	}
