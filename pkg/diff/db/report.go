@@ -175,8 +175,11 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 				{"Removed KB IDs", r.RemovedKBs},
 				{"Changed KB IDs", r.ChangedKBs},
 			} {
-				slices.Sort(l.ids)
-				if err := writeIDList(w, l.label, l.ids); err != nil {
+				// Sort a clone: the slices are shared with the caller's
+				// diffs, and rendering must not mutate its input.
+				ids := slices.Clone(l.ids)
+				slices.Sort(ids)
+				if err := writeIDList(w, l.label, ids); err != nil {
 					return false, errors.Wrapf(err, "%s/%s %s", r.Ecosystem, r.SourceID, l.label)
 				}
 			}

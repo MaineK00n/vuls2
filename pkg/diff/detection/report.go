@@ -103,15 +103,19 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Name, r.SourceID, r.ChangeRate); err != nil {
 				return false, errors.Wrapf(err, "write file header %s/%s", r.Name, r.SourceID)
 			}
+			// Sort clones: the slices are shared with the caller's diffs,
+			// and rendering must not mutate its input.
 			if len(r.Added) > 0 {
-				slices.Sort(r.Added)
-				if err := writeIDList(w, "Added IDs", r.Added); err != nil {
+				added := slices.Clone(r.Added)
+				slices.Sort(added)
+				if err := writeIDList(w, "Added IDs", added); err != nil {
 					return false, errors.Wrapf(err, "write added IDs %s/%s", r.Name, r.SourceID)
 				}
 			}
 			if len(r.Removed) > 0 {
-				slices.Sort(r.Removed)
-				if err := writeIDList(w, "Removed IDs", r.Removed); err != nil {
+				removed := slices.Clone(r.Removed)
+				slices.Sort(removed)
+				if err := writeIDList(w, "Removed IDs", removed); err != nil {
 					return false, errors.Wrapf(err, "write removed IDs %s/%s", r.Name, r.SourceID)
 				}
 			}
