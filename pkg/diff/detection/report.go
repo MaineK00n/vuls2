@@ -10,6 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// placeholderSourceID marks the row emitted for a file compared without any
+// detected sources; no threshold applies to it.
+const placeholderSourceID = "(none)"
+
 // reportRow flattens (file, source) for rendering and sorting.
 type reportRow struct {
 	Name string
@@ -29,7 +33,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 			// A compared file with no detected sources on either side still
 			// gets a placeholder row so the report stays explicit about what
 			// was compared instead of silently omitting it.
-			rows = append(rows, reportRow{Name: d.Name, SourceDiff: SourceDiff{SourceID: "(none)", Pass: d.Pass}})
+			rows = append(rows, reportRow{Name: d.Name, SourceDiff: SourceDiff{SourceID: placeholderSourceID, Pass: d.Pass}})
 			continue
 		}
 		for _, sd := range d.Sources {
@@ -72,9 +76,9 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	}
 
 	for _, r := range rows {
-		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %.1f%% | %.1f%% | %s |\n",
+		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
 			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed), r.ChangeRate,
-			r.Threshold, resultLabel(r.Pass)); err != nil {
+			thresholdCell(r.SourceDiff), resultLabel(r.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -115,6 +119,16 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	}
 
 	return pass, nil
+}
+
+// thresholdCell renders the Threshold column; a placeholder row has no
+// (file, source) for a threshold to apply to, so it renders "-" rather than
+// a misleading 0.0%.
+func thresholdCell(sd SourceDiff) string {
+	if sd.SourceID == placeholderSourceID {
+		return "-"
+	}
+	return fmt.Sprintf("%.1f%%", sd.Threshold)
 }
 
 func resultLabel(pass bool) string {

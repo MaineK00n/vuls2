@@ -1772,7 +1772,7 @@ func TestGenerateReport(t *testing.T) {
 
 | Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
 |-----------|--------|-----------------------|----------------|-----------|--------|
-| empty:1 | (none) | 0.0% | 0.0% | 0.0% | PASS |
+| empty:1 | (none) | 0.0% | 0.0% | - | PASS |
 
 `,
 		},

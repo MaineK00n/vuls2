@@ -294,6 +294,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
+	skipped := make(map[sourceTypes.SourceID]int)
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
 		return targetDB.View(func(ttx *bolt.Tx) error {
@@ -307,7 +308,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 			if tEco != nil {
 				tDet = tEco.Bucket([]byte("detection"))
 			}
-			if err := updateDetectionDiff(bDet, tDet, agg); err != nil {
+			if err := updateDetectionDiff(bDet, tDet, agg, skipped); err != nil {
 				return errors.Wrap(err, "diff detection bucket")
 			}
 
@@ -328,6 +329,12 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		return EcosystemDiff{}, errors.Wrap(err, "diff ecosystem")
 	}
 
+	// One aggregated warning per source keeps a widespread extraction bug
+	// from flooding the log with per-root-ID lines.
+	for sid, n := range skipped {
+		slog.Warn("skipped source with no criterions", "ecosystem", ecosystem, "source", sid, "root IDs", n)
+	}
+
 	diff.Sources = make([]SourceDiff, 0, len(agg))
 	for sid, sd := range agg {
 		sd.SourceID = sid
@@ -344,7 +351,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 // updateDetectionDiff merge-joins two `<ecosystem>/detection` buckets on sorted
 // cursors and accumulates per-source Detection-related counts into agg. Either
 // bucket may be nil.
-func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
+func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
 	if bDet == nil && tDet == nil {
 		return nil
 	}
@@ -358,10 +365,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			for sid, count := range counts {
 				if count == 0 {
 					// A source with zero criterions can never match — an
-					// extraction bug; skip with a warning instead of
-					// failing the whole diff (it exists in shipped data,
-					// e.g. fedora-api advisories without packages).
-					slog.Warn("skipping source with no criterions", "root ID", string(k), "source", sid)
+					// extraction bug; skip it (it exists in shipped data,
+					// e.g. fedora-api advisories without packages). The
+					// caller reports the skips in one aggregated warning
+					// per source.
+					skipped[sid]++
 					continue
 				}
 				sd := agg[sid]
@@ -383,7 +391,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			for sid, count := range counts {
 				if count == 0 {
 					// See the zero-criterion note above.
-					slog.Warn("skipping source with no criterions", "root ID", string(k), "source", sid)
+					skipped[sid]++
 					continue
 				}
 				sd := agg[sid]
@@ -421,7 +429,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			for sid, count := range counts {
 				if count == 0 {
 					// See the zero-criterion note above.
-					slog.Warn("skipping source with no criterions", "root ID", string(bk), "source", sid)
+					skipped[sid]++
 					continue
 				}
 				sd := agg[sid]
@@ -439,7 +447,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			for sid, count := range counts {
 				if count == 0 {
 					// See the zero-criterion note above.
-					slog.Warn("skipping source with no criterions", "root ID", string(tk), "source", sid)
+					skipped[sid]++
 					continue
 				}
 				sd := agg[sid]
@@ -458,7 +466,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				if t.Baseline == 0 && t.Target == 0 {
 					// Present on at least one side but with zero units on
 					// both — see the zero-criterion note above.
-					slog.Warn("skipping source with no criterions", "root ID", string(bk), "source", sid)
+					skipped[sid]++
 					continue
 				}
 				sd := agg[sid]

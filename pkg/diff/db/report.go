@@ -11,6 +11,10 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
+// placeholderSourceID marks the row emitted for an ecosystem compared
+// without any per-source data; no threshold applies to it.
+const placeholderSourceID = "(none)"
+
 // reportRow flattens (ecosystem, source) for rendering and sorting.
 type reportRow struct {
 	Ecosystem ecosystemTypes.Ecosystem
@@ -30,7 +34,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			// A compared ecosystem with no per-source data still gets a
 			// placeholder row so the report stays explicit about what was
 			// compared instead of silently omitting it.
-			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceDiff: SourceDiff{SourceID: "(none)", Pass: d.Pass}})
+			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceDiff: SourceDiff{SourceID: placeholderSourceID, Pass: d.Pass}})
 			continue
 		}
 		for _, s := range d.Sources {
@@ -74,12 +78,12 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 		return false, errors.Wrap(err, "write header")
 	}
 	for _, r := range rows {
-		if _, err := fmt.Fprintf(w, "| %s | %s | %.1f%% | %.1f%% | %.1f%% | %s |\n",
+		if _, err := fmt.Fprintf(w, "| %s | %s | %.1f%% | %.1f%% | %s | %s |\n",
 			r.Ecosystem,
 			r.SourceID,
 			r.DetectionChangeRate,
 			r.KBChangeRate,
-			r.Threshold,
+			thresholdCell(r.SourceDiff),
 			resultLabel(r.Pass),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
@@ -180,6 +184,16 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	}
 
 	return pass, nil
+}
+
+// thresholdCell renders the Threshold column; a placeholder row has no
+// (ecosystem, source) for a threshold to apply to, so it renders "-" rather
+// than a misleading 0.0%.
+func thresholdCell(sd SourceDiff) string {
+	if sd.SourceID == placeholderSourceID {
+		return "-"
+	}
+	return fmt.Sprintf("%.1f%%", sd.Threshold)
 }
 
 func resultLabel(pass bool) string {

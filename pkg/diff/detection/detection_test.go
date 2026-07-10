@@ -787,7 +787,7 @@ func TestGenerateReport(t *testing.T) {
 
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% | 0.0% | PASS |
+| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% | - | PASS |
 
 `,
 		},
