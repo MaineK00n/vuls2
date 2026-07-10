@@ -341,8 +341,6 @@ func TestDiffEcosystem(t *testing.T) {
 						SourceID:       "microsoft-cvrf",
 						BaselineKBKeys: 2,
 						TargetKBKeys:   2,
-						BaselineKBs:    2,
-						TargetKBs:      2,
 						MatchedKBs:     2,
 						Pass:           true,
 					},
@@ -365,8 +363,6 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineKBKeys: 2,
 						TargetKBKeys:   3,
 						AddedKBs:       []string{"KB5001222"},
-						BaselineKBs:    2,
-						TargetKBs:      3,
 						MatchedKBs:     2,
 						KBChangeRate:   50,
 					},
@@ -388,8 +384,6 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineKBKeys: 2,
 						TargetKBKeys:   2,
 						ChangedKBs:     []string{"KB5001111"},
-						BaselineKBs:    2,
-						TargetKBs:      2,
 						MatchedKBs:     1,
 						KBChangeRate:   100,
 					},
@@ -410,7 +404,6 @@ func TestDiffEcosystem(t *testing.T) {
 						SourceID:       "microsoft-cvrf",
 						BaselineKBKeys: 2,
 						RemovedKBs:     []string{"KB5001000", "KB5001111"},
-						BaselineKBs:    2,
 						KBChangeRate:   100,
 					},
 				},
@@ -1399,8 +1392,6 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:       "microsoft-cvrf",
 								BaselineKBKeys: 10,
 								TargetKBKeys:   10,
-								BaselineKBs:    10,
-								TargetKBs:      10,
 								MatchedKBs:     3,
 								ChangedKBs:     []string{"KB5001", "KB5002"},
 								AddedKBs:       []string{"KB5003"},
@@ -1427,9 +1418,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| microsoft | microsoft-cvrf | 10 | 10 | 1 | 1 | 2 | 10 | 10 | 3 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| microsoft | microsoft-cvrf | 10 | 10 | 1 | 1 | 2 | 3 |
 
 ## Details (FAIL sources)
 
@@ -1477,8 +1468,6 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:       "microsoft-cvrf",
 								BaselineKBKeys: 5,
 								TargetKBKeys:   5,
-								BaselineKBs:    5,
-								TargetKBs:      5,
 								MatchedKBs:     5,
 								Threshold:      10,
 								Pass:           true,
@@ -1508,9 +1497,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| microsoft | microsoft-cvrf | 5 | 5 | 0 | 0 | 0 | 5 | 5 | 5 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| microsoft | microsoft-cvrf | 5 | 5 | 0 | 0 | 0 | 5 |
 
 `,
 		},
@@ -1534,8 +1523,6 @@ func TestGenerateReport(t *testing.T) {
 								MatchedCriterions:   9950,
 								BaselineKBKeys:      5,
 								TargetKBKeys:        5,
-								BaselineKBs:         5,
-								TargetKBs:           5,
 								MatchedKBs:          3,
 								ChangedKBs:          []string{"KB1", "KB2"},
 								DetectionChangeRate: 1.5,
@@ -1567,9 +1554,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
-| mixed:1 | mixed-source | 5 | 5 | 0 | 0 | 2 | 5 | 5 | 3 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| mixed:1 | mixed-source | 5 | 5 | 0 | 0 | 2 | 3 |
 
 ## Details (FAIL sources)
 

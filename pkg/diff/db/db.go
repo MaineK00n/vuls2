@@ -107,15 +107,15 @@ type SourceDiff struct {
 	MatchedCriterions  int      // criterions structurally identical in both (Sort + Compare == 0)
 
 	// KB bucket diff (`<ecosystem>/kb/<KB ID>`), restricted to the entries
-	// this source contributes to.
-	BaselineKBKeys int
-	TargetKBKeys   int
+	// this source contributes to. A source stores at most one KB record per
+	// KB ID, so a per-source unit count would always equal the key count —
+	// only key counts are kept.
+	BaselineKBKeys int      // KB IDs whose baseline value contains this source
+	TargetKBKeys   int      // KB IDs whose target value contains this source
 	AddedKBs       []string // KB IDs where this source appears only in target
 	RemovedKBs     []string // KB IDs where this source appears only in baseline
 	ChangedKBs     []string // KB IDs in both but with different KB data for this source
-	BaselineKBs    int      // (KB ID × this source) pair count in baseline
-	TargetKBs      int      // (KB ID × this source) pair count in target
-	MatchedKBs     int      // KB pairs structurally identical in both (Sort + Compare == 0)
+	MatchedKBs     int      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
 
 	// Per-bucket change rates. When a bucket is absent in both baseline
 	// and target, its rate is 0.
@@ -330,7 +330,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	for sid, sd := range agg {
 		sd.SourceID = sid
 		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
-		sd.KBChangeRate = changeRate(sd.BaselineKBs, sd.TargetKBs, sd.MatchedKBs)
+		sd.KBChangeRate = changeRate(sd.BaselineKBKeys, sd.TargetKBKeys, sd.MatchedKBs)
 		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
 		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
 		diff.Sources = append(diff.Sources, sd)
@@ -475,11 +475,10 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(k))
 			}
-			for sid, n := range m {
+			for sid := range m {
 				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(k))
-				sd.TargetKBs += n
 				agg[sid] = sd
 			}
 			return nil
@@ -492,11 +491,10 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(k))
 			}
-			for sid, n := range m {
+			for sid := range m {
 				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
-				sd.BaselineKBs += n
 				agg[sid] = sd
 			}
 			return nil
@@ -524,11 +522,10 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(bk))
 			}
-			for sid, n := range m {
+			for sid := range m {
 				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
-				sd.BaselineKBs += n
 				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
@@ -537,11 +534,10 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			if err != nil {
 				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(tk))
 			}
-			for sid, n := range m {
+			for sid := range m {
 				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(tk))
-				sd.TargetKBs += n
 				agg[sid] = sd
 			}
 			tk, tv = tc.Next()
@@ -554,11 +550,9 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 				sd := agg[sid]
 				if cnt.InBaseline {
 					sd.BaselineKBKeys++
-					sd.BaselineKBs += cnt.Baseline
 				}
 				if cnt.InTarget {
 					sd.TargetKBKeys++
-					sd.TargetKBs += cnt.Target
 				}
 				sd.MatchedKBs += cnt.Matched
 				switch {

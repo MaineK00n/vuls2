@@ -120,8 +120,8 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	}) {
 		if _, err := fmt.Fprintf(w, `## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
 `); err != nil {
 			return false, errors.Wrap(err, "write kb header")
 		}
@@ -129,10 +129,10 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			if r.BaselineKBKeys == 0 && r.TargetKBKeys == 0 {
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d |\n",
+			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d |\n",
 				r.Ecosystem, r.SourceID, r.BaselineKBKeys, r.TargetKBKeys,
 				len(r.AddedKBs), len(r.RemovedKBs), len(r.ChangedKBs),
-				r.BaselineKBs, r.TargetKBs, r.MatchedKBs); err != nil {
+				r.MatchedKBs); err != nil {
 				return false, errors.Wrap(err, "write kb row")
 			}
 		}
