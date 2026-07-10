@@ -579,10 +579,12 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 }
 
 // unitTally tallies the units of a single key compared between baseline and
-// target, for one source. InBaseline/InTarget record whether the source
-// appears in the corresponding value map at all — a source may be present
-// with zero units, which is still presence for Added/Removed/Changed
-// classification.
+// target, for one source. A unit is the smallest compared element feeding
+// the change rate: a leaf criterion (with its operator path) for the
+// detection bucket, and a per-source KB record (0/1 per KB ID) for the kb
+// bucket. InBaseline/InTarget record whether the source appears in the
+// corresponding value map at all — a source may be present with zero units,
+// which is still presence for Added/Removed/Changed classification.
 type unitTally struct {
 	Baseline   int
 	Target     int
