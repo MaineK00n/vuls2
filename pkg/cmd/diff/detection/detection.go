@@ -25,7 +25,7 @@ func NewCmd() *cobra.Command {
 		Use:   "detection <scan-results-dir> <baseline-db> <baseline-vuls0-binary> <target-db> <target-vuls0-binary>",
 		Short: "compare detection results between baseline and target (binary, DB) pairs",
 		Example: heredoc.Doc(`
-		# fail when any scan-result file drifts more than 5%
+		# fail when any data source in any scan-result file drifts more than 5%
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \

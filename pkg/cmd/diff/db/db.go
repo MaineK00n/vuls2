@@ -41,7 +41,7 @@ func NewCmd() *cobra.Command {
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
 		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override 'ubuntu:26.04=25,cpe/cisco-json=30'
+		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
