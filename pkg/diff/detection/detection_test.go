@@ -938,6 +938,22 @@ func TestDiff(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// The lenient direction of the same precedence: the file-wide key
+			// alone (10) would fail ubuntu_2204 (66.7%), but the file/source
+			// key wins and lifts it above its rate.
+			name: "file/source override rescues from strict file override",
+			args: args{
+				dir:                 scanDir,
+				detectFunc:          fakeDetect,
+				changeRateThreshold: 100, // default alone would pass everything
+				changeRateThresholdOverrides: map[string]float64{
+					"ubuntu_2204":             10,
+					"ubuntu_2204/ubuntu-oval": 70,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			// "<file>/<source>" takes precedence over the file-wide key: the
 			// generous file-wide 70 is overridden back down to 10 for the
 			// only source present, so the file fails again.

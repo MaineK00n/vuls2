@@ -568,6 +568,24 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// The lenient direction of the same precedence: the ecosystem-wide
+			// override alone (50) would fail test-source-2 (200%) and
+			// test-source-3 (100%), but their source-specific overrides win
+			// and lift both above their rates.
+			name: "source override rescues from strict ecosystem override",
+			args: args{
+				baselineFixtures:    []string{"testdata/fixtures/multi-source-baseline"},
+				targetFixtures:      []string{"testdata/fixtures/multi-source-target"},
+				changeRateThreshold: 10,
+				changeRateThresholdOverrides: map[string]float64{
+					"test:multi":               50,
+					"test:multi/test-source-2": 250,
+					"test:multi/test-source-3": 150,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			// A source-specific override takes precedence over a generous
 			// ecosystem-wide override: test-source-2 (200%) fails at 100 even
 			// though the ecosystem override of 300 would pass it.
