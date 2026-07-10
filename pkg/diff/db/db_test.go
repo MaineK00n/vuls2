@@ -558,9 +558,9 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// multi-source rates: test-source 0%, test-source-2 200% (changed),
-			// test-source-3 100% (new source in target). An ecosystem-wide
-			// override is the default for all its sources.
+			// multi-source rates: test-source-1 0%, test-source-2 200%
+			// (changed), test-source-3 100% (new source in target). An
+			// ecosystem-wide override is the default for all its sources.
 			name: "ecosystem override covers all sources",
 			args: args{
 				baselineFixtures:             []string{"testdata/fixtures/multi-source-baseline"},
@@ -749,8 +749,8 @@ func TestCompareCriterions(t *testing.T) {
 			},
 		},
 		{
-			// The per-source split: src2's removal is visible as its own
-			// entry instead of being folded into a summed total.
+			// A removed source surfaces as its own entry with a
+			// baseline-only tally.
 			name: "source removed",
 			args: args{
 				baseline: `{

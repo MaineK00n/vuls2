@@ -192,8 +192,8 @@ func TestCollectSources(t *testing.T) {
 		},
 		{
 			// vuls0 always writes at least one entry, so a well-formed but
-			// empty list signals a marker format change — fail loudly instead
-			// of silently falling back to "unknown".
+			// empty list signals a marker format change and must fail
+			// loudly.
 			name: "empty marker list errors",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
@@ -892,13 +892,13 @@ func TestDiff(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Locks WithChangeRateThresholdOverrides forwarding through the
-			// inline resolve+diffDetection loop in Diff. ubuntu_2204 in
-			// fakeDetect produces a 66.7% change rate (baseline 3 IDs,
-			// target 1, two removed) which would FAIL the 10% default. The
-			// "ubuntu_2204=70" override lifts every source in that file above
-			// its rate so the whole Diff returns nil. If Diff stops forwarding
-			// the option, the override has no effect and ubuntu_2204 fails again.
+			// Locks WithChangeRateThresholdOverrides forwarding from Diff
+			// into diffDetection. ubuntu_2204 in fakeDetect produces a 66.7%
+			// change rate (baseline 3 IDs, target 1, two removed) which would
+			// FAIL the 10% default. The "ubuntu_2204=70" override lifts every
+			// source in that file above its rate so the whole Diff returns
+			// nil. If Diff stops forwarding the option, the override has no
+			// effect and ubuntu_2204 fails again.
 			name: "file override forwarded through to per-source resolution",
 			args: args{
 				dir:                          scanDir,
@@ -952,10 +952,9 @@ func TestDiff(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// An override entry that matches no file in the diffm must fall
-			// through cleanly: every file still resolves to the default
-			// threshold. Locks the `if v, ok := overrides[name]; ok` miss
-			// branch in Diff's inline resolve loop.
+			// An override entry that matches no file must fall through
+			// cleanly: every file still resolves to the default threshold.
+			// Locks resolveThreshold's miss branches.
 			name: "unmatched override key does not affect outcome",
 			args: args{
 				dir:                          scanDir,

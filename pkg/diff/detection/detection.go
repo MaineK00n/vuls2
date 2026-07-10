@@ -54,7 +54,8 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 // applies to a single source and takes precedence over the file-wide key —
 // the same source ID vocabulary `vuls diff db` overrides use. Values are
 // percentages. Missing keys fall back to the default supplied via
-// WithChangeRateThreshold. A nil or empty map preserves prior behavior.
+// WithChangeRateThreshold; a nil or empty map leaves every
+// (file, source) on that default.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
