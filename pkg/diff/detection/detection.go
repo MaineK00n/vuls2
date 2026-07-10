@@ -165,7 +165,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		// Resolved per-(file, source) threshold is rendered per row in the
 		// report's Threshold column, so the exit error stays threshold-free to
 		// avoid implying the default was the one that tripped.
-		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one (scan-result file, data source); see report for details")
+		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one (scan-result file, data source) pair; see report for details")
 	}
 	return nil
 }

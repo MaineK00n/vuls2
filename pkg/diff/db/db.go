@@ -187,7 +187,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		// Resolved per-source threshold is rendered per row in the report's
 		// Threshold column, so the exit error stays threshold-free to avoid
 		// implying the default was the one that tripped.
-		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one (ecosystem, source); see report for details")
+		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one (ecosystem, source) pair; see report for details")
 	}
 	return nil
 }
