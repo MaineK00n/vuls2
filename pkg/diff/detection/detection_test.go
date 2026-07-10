@@ -164,18 +164,18 @@ func TestCollectSources(t *testing.T) {
 			},
 		},
 		{
-			name: "no marked content buckets under unknown",
+			// With a [vuls2]-only config every detected CVE comes from a
+			// vuls2 detection path, which always attaches the marker — a CVE
+			// without one signals a vuls0 bug, not a source to bucket.
+			name: "no marked content errors",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
 					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
 						"nvd": {{}},
 					}},
-					"CVE-2026-0002": {},
 				},
 			},
-			want: map[sourceTypes.SourceID][]string{
-				"unknown": {"CVE-2026-0001", "CVE-2026-0002"},
-			},
+			wantErr: true,
 		},
 		{
 			// A corrupt marker is a bug in the producing vuls0, not something

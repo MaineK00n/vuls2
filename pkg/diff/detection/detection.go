@@ -377,11 +377,12 @@ skipUpdate = true
 // coarser confidences[].detectionMethod signal cannot separate (e.g.
 // fortinet-csaf vs fortinet-cvrf) distinct, and aligns the override key
 // vocabulary with `vuls diff db`. A CVE detected by multiple sources is
-// counted under each. A CVE with no marked content lands in "unknown"; a
-// marker that is present but unusable (bad JSON, empty list, entry without
-// a source_id) is an error — vuls0 always writes at least one entry with a
-// non-empty source_id, so anything else signals a marker format change that
-// must fail loudly rather than silently mis-attribute detections.
+// counted under each. Anything that breaks source attribution is an error
+// rather than a silent fallback: a marker that is present but unusable (bad
+// JSON, empty list, entry without a source_id) signals a marker format
+// change, and a detected CVE with no marked content at all signals a vuls0
+// bug — with a [vuls2]-only config every detected CVE comes from a vuls2
+// detection path, which always attaches the marker.
 // ID lists carry no order guarantee; the report sorts for presentation.
 func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][]string, error) {
 	m := make(map[sourceTypes.SourceID][]string)
@@ -409,7 +410,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 			}
 		}
 		if len(sources) == 0 {
-			sources["unknown"] = struct{}{}
+			return nil, errors.Errorf("no vuls2-sources marker on any content of %s", cve)
 		}
 		for s := range sources {
 			m[s] = append(m[s], cve)
