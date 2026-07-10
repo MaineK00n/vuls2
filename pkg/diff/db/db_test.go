@@ -1126,27 +1126,27 @@ func TestCompareKBs(t *testing.T) {
 	}
 }
 
-func TestCountKBs(t *testing.T) {
+func TestKBSources(t *testing.T) {
 	type args struct {
 		data string
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    map[sourceTypes.SourceID]int
+		want    []sourceTypes.SourceID
 		wantErr bool
 	}{
 		{
 			name: "empty",
 			args: args{data: `{}`},
-			want: map[sourceTypes.SourceID]int{},
+			want: nil,
 		},
 		{
 			name: "one source",
 			args: args{data: `{
 				"src1": {"kb_id": "KB5001234"}
 			}`},
-			want: map[sourceTypes.SourceID]int{"src1": 1},
+			want: []sourceTypes.SourceID{"src1"},
 		},
 		{
 			name: "multiple sources",
@@ -1154,7 +1154,7 @@ func TestCountKBs(t *testing.T) {
 				"src1": {"kb_id": "KB5001234"},
 				"src2": {"kb_id": "KB5001234"}
 			}`},
-			want: map[sourceTypes.SourceID]int{"src1": 1, "src2": 1},
+			want: []sourceTypes.SourceID{"src1", "src2"},
 		},
 		{
 			name:    "invalid json",
@@ -1170,15 +1170,16 @@ func TestCountKBs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := db.CountKBs([]byte(tt.args.data))
+			got, err := db.KBSources([]byte(tt.args.data))
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("CountKBs() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("KBSources() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
 			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("CountKBs() mismatch (-want +got):\n%s", diff)
+			// Map key order is random; compare order-insensitively.
+			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b sourceTypes.SourceID) bool { return a < b })); diff != "" {
+				t.Errorf("KBSources() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

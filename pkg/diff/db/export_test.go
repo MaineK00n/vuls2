@@ -6,7 +6,7 @@ var (
 	CompareCriterions = compareCriterions
 	CountCriterions   = countCriterions
 	CompareKBs        = compareKBs
-	CountKBs          = countKBs
+	KBSources         = kbSources
 	GenerateReport    = generateReport
 )
 

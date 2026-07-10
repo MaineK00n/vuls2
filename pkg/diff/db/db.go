@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"runtime"
 	"slices"
@@ -471,11 +472,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 
 	if bKB == nil {
 		return tKB.ForEach(func(k, v []byte) error {
-			m, err := countKBs(v)
+			sids, err := kbSources(v)
 			if err != nil {
-				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(k))
+				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(k))
 			}
-			for sid := range m {
+			for _, sid := range sids {
 				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(k))
@@ -487,11 +488,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 
 	if tKB == nil {
 		return bKB.ForEach(func(k, v []byte) error {
-			m, err := countKBs(v)
+			sids, err := kbSources(v)
 			if err != nil {
-				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(k))
+				return errors.Wrapf(err, "collect KB sources for baseline. KB ID: %s", string(k))
 			}
-			for sid := range m {
+			for _, sid := range sids {
 				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
@@ -518,11 +519,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			return bytes.Compare(bk, tk)
 		}(); c {
 		case -1:
-			m, err := countKBs(bv)
+			sids, err := kbSources(bv)
 			if err != nil {
-				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(bk))
+				return errors.Wrapf(err, "collect KB sources for baseline. KB ID: %s", string(bk))
 			}
-			for sid := range m {
+			for _, sid := range sids {
 				sd := agg[sid]
 				sd.BaselineKBKeys++
 				sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
@@ -530,11 +531,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			}
 			bk, bv = bc.Next()
 		case +1:
-			m, err := countKBs(tv)
+			sids, err := kbSources(tv)
 			if err != nil {
-				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(tk))
+				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(tk))
 			}
-			for sid := range m {
+			for _, sid := range sids {
 				sd := agg[sid]
 				sd.TargetKBKeys++
 				sd.AddedKBs = append(sd.AddedKBs, string(tk))
@@ -760,10 +761,11 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]count
 	return m, nil
 }
 
-// countKBs unmarshals KB data and returns the (KB ID × source ID) pair count
-// per source (always 1 for each source present in the map). A zero-length
-// value is an error for the same reason as in countCriterions.
-func countKBs(data []byte) (map[sourceTypes.SourceID]int, error) {
+// kbSources unmarshals KB data and returns the source IDs present in the
+// value map — a source stores at most one KB record per KB ID, so only the
+// key set is meaningful. A zero-length value is an error for the same reason
+// as in countCriterions.
+func kbSources(data []byte) ([]sourceTypes.SourceID, error) {
 	if len(data) == 0 {
 		return nil, errors.New("unexpected zero-length KB value")
 	}
@@ -771,9 +773,5 @@ func countKBs(data []byte) (map[sourceTypes.SourceID]int, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, errors.Wrap(err, "unmarshal KB data")
 	}
-	ns := make(map[sourceTypes.SourceID]int, len(m))
-	for sid := range m {
-		ns[sid] = 1
-	}
-	return ns, nil
+	return slices.Collect(maps.Keys(m)), nil
 }
