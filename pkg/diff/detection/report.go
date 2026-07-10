@@ -25,6 +25,13 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 
 	var rows []reportRow
 	for _, d := range slices.Collect(maps.Values(diffm)) {
+		if len(d.Sources) == 0 {
+			// A compared file with no detected sources on either side still
+			// gets a placeholder row so the report stays explicit about what
+			// was compared instead of silently omitting it.
+			rows = append(rows, reportRow{Name: d.Name, SourceDiff: SourceDiff{SourceID: "(none)", Pass: d.Pass}})
+			continue
+		}
 		for _, sd := range d.Sources {
 			rows = append(rows, reportRow{Name: d.Name, SourceDiff: sd})
 		}

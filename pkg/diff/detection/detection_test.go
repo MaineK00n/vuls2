@@ -765,6 +765,31 @@ func TestGenerateReport(t *testing.T) {
 
 `,
 		},
+		{
+			// A file compared with zero detections on both sides must still be
+			// visible in the report instead of silently disappearing.
+			name: "file without sources renders a placeholder row",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"empty_file": {
+						Name: "empty_file",
+						Pass: true,
+					},
+				},
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: PASS
+
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% | 0.0% | PASS |
+
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

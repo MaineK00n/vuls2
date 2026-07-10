@@ -701,10 +701,12 @@ func walkCriteria(c criteriaTypes.Criteria, opPath []criteriaTypes.CriteriaOpera
 
 // countCriterions unmarshals detection data and returns the leaf criterion
 // count per source. Every source ID present in the value map appears as a key,
-// even with a zero count.
+// even with a zero count. A zero-length value is an error: the writer always
+// stores marshaled JSON and reads elsewhere treat empty as not-found, so
+// silently skipping it here would let the guard pass over corrupt data.
 func countCriterions(data []byte) (map[sourceTypes.SourceID]int, error) {
 	if len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("unexpected zero-length detection value")
 	}
 	var m map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -765,10 +767,11 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]count
 }
 
 // countKBs unmarshals KB data and returns the (KB ID × source ID) pair count
-// per source (always 1 for each source present in the map).
+// per source (always 1 for each source present in the map). A zero-length
+// value is an error for the same reason as in countCriterions.
 func countKBs(data []byte) (map[sourceTypes.SourceID]int, error) {
 	if len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("unexpected zero-length KB value")
 	}
 	var m map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(data, &m); err != nil {

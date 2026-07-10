@@ -942,6 +942,13 @@ func TestCountCriterions(t *testing.T) {
 			args:    args{data: `not json`},
 			wantErr: true,
 		},
+		{
+			// The writer always stores marshaled JSON; a zero-length value is
+			// corrupt and must not be silently skipped by the guard.
+			name:    "zero-length value",
+			args:    args{data: ``},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1159,6 +1166,12 @@ func TestCountKBs(t *testing.T) {
 		{
 			name:    "invalid json",
 			args:    args{data: `not json`},
+			wantErr: true,
+		},
+		{
+			// Same policy as countCriterions: empty means corrupt, not "skip".
+			name:    "zero-length value",
+			args:    args{data: ``},
 			wantErr: true,
 		},
 	}
@@ -1701,6 +1714,31 @@ func TestGenerateReport(t *testing.T) {
 #### Changed Root IDs (1)
 
 - CVE-2026-BBBB
+
+`,
+		},
+		{
+			// An ecosystem compared without any per-source data must still be
+			// visible in the report instead of silently disappearing.
+			name: "ecosystem without sources renders a placeholder row",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem: "empty:1",
+						Pass:      true,
+					},
+				},
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: PASS
+
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| empty:1 | (none) | 0.0% | 0.0% | 0.0% | PASS |
 
 `,
 		},
