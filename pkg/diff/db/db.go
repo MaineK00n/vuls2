@@ -348,17 +348,17 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	return diff, nil
 }
 
-// mergeBuckets walks two buckets in sorted key order, calling fn once per
+// mergeBuckets walks two buckets in sorted key order, calling visit once per
 // key with the baseline/target values (nil where that side lacks the key).
 // Either bucket may be nil.
-func mergeBuckets(b, t *bolt.Bucket, fn func(key, bv, tv []byte) error) error {
+func mergeBuckets(b, t *bolt.Bucket, visit func(key, bv, tv []byte) error) error {
 	switch {
 	case b == nil && t == nil:
 		return nil
 	case b == nil:
-		return t.ForEach(func(k, v []byte) error { return fn(k, nil, v) })
+		return t.ForEach(func(k, v []byte) error { return visit(k, nil, v) })
 	case t == nil:
-		return b.ForEach(func(k, v []byte) error { return fn(k, v, nil) })
+		return b.ForEach(func(k, v []byte) error { return visit(k, v, nil) })
 	}
 
 	bc, tc := b.Cursor(), t.Cursor()
@@ -367,17 +367,17 @@ func mergeBuckets(b, t *bolt.Bucket, fn func(key, bv, tv []byte) error) error {
 	for bk != nil || tk != nil {
 		switch {
 		case tk == nil || (bk != nil && bytes.Compare(bk, tk) < 0): // baseline-only key
-			if err := fn(bk, bv, nil); err != nil {
+			if err := visit(bk, bv, nil); err != nil {
 				return err
 			}
 			bk, bv = bc.Next()
 		case bk == nil || bytes.Compare(bk, tk) > 0: // target-only key
-			if err := fn(tk, nil, tv); err != nil {
+			if err := visit(tk, nil, tv); err != nil {
 				return err
 			}
 			tk, tv = tc.Next()
 		default: // key in both
-			if err := fn(bk, bv, tv); err != nil {
+			if err := visit(bk, bv, tv); err != nil {
 				return err
 			}
 			bk, bv = bc.Next()
