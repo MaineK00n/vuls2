@@ -350,15 +350,15 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 
 	if bDet == nil {
 		return tDet.ForEach(func(k, v []byte) error {
-			m, err := countCriterions(v)
+			counts, err := countCriterions(v)
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
-			for sid, n := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(k))
-				sd.TargetCriterions += n
+				sd.TargetCriterions += count
 				agg[sid] = sd
 			}
 			return nil
@@ -367,15 +367,15 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 
 	if tDet == nil {
 		return bDet.ForEach(func(k, v []byte) error {
-			m, err := countCriterions(v)
+			counts, err := countCriterions(v)
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
-			for sid, n := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
-				sd.BaselineCriterions += n
+				sd.BaselineCriterions += count
 				agg[sid] = sd
 			}
 			return nil
@@ -400,55 +400,55 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			return bytes.Compare(bk, tk)
 		}(); c {
 		case -1: // baseline-only → Removed
-			m, err := countCriterions(bv)
+			counts, err := countCriterions(bv)
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
 			}
-			for sid, n := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(bk))
-				sd.BaselineCriterions += n
+				sd.BaselineCriterions += count
 				agg[sid] = sd
 			}
 			bk, bv = bc.Next()
 		case +1: // target-only → Added
-			m, err := countCriterions(tv)
+			counts, err := countCriterions(tv)
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
 			}
-			for sid, n := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(tk))
-				sd.TargetCriterions += n
+				sd.TargetCriterions += count
 				agg[sid] = sd
 			}
 			tk, tv = tc.Next()
 		case 0: // both present → compare per source
-			m, err := compareCriterions(bv, tv)
+			counts, err := compareCriterions(bv, tv)
 			if err != nil {
 				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
 			}
-			for sid, cnt := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
-				if cnt.InBaseline {
+				if count.InBaseline {
 					sd.BaselineKeys++
-					sd.BaselineCriterions += cnt.Baseline
+					sd.BaselineCriterions += count.Baseline
 				}
-				if cnt.InTarget {
+				if count.InTarget {
 					sd.TargetKeys++
-					sd.TargetCriterions += cnt.Target
+					sd.TargetCriterions += count.Target
 				}
-				sd.MatchedCriterions += cnt.Matched
+				sd.MatchedCriterions += count.Matched
 				switch {
-				case cnt.InBaseline && cnt.InTarget:
-					if cnt.Matched < cnt.Baseline || cnt.Matched < cnt.Target {
+				case count.InBaseline && count.InTarget:
+					if count.Matched < count.Baseline || count.Matched < count.Target {
 						sd.Changed = append(sd.Changed, string(bk))
 					}
-				case cnt.InBaseline:
+				case count.InBaseline:
 					sd.Removed = append(sd.Removed, string(bk))
-				case cnt.InTarget:
+				case count.InTarget:
 					sd.Added = append(sd.Added, string(bk))
 				}
 				agg[sid] = sd
@@ -543,27 +543,27 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			}
 			tk, tv = tc.Next()
 		case 0:
-			m, err := compareKBs(bv, tv)
+			counts, err := compareKBs(bv, tv)
 			if err != nil {
 				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
 			}
-			for sid, cnt := range m {
+			for sid, count := range counts {
 				sd := agg[sid]
-				if cnt.InBaseline {
+				if count.InBaseline {
 					sd.BaselineKBKeys++
 				}
-				if cnt.InTarget {
+				if count.InTarget {
 					sd.TargetKBKeys++
 				}
-				sd.MatchedKBs += cnt.Matched
+				sd.MatchedKBs += count.Matched
 				switch {
-				case cnt.InBaseline && cnt.InTarget:
-					if cnt.Matched < cnt.Baseline || cnt.Matched < cnt.Target {
+				case count.InBaseline && count.InTarget:
+					if count.Matched < count.Baseline || count.Matched < count.Target {
 						sd.ChangedKBs = append(sd.ChangedKBs, string(bk))
 					}
-				case cnt.InBaseline:
+				case count.InBaseline:
 					sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
-				case cnt.InTarget:
+				case count.InTarget:
 					sd.AddedKBs = append(sd.AddedKBs, string(bk))
 				}
 				agg[sid] = sd
@@ -578,11 +578,11 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 	return nil
 }
 
-// counts holds per-source unit counts for a single key compared between
+// unitCounts holds per-source unit counts for a single key compared between
 // baseline and target. InBaseline/InTarget record whether the source appears
 // in the corresponding value map at all — a source may be present with zero
 // units, which is still presence for Added/Removed/Changed classification.
-type counts struct {
+type unitCounts struct {
 	Baseline   int
 	Target     int
 	Matched    int
@@ -605,7 +605,7 @@ type counts struct {
 //
 // Returns per-source counts over the union of source IDs in both sides, so
 // new/removed sources contribute to their own change rate.
-func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]counts, error) {
+func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitCounts, error) {
 	var bm, tm map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline criterions")
@@ -626,17 +626,17 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 		return cns
 	}
 
-	m := make(map[sourceTypes.SourceID]counts, max(len(bm), len(tm)))
+	counts := make(map[sourceTypes.SourceID]unitCounts, max(len(bm), len(tm)))
 	for sid := range bm {
-		m[sid] = counts{InBaseline: true}
+		counts[sid] = unitCounts{InBaseline: true}
 	}
 	for sid := range tm {
-		c := m[sid]
+		c := counts[sid]
 		c.InTarget = true
-		m[sid] = c
+		counts[sid] = c
 	}
 
-	for sid, c := range m {
+	for sid, c := range counts {
 		bCns := flattenAndSort(bm[sid])
 		tCns := flattenAndSort(tm[sid])
 
@@ -659,9 +659,9 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 				return nil, errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, cr)
 			}
 		}
-		m[sid] = c
+		counts[sid] = c
 	}
-	return m, nil
+	return counts, nil
 }
 
 // annotatedCriterion pairs a leaf Criterion with the operator path from the
@@ -731,7 +731,7 @@ func countLeafCriterions(c criteriaTypes.Criteria) int {
 // are the marshaled value of `<ecosystem>/kb/<KB ID>`, i.e. a
 // map[sourceTypes.SourceID]microsoftkbTypes.KB. Per-source counts are 0/1
 // per KB ID.
-func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]counts, error) {
+func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitCounts, error) {
 	var bm, tm map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline KBs")
@@ -740,9 +740,9 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]count
 		return nil, errors.Wrap(err, "unmarshal target KBs")
 	}
 
-	m := make(map[sourceTypes.SourceID]counts, max(len(bm), len(tm)))
+	counts := make(map[sourceTypes.SourceID]unitCounts, max(len(bm), len(tm)))
 	for sid, bKB := range bm {
-		c := counts{InBaseline: true, Baseline: 1}
+		c := unitCounts{InBaseline: true, Baseline: 1}
 		if tKB, ok := tm[sid]; ok {
 			bKB.Sort()
 			tKB.Sort()
@@ -750,15 +750,15 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]count
 				c.Matched = 1
 			}
 		}
-		m[sid] = c
+		counts[sid] = c
 	}
 	for sid := range tm {
-		c := m[sid]
+		c := counts[sid]
 		c.InTarget = true
 		c.Target = 1
-		m[sid] = c
+		counts[sid] = c
 	}
-	return m, nil
+	return counts, nil
 }
 
 // kbSources unmarshals KB data and returns the source IDs present in the
