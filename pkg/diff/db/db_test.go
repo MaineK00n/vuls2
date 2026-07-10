@@ -240,9 +240,9 @@ func TestDiffEcosystem(t *testing.T) {
 			},
 		},
 		{
-			// The motivating case for per-source granularity: two sources share
-			// one root ID; only the changed one may fail, the unchanged one
-			// must pass, and a source newly appearing in target is strict-failed.
+			// Two sources share one root ID; only the changed one may fail,
+			// the unchanged one must pass, and a source newly appearing in
+			// target is strict-failed.
 			name: "multi-source: only changed source fails",
 			args: args{
 				baselineFixture: "testdata/fixtures/multi-source-baseline",
@@ -1320,9 +1320,8 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
-			// The motivating scenario for per-source rows: within the single
-			// cpe ecosystem, a huge passing source must not mask a small
-			// failing one — the failing small source sorts first.
+			// Within a single ecosystem, a huge passing source must not mask
+			// a small failing one — the failing small source sorts first.
 			name: "small source failure not masked by large source",
 			args: args{
 				diffs: []db.EcosystemDiff{

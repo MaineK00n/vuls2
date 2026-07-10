@@ -145,8 +145,8 @@ func TestCollectSources(t *testing.T) {
 		{
 			// Enrichment-added contents carry no vuls2-sources marker and must
 			// not create a bucket — otherwise every CVE would also count under
-			// the enrichment sources (NVD, MITRE, ...), recreating the masking
-			// this diff exists to remove.
+			// the enrichment sources (NVD, MITRE, ...), coupling every file's
+			// change rate to enrichment churn.
 			name: "unmarked enrichment content ignored",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
@@ -330,10 +330,10 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			// The motivating case for per-source granularity: the small
-			// cisco-json source disappears while the big NVD source is
-			// unchanged. The union of CVE IDs would barely move (cisco CVEs
-			// are also detected by NVD), but the per-source diff fails loudly.
+			// A small source must not hide behind a big one: cisco-json
+			// disappears while NVD is unchanged. The union of CVE IDs would
+			// barely move (cisco CVEs are also detected by NVD), but the
+			// per-source diff fails loudly.
 			name: "small source loss not masked by large source",
 			args: args{
 				name: "cpe_cisco",
@@ -565,9 +565,8 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
-			// The motivating scenario: within one cpe fixture, a failing small
-			// source sorts above the passing large source and is reported as
-			// its own row.
+			// Within one cpe fixture, a failing small source sorts above the
+			// passing large source and is reported as its own row.
 			name: "small source failure not masked by large source",
 			args: args{
 				diffs: map[string]detection.FileDiff{
