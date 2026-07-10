@@ -119,14 +119,16 @@ func TestCollectSources(t *testing.T) {
 			},
 		},
 		{
-			// A merged content carries a multi-element source list; every
-			// element counts, deduped against other contents of the same CVE.
+			// A merged content carries a multi-element source list (vuls0
+			// merges contents of the same type, e.g. the NVD feed and API
+			// sources both surface as "nvd"); every element counts, deduped
+			// against other contents of the same CVE.
 			name: "merged multi-source marker",
 			args: args{
 				scannedCves: map[string]detection.VulnInfo{
 					"CVE-2026-0001": {CveContents: map[string][]detection.CveContent{
 						"nvd": {
-							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"nvd-feed-cve-v2","root_id":"CVE-2026-0001"},{"source_id":"vulncheck-nist-nvd2"}]`}},
+							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"nvd-feed-cve-v2","root_id":"CVE-2026-0001"},{"source_id":"nvd-api-cve"}]`}},
 						},
 						"cisco": {
 							{Optional: map[string]string{"vuls2-sources": `[{"source_id":"cisco-json"}]`}},
@@ -135,9 +137,9 @@ func TestCollectSources(t *testing.T) {
 				},
 			},
 			want: map[sourceTypes.SourceID][]string{
-				"nvd-feed-cve-v2":     {"CVE-2026-0001"},
-				"vulncheck-nist-nvd2": {"CVE-2026-0001"},
-				"cisco-json":          {"CVE-2026-0001"},
+				"nvd-feed-cve-v2": {"CVE-2026-0001"},
+				"nvd-api-cve":     {"CVE-2026-0001"},
+				"cisco-json":      {"CVE-2026-0001"},
 			},
 		},
 		{
