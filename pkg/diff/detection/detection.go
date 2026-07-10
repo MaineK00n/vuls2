@@ -431,7 +431,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // validating data source migrations where IDs stay the same but metadata
 // differs.
 func diffDetection(name string, ids cveIDs, overrides map[string]float64, threshold float64) FileDiff {
-	sources := make(map[sourceTypes.SourceID]struct{})
+	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
 	for s := range ids.Baseline {
 		sources[s] = struct{}{}
 	}
