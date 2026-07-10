@@ -51,8 +51,8 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 					return 0
 				}
 			}(),
-			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
-				max(b.DetectionChangeRate, b.KBChangeRate)),
+			cmp.Compare(max(b.DetectionChangeRate, b.KBChangeRate),
+				max(a.DetectionChangeRate, a.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
 			cmp.Compare(a.SourceID, b.SourceID),
 		)
@@ -169,6 +169,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 				{"Removed KB IDs", r.RemovedKBs},
 				{"Changed KB IDs", r.ChangedKBs},
 			} {
+				slices.Sort(l.ids)
 				if err := writeIDList(w, l.label, l.ids); err != nil {
 					return false, errors.Wrapf(err, "%s/%s %s", r.Ecosystem, r.SourceID, l.label)
 				}

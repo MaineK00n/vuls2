@@ -15,6 +15,8 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
 type options struct {
@@ -83,7 +85,7 @@ func WithWriter(w io.Writer) Option {
 // from masking the disappearance of a small source's detections when only the
 // union of CVE IDs is compared.
 type SourceDiff struct {
-	SourceID    string
+	SourceID    sourceTypes.SourceID
 	BaselineIDs []string
 	TargetIDs   []string
 	Added       []string
@@ -103,8 +105,8 @@ type FileDiff struct {
 	Name string
 
 	// Raw per-source CVE ID collections from the baseline and target runs.
-	BaselineIDs map[string][]string
-	TargetIDs   map[string][]string
+	BaselineIDs map[sourceTypes.SourceID][]string
+	TargetIDs   map[sourceTypes.SourceID][]string
 
 	// Per-source diffs computed by diffDetection, in no particular order;
 	// the report sorts for presentation.
@@ -164,7 +166,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 // resolveThreshold resolves the change-rate threshold for one (file, source)
 // pair. Precedence: "<file>/<source>" override > "<file>" override > default.
-func resolveThreshold(overrides map[string]float64, def float64, name, sid string) float64 {
+func resolveThreshold(overrides map[string]float64, def float64, name string, sid sourceTypes.SourceID) float64 {
 	if v, ok := overrides[fmt.Sprintf("%s/%s", name, sid)]; ok {
 		return v
 	}
@@ -217,7 +219,7 @@ func detectAll(baselineBin, baselineDB, targetBin, targetDB string, files map[st
 	type result struct {
 		role string
 		name string
-		ids  map[string][]string // source ID → CVE IDs
+		ids  map[sourceTypes.SourceID][]string
 	}
 
 	total := len(tasks)
@@ -280,12 +282,12 @@ type cveContent struct {
 // CveContent.Optional["vuls2-sources"] (detector/vuls2's `source` struct);
 // only the source ID is needed here.
 type vuls2Source struct {
-	SourceID string `json:"source_id"`
+	SourceID sourceTypes.SourceID `json:"source_id"`
 }
 
 // runVuls0Report runs vuls0 report on a single scan result file and returns
 // detected CVE IDs grouped by data source.
-func runVuls0Report(ctx context.Context, binary, dbpath, scanResultPath string) (map[string][]string, error) {
+func runVuls0Report(ctx context.Context, binary, dbpath, scanResultPath string) (map[sourceTypes.SourceID][]string, error) {
 	tmpDir, err := os.MkdirTemp("", "diff-vuls0-*")
 	if err != nil {
 		return nil, errors.Wrap(err, "mkdtemp")
@@ -379,10 +381,10 @@ skipUpdate = true
 // non-empty source_id, so anything else signals a marker format change that
 // must fail loudly rather than silently mis-attribute detections.
 // ID lists carry no order guarantee; the report sorts for presentation.
-func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error) {
-	m := make(map[string][]string)
+func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][]string, error) {
+	m := make(map[sourceTypes.SourceID][]string)
 	for cve, vi := range scannedCves {
-		sources := make(map[string]struct{})
+		sources := make(map[sourceTypes.SourceID]struct{})
 		for _, contents := range vi.CveContents {
 			for _, c := range contents {
 				raw, ok := c.Optional["vuls2-sources"]
@@ -426,7 +428,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[string][]string, error
 // validating data source migrations where IDs stay the same but metadata
 // differs.
 func diffDetection(d FileDiff, overrides map[string]float64, threshold float64) FileDiff {
-	sources := make(map[string]struct{}, max(len(d.BaselineIDs), len(d.TargetIDs)))
+	sources := make(map[sourceTypes.SourceID]struct{}, max(len(d.BaselineIDs), len(d.TargetIDs)))
 	for s := range d.BaselineIDs {
 		sources[s] = struct{}{}
 	}
@@ -443,25 +445,31 @@ func diffDetection(d FileDiff, overrides map[string]float64, threshold float64) 
 		}
 		sd.Added = subtract(sd.TargetIDs, sd.BaselineIDs)
 		sd.Removed = subtract(sd.BaselineIDs, sd.TargetIDs)
-
-		// changeRate can exceed 100% when additions outnumber baseline entries.
-		// This is intentional — capping at 100 would hide the magnitude of large additions.
-		sd.ChangeRate = func() float64 {
-			switch {
-			case len(sd.BaselineIDs) > 0:
-				return float64(len(sd.Added)+len(sd.Removed)) / float64(len(sd.BaselineIDs)) * 100
-			case len(sd.Added)+len(sd.Removed) > 0:
-				return 100
-			default:
-				return 0
-			}
-		}()
+		sd.ChangeRate = changeRate(len(sd.BaselineIDs), len(sd.Added), len(sd.Removed))
 		sd.Threshold = resolveThreshold(overrides, threshold, d.Name, sid)
 		sd.Pass = sd.ChangeRate <= sd.Threshold
 		d.Sources = append(d.Sources, sd)
 	}
 	d.Pass = !slices.ContainsFunc(d.Sources, func(sd SourceDiff) bool { return !sd.Pass })
 	return d
+}
+
+// changeRate computes a per-source change rate as a percentage:
+//
+//	(added + removed) / baseline * 100
+//
+// It can exceed 100% when additions outnumber baseline entries — capping at
+// 100 would hide the magnitude of large additions. When baseline is empty but
+// entries were added or removed, the rate is 100. When nothing changed, 0.
+func changeRate(baseline, added, removed int) float64 {
+	switch {
+	case baseline > 0:
+		return float64(added+removed) / float64(baseline) * 100
+	case added+removed > 0:
+		return 100
+	default:
+		return 0
+	}
 }
 
 // subtract returns elements in a that are not in b (i.e. a \ b).
