@@ -348,19 +348,56 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	return diff, nil
 }
 
-// updateDetectionDiff merge-joins two `<ecosystem>/detection` buckets on sorted
-// cursors and accumulates per-source Detection-related counts into agg. Either
-// bucket may be nil.
-func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
-	if bDet == nil && tDet == nil {
+// mergeBuckets walks two buckets in sorted key order, calling fn once per
+// key with the baseline/target values (nil where that side lacks the key).
+// Either bucket may be nil.
+func mergeBuckets(b, t *bolt.Bucket, fn func(key, bv, tv []byte) error) error {
+	switch {
+	case b == nil && t == nil:
 		return nil
+	case b == nil:
+		return t.ForEach(func(k, v []byte) error { return fn(k, nil, v) })
+	case t == nil:
+		return b.ForEach(func(k, v []byte) error { return fn(k, v, nil) })
 	}
 
-	if bDet == nil {
-		return tDet.ForEach(func(k, v []byte) error {
-			counts, err := countCriterions(v)
+	bc, tc := b.Cursor(), t.Cursor()
+	bk, bv := bc.First()
+	tk, tv := tc.First()
+	for bk != nil || tk != nil {
+		switch {
+		case tk == nil || (bk != nil && bytes.Compare(bk, tk) < 0): // baseline-only key
+			if err := fn(bk, bv, nil); err != nil {
+				return err
+			}
+			bk, bv = bc.Next()
+		case bk == nil || bytes.Compare(bk, tk) > 0: // target-only key
+			if err := fn(tk, nil, tv); err != nil {
+				return err
+			}
+			tk, tv = tc.Next()
+		default: // key in both
+			if err := fn(bk, bv, tv); err != nil {
+				return err
+			}
+			bk, bv = bc.Next()
+			tk, tv = tc.Next()
+		}
+	}
+	return nil
+}
+
+// updateDetectionDiff walks two `<ecosystem>/detection` buckets in sorted key
+// order and accumulates per-source Detection-related counts into agg. Either
+// bucket may be nil. Sources skipped for having zero criterions are counted
+// in skipped.
+func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
+	return mergeBuckets(bDet, tDet, func(k, bv, tv []byte) error {
+		switch {
+		case tv == nil: // baseline-only → Removed
+			counts, err := countCriterions(bv)
 			if err != nil {
-				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
+				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
 			for sid, count := range counts {
 				if count == 0 {
@@ -373,76 +410,15 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 					continue
 				}
 				sd := agg[sid]
-				sd.TargetKeys++
-				sd.Added = append(sd.Added, string(k))
-				sd.TargetCriterions += count
-				agg[sid] = sd
-			}
-			return nil
-		})
-	}
-
-	if tDet == nil {
-		return bDet.ForEach(func(k, v []byte) error {
-			counts, err := countCriterions(v)
-			if err != nil {
-				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
-			}
-			for sid, count := range counts {
-				if count == 0 {
-					// See the zero-criterion note above.
-					skipped[sid]++
-					continue
-				}
-				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
 				sd.BaselineCriterions += count
 				agg[sid] = sd
 			}
-			return nil
-		})
-	}
-
-	// Merge-join: both BoltDB cursors iterate in sorted key order.
-	bc := bDet.Cursor()
-	tc := tDet.Cursor()
-
-	bk, bv := bc.First()
-	tk, tv := tc.First()
-
-	for bk != nil || tk != nil {
-		switch c := func() int {
-			if bk == nil {
-				return +1
-			}
-			if tk == nil {
-				return -1
-			}
-			return bytes.Compare(bk, tk)
-		}(); c {
-		case -1: // baseline-only → Removed
-			counts, err := countCriterions(bv)
-			if err != nil {
-				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
-			}
-			for sid, count := range counts {
-				if count == 0 {
-					// See the zero-criterion note above.
-					skipped[sid]++
-					continue
-				}
-				sd := agg[sid]
-				sd.BaselineKeys++
-				sd.Removed = append(sd.Removed, string(bk))
-				sd.BaselineCriterions += count
-				agg[sid] = sd
-			}
-			bk, bv = bc.Next()
-		case +1: // target-only → Added
+		case bv == nil: // target-only → Added
 			counts, err := countCriterions(tv)
 			if err != nil {
-				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
+				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
 			for sid, count := range counts {
 				if count == 0 {
@@ -452,15 +428,14 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				}
 				sd := agg[sid]
 				sd.TargetKeys++
-				sd.Added = append(sd.Added, string(tk))
+				sd.Added = append(sd.Added, string(k))
 				sd.TargetCriterions += count
 				agg[sid] = sd
 			}
-			tk, tv = tc.Next()
-		case 0: // both present → compare per source
+		default: // key in both → compare per source
 			tallies, err := compareCriterions(bv, tv)
 			if err != nil {
-				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
+				return errors.Wrapf(err, "compare criterions for root ID: %s", string(k))
 			}
 			for sid, t := range tallies {
 				if t.Baseline == 0 && t.Target == 0 {
@@ -482,51 +457,28 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				switch {
 				case t.Baseline > 0 && t.Target > 0:
 					if t.Matched < t.Baseline || t.Matched < t.Target {
-						sd.Changed = append(sd.Changed, string(bk))
+						sd.Changed = append(sd.Changed, string(k))
 					}
 				case t.Baseline > 0:
-					sd.Removed = append(sd.Removed, string(bk))
+					sd.Removed = append(sd.Removed, string(k))
 				case t.Target > 0:
-					sd.Added = append(sd.Added, string(bk))
+					sd.Added = append(sd.Added, string(k))
 				}
 				agg[sid] = sd
 			}
-			bk, bv = bc.Next()
-			tk, tv = tc.Next()
-		default:
-			return errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, c)
 		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
-// updateKBDiff merge-joins two `<ecosystem>/kb` buckets on sorted cursors and
-// accumulates per-source KB-related counts into agg. Either bucket may be nil.
+// updateKBDiff walks two `<ecosystem>/kb` buckets in sorted key order and
+// accumulates per-source KB-related counts into agg. Either bucket may be
+// nil.
 func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
-	if bKB == nil && tKB == nil {
-		return nil
-	}
-
-	if bKB == nil {
-		return tKB.ForEach(func(k, v []byte) error {
-			sids, err := kbSources(v)
-			if err != nil {
-				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(k))
-			}
-			for _, sid := range sids {
-				sd := agg[sid]
-				sd.TargetKBKeys++
-				sd.AddedKBs = append(sd.AddedKBs, string(k))
-				agg[sid] = sd
-			}
-			return nil
-		})
-	}
-
-	if tKB == nil {
-		return bKB.ForEach(func(k, v []byte) error {
-			sids, err := kbSources(v)
+	return mergeBuckets(bKB, tKB, func(k, bv, tv []byte) error {
+		switch {
+		case tv == nil: // baseline-only → Removed
+			sids, err := kbSources(bv)
 			if err != nil {
 				return errors.Wrapf(err, "collect KB sources for baseline. KB ID: %s", string(k))
 			}
@@ -536,54 +488,21 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
 				agg[sid] = sd
 			}
-			return nil
-		})
-	}
-
-	bc := bKB.Cursor()
-	tc := tKB.Cursor()
-
-	bk, bv := bc.First()
-	tk, tv := tc.First()
-
-	for bk != nil || tk != nil {
-		switch c := func() int {
-			if bk == nil {
-				return +1
-			}
-			if tk == nil {
-				return -1
-			}
-			return bytes.Compare(bk, tk)
-		}(); c {
-		case -1:
-			sids, err := kbSources(bv)
-			if err != nil {
-				return errors.Wrapf(err, "collect KB sources for baseline. KB ID: %s", string(bk))
-			}
-			for _, sid := range sids {
-				sd := agg[sid]
-				sd.BaselineKBKeys++
-				sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
-				agg[sid] = sd
-			}
-			bk, bv = bc.Next()
-		case +1:
+		case bv == nil: // target-only → Added
 			sids, err := kbSources(tv)
 			if err != nil {
-				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(tk))
+				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(k))
 			}
 			for _, sid := range sids {
 				sd := agg[sid]
 				sd.TargetKBKeys++
-				sd.AddedKBs = append(sd.AddedKBs, string(tk))
+				sd.AddedKBs = append(sd.AddedKBs, string(k))
 				agg[sid] = sd
 			}
-			tk, tv = tc.Next()
-		case 0:
+		default: // key in both → compare per source
 			tallies, err := compareKBs(bv, tv)
 			if err != nil {
-				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
+				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(k))
 			}
 			for sid, t := range tallies {
 				sd := agg[sid]
@@ -597,23 +516,18 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 				switch {
 				case t.Baseline > 0 && t.Target > 0:
 					if t.Matched < t.Baseline || t.Matched < t.Target {
-						sd.ChangedKBs = append(sd.ChangedKBs, string(bk))
+						sd.ChangedKBs = append(sd.ChangedKBs, string(k))
 					}
 				case t.Baseline > 0:
-					sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
+					sd.RemovedKBs = append(sd.RemovedKBs, string(k))
 				case t.Target > 0:
-					sd.AddedKBs = append(sd.AddedKBs, string(bk))
+					sd.AddedKBs = append(sd.AddedKBs, string(k))
 				}
 				agg[sid] = sd
 			}
-			bk, bv = bc.Next()
-			tk, tv = tc.Next()
-		default:
-			return errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, c)
 		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // tally tallies the units of a single key compared between baseline and
