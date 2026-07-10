@@ -42,7 +42,7 @@
         }
     ],
     "data_source": {
-        "id": "test-source",
+        "id": "test-source-1",
         "raws": []
     }
 }

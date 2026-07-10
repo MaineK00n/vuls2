@@ -253,7 +253,7 @@ func TestDiffEcosystem(t *testing.T) {
 				Ecosystem: "test:multi",
 				Sources: []db.SourceDiff{
 					{
-						SourceID:           "test-source",
+						SourceID:           "test-source-1",
 						BaselineKeys:       1,
 						TargetKeys:         1,
 						BaselineCriterions: 1,
@@ -295,7 +295,7 @@ func TestDiffEcosystem(t *testing.T) {
 				Ecosystem: "test:multi",
 				Sources: []db.SourceDiff{
 					{
-						SourceID:           "test-source",
+						SourceID:           "test-source-1",
 						BaselineKeys:       1,
 						TargetKeys:         1,
 						BaselineCriterions: 1,
