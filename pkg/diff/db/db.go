@@ -469,7 +469,10 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 		}
 		return nil
 	})
-	return errors.Wrap(err, "merge detection buckets")
+	if err != nil {
+		return errors.Wrap(err, "merge detection buckets")
+	}
+	return nil
 }
 
 // updateKBDiff walks two `<ecosystem>/kb` buckets in sorted key order and
@@ -529,7 +532,10 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 		}
 		return nil
 	})
-	return errors.Wrap(err, "merge kb buckets")
+	if err != nil {
+		return errors.Wrap(err, "merge kb buckets")
+	}
+	return nil
 }
 
 // tally tallies the units of a single key compared between baseline and
