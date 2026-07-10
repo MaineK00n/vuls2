@@ -392,7 +392,7 @@ func mergeBuckets(b, t *bolt.Bucket, fn func(key, bv, tv []byte) error) error {
 // bucket may be nil. Sources skipped for having zero criterions are counted
 // in skipped.
 func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
-	return mergeBuckets(bDet, tDet, func(k, bv, tv []byte) error {
+	err := mergeBuckets(bDet, tDet, func(k, bv, tv []byte) error {
 		switch {
 		case tv == nil: // baseline-only → Removed
 			counts, err := countCriterions(bv)
@@ -469,13 +469,14 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 		}
 		return nil
 	})
+	return errors.Wrap(err, "merge detection buckets")
 }
 
 // updateKBDiff walks two `<ecosystem>/kb` buckets in sorted key order and
 // accumulates per-source KB-related counts into agg. Either bucket may be
 // nil.
 func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
-	return mergeBuckets(bKB, tKB, func(k, bv, tv []byte) error {
+	err := mergeBuckets(bKB, tKB, func(k, bv, tv []byte) error {
 		switch {
 		case tv == nil: // baseline-only → Removed
 			sids, err := kbSources(bv)
@@ -528,6 +529,7 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 		}
 		return nil
 	})
+	return errors.Wrap(err, "merge kb buckets")
 }
 
 // tally tallies the units of a single key compared between baseline and
