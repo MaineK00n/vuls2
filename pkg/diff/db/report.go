@@ -11,11 +11,6 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
-// maxDetailIDs caps each Added/Removed/Changed ID list in the Details section.
-// A failing large source (e.g. cpe/nvd-feed-cve-v2) could otherwise emit 10^5
-// lines, drowning the report the CI step summary is built from.
-const maxDetailIDs = 500
-
 // reportRow flattens (ecosystem, source) for rendering and sorting.
 type reportRow struct {
 	Ecosystem ecosystemTypes.Ecosystem
@@ -187,8 +182,8 @@ func resultLabel(pass bool) string {
 	return "**FAIL**"
 }
 
-// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs,
-// truncated to maxDetailIDs entries. It is a no-op when ids is empty.
+// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
+// It is a no-op when ids is empty.
 func writeIDList(w io.Writer, label string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -196,14 +191,9 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	if _, err := fmt.Fprintf(w, "#### %s (%d)\n\n", label, len(ids)); err != nil {
 		return errors.Wrap(err, "write header")
 	}
-	for _, id := range ids[:min(len(ids), maxDetailIDs)] {
+	for _, id := range ids {
 		if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
 			return errors.Wrap(err, "write id")
-		}
-	}
-	if len(ids) > maxDetailIDs {
-		if _, err := fmt.Fprintf(w, "- ... and %d more\n", len(ids)-maxDetailIDs); err != nil {
-			return errors.Wrap(err, "write truncation marker")
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {

@@ -2,10 +2,8 @@ package detection_test
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -783,48 +781,6 @@ func TestGenerateReport(t *testing.T) {
 				t.Errorf("GenerateReport() mismatch (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestGenerateReportTruncatesLongIDLists(t *testing.T) {
-	ids := make([]string, 502)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("CVE-2026-%04d", i)
-	}
-	diffs := map[string]detection.FileDiff{
-		"cpe_nvd": {
-			Name: "cpe_nvd",
-			Sources: []detection.SourceDiff{
-				{
-					SourceID:    "nvd-feed-cve-v2",
-					BaselineIDs: ids,
-					Removed:     ids,
-					ChangeRate:  100,
-					Threshold:   5,
-					Pass:        false,
-				},
-			},
-			Pass: false,
-		},
-	}
-
-	var buf bytes.Buffer
-	gotPass, err := detection.GenerateReport(&buf, diffs)
-	if err != nil {
-		t.Fatalf("GenerateReport() error = %v", err)
-	}
-	if gotPass {
-		t.Error("GenerateReport() pass = true, want false")
-	}
-	got := buf.String()
-	if !strings.Contains(got, "#### Removed IDs (502)") {
-		t.Error("report should state the full list length")
-	}
-	if !strings.Contains(got, "- ... and 2 more\n") {
-		t.Error("report should truncate the list with a trailer")
-	}
-	if strings.Contains(got, ids[501]) {
-		t.Errorf("report should not contain the truncated ID %s", ids[501])
 	}
 }
 

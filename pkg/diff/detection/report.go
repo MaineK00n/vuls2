@@ -10,11 +10,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// maxDetailIDs caps each Added/Removed ID list in the Details section, so a
-// badly broken DB (e.g. a whole data source disappearing from a large
-// fixture) cannot drown the report the CI step summary is built from.
-const maxDetailIDs = 500
-
 // reportRow flattens (file, source) for rendering and sorting.
 type reportRow struct {
 	Name string
@@ -122,8 +117,8 @@ func resultLabel(pass bool) string {
 	return "**FAIL**"
 }
 
-// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs,
-// truncated to maxDetailIDs entries. It is a no-op when ids is empty.
+// writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
+// It is a no-op when ids is empty.
 func writeIDList(w io.Writer, label string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -131,14 +126,9 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	if _, err := fmt.Fprintf(w, "#### %s (%d)\n\n", label, len(ids)); err != nil {
 		return errors.Wrap(err, "write header")
 	}
-	for _, id := range ids[:min(len(ids), maxDetailIDs)] {
+	for _, id := range ids {
 		if _, err := fmt.Fprintf(w, "- %s\n", id); err != nil {
 			return errors.Wrap(err, "write id")
-		}
-	}
-	if len(ids) > maxDetailIDs {
-		if _, err := fmt.Fprintf(w, "- ... and %d more\n", len(ids)-maxDetailIDs); err != nil {
-			return errors.Wrap(err, "write truncation marker")
 		}
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
