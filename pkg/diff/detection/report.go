@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"io"
-	"maps"
 	"slices"
 
 	"github.com/pkg/errors"
@@ -28,7 +27,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	}
 
 	var rows []reportRow
-	for _, d := range slices.Collect(maps.Values(diffm)) {
+	for _, d := range diffm {
 		if len(d.Sources) == 0 {
 			// A compared file with no detected sources on either side still
 			// gets a placeholder row so the report stays explicit about what
