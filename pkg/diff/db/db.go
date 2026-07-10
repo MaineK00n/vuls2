@@ -355,6 +355,14 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
 			for sid, count := range counts {
+				if count == 0 {
+					// A source with zero criterions can never match — an
+					// extraction bug; skip with a warning instead of
+					// failing the whole diff (it exists in shipped data,
+					// e.g. fedora-api advisories without packages).
+					slog.Warn("skipping source with no criterions", "root ID", string(k), "source", sid)
+					continue
+				}
 				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(k))
@@ -372,6 +380,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
 			for sid, count := range counts {
+				if count == 0 {
+					// See the zero-criterion note above.
+					slog.Warn("skipping source with no criterions", "root ID", string(k), "source", sid)
+					continue
+				}
 				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
@@ -405,6 +418,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
 			}
 			for sid, count := range counts {
+				if count == 0 {
+					// See the zero-criterion note above.
+					slog.Warn("skipping source with no criterions", "root ID", string(bk), "source", sid)
+					continue
+				}
 				sd := agg[sid]
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(bk))
@@ -418,6 +436,11 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
 			}
 			for sid, count := range counts {
+				if count == 0 {
+					// See the zero-criterion note above.
+					slog.Warn("skipping source with no criterions", "root ID", string(tk), "source", sid)
+					continue
+				}
 				sd := agg[sid]
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(tk))
@@ -430,25 +453,31 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			if err != nil {
 				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
 			}
-			for sid, tally := range tallies {
+			for sid, t := range tallies {
+				if t.Baseline == 0 && t.Target == 0 {
+					// Present on at least one side but with zero units on
+					// both — see the zero-criterion note above.
+					slog.Warn("skipping source with no criterions", "root ID", string(bk), "source", sid)
+					continue
+				}
 				sd := agg[sid]
-				if tally.InBaseline {
+				if t.Baseline > 0 {
 					sd.BaselineKeys++
-					sd.BaselineCriterions += tally.Baseline
+					sd.BaselineCriterions += t.Baseline
 				}
-				if tally.InTarget {
+				if t.Target > 0 {
 					sd.TargetKeys++
-					sd.TargetCriterions += tally.Target
+					sd.TargetCriterions += t.Target
 				}
-				sd.MatchedCriterions += tally.Matched
+				sd.MatchedCriterions += t.Matched
 				switch {
-				case tally.InBaseline && tally.InTarget:
-					if tally.Matched < tally.Baseline || tally.Matched < tally.Target {
+				case t.Baseline > 0 && t.Target > 0:
+					if t.Matched < t.Baseline || t.Matched < t.Target {
 						sd.Changed = append(sd.Changed, string(bk))
 					}
-				case tally.InBaseline:
+				case t.Baseline > 0:
 					sd.Removed = append(sd.Removed, string(bk))
-				case tally.InTarget:
+				case t.Target > 0:
 					sd.Added = append(sd.Added, string(bk))
 				}
 				agg[sid] = sd
@@ -547,23 +576,23 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			if err != nil {
 				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
 			}
-			for sid, tally := range tallies {
+			for sid, t := range tallies {
 				sd := agg[sid]
-				if tally.InBaseline {
+				if t.Baseline > 0 {
 					sd.BaselineKBKeys++
 				}
-				if tally.InTarget {
+				if t.Target > 0 {
 					sd.TargetKBKeys++
 				}
-				sd.MatchedKBs += tally.Matched
+				sd.MatchedKBs += t.Matched
 				switch {
-				case tally.InBaseline && tally.InTarget:
-					if tally.Matched < tally.Baseline || tally.Matched < tally.Target {
+				case t.Baseline > 0 && t.Target > 0:
+					if t.Matched < t.Baseline || t.Matched < t.Target {
 						sd.ChangedKBs = append(sd.ChangedKBs, string(bk))
 					}
-				case tally.InBaseline:
+				case t.Baseline > 0:
 					sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
-				case tally.InTarget:
+				case t.Target > 0:
 					sd.AddedKBs = append(sd.AddedKBs, string(bk))
 				}
 				agg[sid] = sd
@@ -578,19 +607,19 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 	return nil
 }
 
-// unitTally tallies the units of a single key compared between baseline and
+// tally tallies the units of a single key compared between baseline and
 // target, for one source. A unit is the smallest compared element feeding
 // the change rate: a leaf criterion (with its operator path) for the
 // detection bucket, and a per-source KB record (0/1 per KB ID) for the kb
-// bucket. InBaseline/InTarget record whether the source appears in the
-// corresponding value map at all — a source may be present with zero units,
-// which is still presence for Added/Removed/Changed classification.
-type unitTally struct {
-	Baseline   int
-	Target     int
-	Matched    int
-	InBaseline bool
-	InTarget   bool
+// bucket. A non-zero count doubles as presence: a source that appears in a
+// value map with zero units cannot ever match — an extraction bug (e.g.
+// fedora-api advisories without packages) — and is skipped with a warning
+// by the accumulation sites, so Baseline > 0 effectively means the source
+// is present and usable in baseline (likewise for Target).
+type tally struct {
+	Baseline int
+	Target   int
+	Matched  int
 }
 
 // compareCriterions structurally compares detection data at the Criterion (leaf) level,
@@ -608,7 +637,7 @@ type unitTally struct {
 //
 // Returns a per-source tally over the union of source IDs in both sides, so
 // new/removed sources contribute to their own change rate.
-func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitTally, error) {
+func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]tally, error) {
 	var bm, tm map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline criterions")
@@ -629,14 +658,12 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 		return cns
 	}
 
-	tallies := make(map[sourceTypes.SourceID]unitTally, max(len(bm), len(tm)))
+	tallies := make(map[sourceTypes.SourceID]tally, max(len(bm), len(tm)))
 	for sid := range bm {
-		tallies[sid] = unitTally{InBaseline: true}
+		tallies[sid] = tally{}
 	}
 	for sid := range tm {
-		t := tallies[sid]
-		t.InTarget = true
-		tallies[sid] = t
+		tallies[sid] = tally{}
 	}
 
 	for sid, t := range tallies {
@@ -698,10 +725,12 @@ func walkCriteria(c criteriaTypes.Criteria, opPath []criteriaTypes.CriteriaOpera
 }
 
 // countCriterions unmarshals detection data and returns the leaf criterion
-// count per source. Every source ID present in the value map appears as a key,
-// even with a zero count. A zero-length value is an error: the writer always
-// stores marshaled JSON and reads elsewhere treat empty as not-found, so
-// silently skipping it here would let the guard pass over corrupt data.
+// count per source. Every source ID present in the value map appears as a
+// key, even with a zero count — callers skip zero-count sources with a
+// warning (see updateDetectionDiff). A zero-length value is an error: the
+// writer always stores marshaled JSON and reads elsewhere treat empty as
+// not-found, so silently skipping it here would let the guard pass over
+// corrupt data.
 func countCriterions(data []byte) (map[sourceTypes.SourceID]int, error) {
 	if len(data) == 0 {
 		return nil, errors.New("unexpected zero-length detection value")
@@ -734,7 +763,7 @@ func countLeafCriterions(c criteriaTypes.Criteria) int {
 // are the marshaled value of `<ecosystem>/kb/<KB ID>`, i.e. a
 // map[sourceTypes.SourceID]microsoftkbTypes.KB. Per-source tallies are 0/1
 // per KB ID.
-func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitTally, error) {
+func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]tally, error) {
 	var bm, tm map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline KBs")
@@ -743,9 +772,9 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitT
 		return nil, errors.Wrap(err, "unmarshal target KBs")
 	}
 
-	tallies := make(map[sourceTypes.SourceID]unitTally, max(len(bm), len(tm)))
+	tallies := make(map[sourceTypes.SourceID]tally, max(len(bm), len(tm)))
 	for sid, bKB := range bm {
-		t := unitTally{InBaseline: true, Baseline: 1}
+		t := tally{Baseline: 1}
 		if tKB, ok := tm[sid]; ok {
 			bKB.Sort()
 			tKB.Sort()
@@ -757,7 +786,6 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitT
 	}
 	for sid := range tm {
 		t := tallies[sid]
-		t.InTarget = true
 		t.Target = 1
 		tallies[sid] = t
 	}

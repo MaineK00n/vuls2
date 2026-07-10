@@ -328,6 +328,33 @@ func TestDiffEcosystem(t *testing.T) {
 			},
 		},
 		{
+			// A source present with zero criterions (extraction bug shipped
+			// in real data, e.g. fedora-api advisories without packages) is
+			// skipped with a warning: it must appear neither as a SourceDiff
+			// nor fail the diff.
+			name: "zero-criterion source skipped",
+			args: args{
+				baselineFixture: "testdata/fixtures/zero-unit-baseline",
+				targetFixture:   "testdata/fixtures/zero-unit-target",
+				ecosystem:       "test:zero",
+			},
+			want: db.EcosystemDiff{
+				Ecosystem: "test:zero",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:           "test-source-1",
+						BaselineKeys:       1,
+						TargetKeys:         1,
+						BaselineCriterions: 1,
+						TargetCriterions:   1,
+						MatchedCriterions:  1,
+						Pass:               true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
 			name: "kb no change",
 			args: args{
 				baselineFixture: "testdata/fixtures/kb-baseline",
@@ -626,7 +653,7 @@ func TestCompareCriterions(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    map[sourceTypes.SourceID]db.UnitTally
+		want    map[sourceTypes.SourceID]db.Tally
 		wantErr bool
 	}{
 		{
@@ -643,8 +670,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
 			},
 		},
 		{
@@ -662,8 +689,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 2, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 2, Target: 1, Matched: 1},
 			},
 		},
 		{
@@ -681,8 +708,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 2, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 2, Matched: 1},
 			},
 		},
 		{
@@ -699,8 +726,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 0},
 			},
 		},
 		{
@@ -717,8 +744,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 0},
 			},
 		},
 		{
@@ -740,9 +767,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
-				"src2": {Baseline: 1, InBaseline: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
+				"src2": {Baseline: 1},
 			},
 		},
 		{
@@ -762,9 +789,9 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
-				"src2": {Target: 1, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
+				"src2": {Target: 1},
 			},
 		},
 		{
@@ -801,8 +828,26 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Target: 1, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Target: 1},
+			},
+		},
+		{
+			// A present source with zero criterions yields a zero tally on
+			// that side; the accumulation sites treat it as absent.
+			name: "present source without criterions yields zero tally",
+			args: args{
+				baseline: `{
+					"src1": []
+				}`,
+				target: `{
+					"src1": [
+						{"criteria": {"criterions": [{"type": "version"}]}}
+					]
+				}`,
+			},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 0, Target: 1, Matched: 0},
 			},
 		},
 		{
@@ -819,8 +864,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
 			},
 		},
 		{
@@ -837,8 +882,8 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 0},
 			},
 		},
 	}
@@ -874,6 +919,8 @@ func TestCountCriterions(t *testing.T) {
 			want: map[sourceTypes.SourceID]int{},
 		},
 		{
+			// A present source with zero criterions is kept as an explicit
+			// zero — the accumulation sites skip it with a warning.
 			name: "no conditions",
 			args: args{data: `{"src1":[]}`},
 			want: map[sourceTypes.SourceID]int{"src1": 0},
@@ -967,7 +1014,7 @@ func TestCompareKBs(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    map[sourceTypes.SourceID]db.UnitTally
+		want    map[sourceTypes.SourceID]db.Tally
 		wantErr bool
 	}{
 		{
@@ -988,8 +1035,8 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
 			},
 		},
 		{
@@ -1008,8 +1055,8 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 0},
 			},
 		},
 		{
@@ -1028,8 +1075,8 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
 			},
 		},
 		{
@@ -1053,8 +1100,8 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 0},
 			},
 		},
 		{
@@ -1068,9 +1115,9 @@ func TestCompareKBs(t *testing.T) {
 					"src2": {"kb_id": "KB5001234"}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
-				"src2": {Target: 1, InTarget: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
+				"src2": {Target: 1},
 			},
 		},
 		{
@@ -1084,9 +1131,9 @@ func TestCompareKBs(t *testing.T) {
 					"src1": {"kb_id": "KB5001234"}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.UnitTally{
-				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
-				"src2": {Baseline: 1, InBaseline: true},
+			want: map[sourceTypes.SourceID]db.Tally{
+				"src1": {Baseline: 1, Target: 1, Matched: 1},
+				"src2": {Baseline: 1},
 			},
 		},
 		{

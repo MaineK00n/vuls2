@@ -1,0 +1,21 @@
+{
+    "id": "ROOT-0001",
+    "advisories": [],
+    "vulnerabilities": [],
+    "detections": [
+        {
+            "ecosystem": "test:zero",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "OR"
+                    }
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "test-source-2",
+        "raws": []
+    }
+}
