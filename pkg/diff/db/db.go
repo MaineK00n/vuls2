@@ -426,29 +426,29 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 			}
 			tk, tv = tc.Next()
 		case 0: // both present → compare per source
-			counts, err := compareCriterions(bv, tv)
+			tallies, err := compareCriterions(bv, tv)
 			if err != nil {
 				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
 			}
-			for sid, count := range counts {
+			for sid, tally := range tallies {
 				sd := agg[sid]
-				if count.InBaseline {
+				if tally.InBaseline {
 					sd.BaselineKeys++
-					sd.BaselineCriterions += count.Baseline
+					sd.BaselineCriterions += tally.Baseline
 				}
-				if count.InTarget {
+				if tally.InTarget {
 					sd.TargetKeys++
-					sd.TargetCriterions += count.Target
+					sd.TargetCriterions += tally.Target
 				}
-				sd.MatchedCriterions += count.Matched
+				sd.MatchedCriterions += tally.Matched
 				switch {
-				case count.InBaseline && count.InTarget:
-					if count.Matched < count.Baseline || count.Matched < count.Target {
+				case tally.InBaseline && tally.InTarget:
+					if tally.Matched < tally.Baseline || tally.Matched < tally.Target {
 						sd.Changed = append(sd.Changed, string(bk))
 					}
-				case count.InBaseline:
+				case tally.InBaseline:
 					sd.Removed = append(sd.Removed, string(bk))
-				case count.InTarget:
+				case tally.InTarget:
 					sd.Added = append(sd.Added, string(bk))
 				}
 				agg[sid] = sd
@@ -543,27 +543,27 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 			}
 			tk, tv = tc.Next()
 		case 0:
-			counts, err := compareKBs(bv, tv)
+			tallies, err := compareKBs(bv, tv)
 			if err != nil {
 				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
 			}
-			for sid, count := range counts {
+			for sid, tally := range tallies {
 				sd := agg[sid]
-				if count.InBaseline {
+				if tally.InBaseline {
 					sd.BaselineKBKeys++
 				}
-				if count.InTarget {
+				if tally.InTarget {
 					sd.TargetKBKeys++
 				}
-				sd.MatchedKBs += count.Matched
+				sd.MatchedKBs += tally.Matched
 				switch {
-				case count.InBaseline && count.InTarget:
-					if count.Matched < count.Baseline || count.Matched < count.Target {
+				case tally.InBaseline && tally.InTarget:
+					if tally.Matched < tally.Baseline || tally.Matched < tally.Target {
 						sd.ChangedKBs = append(sd.ChangedKBs, string(bk))
 					}
-				case count.InBaseline:
+				case tally.InBaseline:
 					sd.RemovedKBs = append(sd.RemovedKBs, string(bk))
-				case count.InTarget:
+				case tally.InTarget:
 					sd.AddedKBs = append(sd.AddedKBs, string(bk))
 				}
 				agg[sid] = sd
@@ -578,11 +578,12 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff
 	return nil
 }
 
-// unitCounts holds per-source unit counts for a single key compared between
-// baseline and target. InBaseline/InTarget record whether the source appears
-// in the corresponding value map at all — a source may be present with zero
-// units, which is still presence for Added/Removed/Changed classification.
-type unitCounts struct {
+// unitTally tallies the units of a single key compared between baseline and
+// target, for one source. InBaseline/InTarget record whether the source
+// appears in the corresponding value map at all — a source may be present
+// with zero units, which is still presence for Added/Removed/Changed
+// classification.
+type unitTally struct {
 	Baseline   int
 	Target     int
 	Matched    int
@@ -603,9 +604,9 @@ type unitCounts struct {
 // tree structure for a given data source version, so structural changes always
 // indicate an upstream data change worth surfacing.
 //
-// Returns per-source counts over the union of source IDs in both sides, so
+// Returns a per-source tally over the union of source IDs in both sides, so
 // new/removed sources contribute to their own change rate.
-func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitCounts, error) {
+func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitTally, error) {
 	var bm, tm map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline criterions")
@@ -626,22 +627,22 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 		return cns
 	}
 
-	counts := make(map[sourceTypes.SourceID]unitCounts, max(len(bm), len(tm)))
+	tallies := make(map[sourceTypes.SourceID]unitTally, max(len(bm), len(tm)))
 	for sid := range bm {
-		counts[sid] = unitCounts{InBaseline: true}
+		tallies[sid] = unitTally{InBaseline: true}
 	}
 	for sid := range tm {
-		c := counts[sid]
-		c.InTarget = true
-		counts[sid] = c
+		t := tallies[sid]
+		t.InTarget = true
+		tallies[sid] = t
 	}
 
-	for sid, c := range counts {
+	for sid, t := range tallies {
 		bCns := flattenAndSort(bm[sid])
 		tCns := flattenAndSort(tm[sid])
 
-		c.Baseline = len(bCns)
-		c.Target = len(tCns)
+		t.Baseline = len(bCns)
+		t.Target = len(tCns)
 
 		// Merge-join on sorted annotated criterions
 		bi, ti := 0, 0
@@ -652,16 +653,16 @@ func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceI
 			case +1:
 				ti++
 			case 0:
-				c.Matched++
+				t.Matched++
 				bi++
 				ti++
 			default:
 				return nil, errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, cr)
 			}
 		}
-		counts[sid] = c
+		tallies[sid] = t
 	}
-	return counts, nil
+	return tallies, nil
 }
 
 // annotatedCriterion pairs a leaf Criterion with the operator path from the
@@ -729,9 +730,9 @@ func countLeafCriterions(c criteriaTypes.Criteria) int {
 
 // compareKBs structurally compares KB data per data source. The input bytes
 // are the marshaled value of `<ecosystem>/kb/<KB ID>`, i.e. a
-// map[sourceTypes.SourceID]microsoftkbTypes.KB. Per-source counts are 0/1
+// map[sourceTypes.SourceID]microsoftkbTypes.KB. Per-source tallies are 0/1
 // per KB ID.
-func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitCounts, error) {
+func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitTally, error) {
 	var bm, tm map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
 		return nil, errors.Wrap(err, "unmarshal baseline KBs")
@@ -740,25 +741,25 @@ func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]unitC
 		return nil, errors.Wrap(err, "unmarshal target KBs")
 	}
 
-	counts := make(map[sourceTypes.SourceID]unitCounts, max(len(bm), len(tm)))
+	tallies := make(map[sourceTypes.SourceID]unitTally, max(len(bm), len(tm)))
 	for sid, bKB := range bm {
-		c := unitCounts{InBaseline: true, Baseline: 1}
+		t := unitTally{InBaseline: true, Baseline: 1}
 		if tKB, ok := tm[sid]; ok {
 			bKB.Sort()
 			tKB.Sort()
 			if microsoftkbTypes.Compare(bKB, tKB) == 0 {
-				c.Matched = 1
+				t.Matched = 1
 			}
 		}
-		counts[sid] = c
+		tallies[sid] = t
 	}
 	for sid := range tm {
-		c := counts[sid]
-		c.InTarget = true
-		c.Target = 1
-		counts[sid] = c
+		t := tallies[sid]
+		t.InTarget = true
+		t.Target = 1
+		tallies[sid] = t
 	}
-	return counts, nil
+	return tallies, nil
 }
 
 // kbSources unmarshals KB data and returns the source IDs present in the

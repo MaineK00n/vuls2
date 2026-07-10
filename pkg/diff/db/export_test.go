@@ -10,5 +10,5 @@ var (
 	GenerateReport    = generateReport
 )
 
-// Counts exposes the per-source unit counts type for external tests.
-type Counts = unitCounts
+// UnitTally exposes the per-source unit tally type for external tests.
+type UnitTally = unitTally

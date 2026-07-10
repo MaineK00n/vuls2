@@ -626,7 +626,7 @@ func TestCompareCriterions(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    map[sourceTypes.SourceID]db.Counts
+		want    map[sourceTypes.SourceID]db.UnitTally
 		wantErr bool
 	}{
 		{
@@ -643,7 +643,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -662,7 +662,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 2, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -681,7 +681,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 2, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -699,7 +699,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
 			},
 		},
@@ -717,7 +717,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
 			},
 		},
@@ -740,7 +740,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 				"src2": {Baseline: 1, InBaseline: true},
 			},
@@ -762,7 +762,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 				"src2": {Target: 1, InTarget: true},
 			},
@@ -801,7 +801,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Target: 1, InTarget: true},
 			},
 		},
@@ -819,7 +819,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -837,7 +837,7 @@ func TestCompareCriterions(t *testing.T) {
 					]
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
 			},
 		},
@@ -967,7 +967,7 @@ func TestCompareKBs(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    map[sourceTypes.SourceID]db.Counts
+		want    map[sourceTypes.SourceID]db.UnitTally
 		wantErr bool
 	}{
 		{
@@ -988,7 +988,7 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -1008,7 +1008,7 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
 			},
 		},
@@ -1028,7 +1028,7 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 			},
 		},
@@ -1053,7 +1053,7 @@ func TestCompareKBs(t *testing.T) {
 					}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 0, InBaseline: true, InTarget: true},
 			},
 		},
@@ -1068,7 +1068,7 @@ func TestCompareKBs(t *testing.T) {
 					"src2": {"kb_id": "KB5001234"}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 				"src2": {Target: 1, InTarget: true},
 			},
@@ -1084,7 +1084,7 @@ func TestCompareKBs(t *testing.T) {
 					"src1": {"kb_id": "KB5001234"}
 				}`,
 			},
-			want: map[sourceTypes.SourceID]db.Counts{
+			want: map[sourceTypes.SourceID]db.UnitTally{
 				"src1": {Baseline: 1, Target: 1, Matched: 1, InBaseline: true, InTarget: true},
 				"src2": {Baseline: 1, InBaseline: true},
 			},
