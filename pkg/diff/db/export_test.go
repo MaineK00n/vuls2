@@ -6,6 +6,9 @@ var (
 	CompareCriterions = compareCriterions
 	CountCriterions   = countCriterions
 	CompareKBs        = compareKBs
-	CountKBs          = countKBs
+	KBSources         = kbSources
 	GenerateReport    = generateReport
 )
+
+// Tally exposes the per-source unit tally type for external tests.
+type Tally = tally

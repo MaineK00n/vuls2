@@ -7,19 +7,45 @@ import (
 	"slices"
 
 	"github.com/pkg/errors"
+
+	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
+// placeholderSourceID marks the row emitted for an ecosystem compared
+// without any per-source data; no threshold applies to it.
+const placeholderSourceID = "(none)"
+
+// reportRow flattens (ecosystem, source) for rendering and sorting.
+type reportRow struct {
+	Ecosystem ecosystemTypes.Ecosystem
+	SourceDiff
+}
+
 // generateReport writes a Markdown report for DB diff to w.
-// It returns whether all ecosystems passed and any write error.
+// It returns whether all (ecosystem, source) pairs passed and any write error.
 func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	if len(diffs) == 0 {
 		return true, errors.New("no ecosystems to compare")
 	}
 
-	// Sort: FAIL first, then by max(rate) desc, then by ecosystem asc.
-	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
+	var rows []reportRow
+	for _, d := range diffs {
+		if len(d.Sources) == 0 {
+			// A compared ecosystem with no per-source data still gets a
+			// placeholder row so the report stays explicit about what was
+			// compared instead of silently omitting it.
+			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceDiff: SourceDiff{SourceID: placeholderSourceID, Pass: d.Pass}})
+			continue
+		}
+		for _, s := range d.Sources {
+			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceDiff: s})
+		}
+	}
+
+	// Sort: FAIL first, then by max(rate) desc, then by ecosystem asc, source asc.
+	// Per-source threshold can hide a high-rate row behind PASS, so surfacing
 	// FAIL rows first keeps triage focused on what actually blocks promotion.
-	slices.SortFunc(diffs, func(a, b EcosystemDiff) int {
+	slices.SortFunc(rows, func(a, b reportRow) int {
 		return cmp.Or(
 			func() int {
 				switch {
@@ -31,13 +57,14 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 					return 0
 				}
 			}(),
-			-cmp.Compare(max(a.DetectionChangeRate, a.KBChangeRate),
-				max(b.DetectionChangeRate, b.KBChangeRate)),
+			cmp.Compare(max(b.DetectionChangeRate, b.KBChangeRate),
+				max(a.DetectionChangeRate, a.KBChangeRate)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
+			cmp.Compare(a.SourceID, b.SourceID),
 		)
 	})
 
-	pass := !slices.ContainsFunc(diffs, func(r EcosystemDiff) bool { return !r.Pass })
+	pass := !slices.ContainsFunc(rows, func(r reportRow) bool { return !r.Pass })
 
 	if _, err := fmt.Fprintf(w, `# Diff Report: DB
 
@@ -45,18 +72,19 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 
 **Result**: %s
 
-| Ecosystem | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|-----------------------|----------------|-----------|--------|
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
 `, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
-	for _, d := range diffs {
-		if _, err := fmt.Fprintf(w, "| %s | %.1f%% | %.1f%% | %.1f%% | %s |\n",
-			d.Ecosystem,
-			d.DetectionChangeRate,
-			d.KBChangeRate,
-			d.Threshold,
-			resultLabel(d.Pass),
+	for _, r := range rows {
+		if _, err := fmt.Fprintf(w, "| %s | %s | %.1f%% | %.1f%% | %s | %s |\n",
+			r.Ecosystem,
+			r.SourceID,
+			r.DetectionChangeRate,
+			r.KBChangeRate,
+			thresholdCell(r.SourceDiff),
+			resultLabel(r.Pass),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
@@ -65,24 +93,24 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 		return false, errors.Wrap(err, "write summary separator")
 	}
 
-	if slices.ContainsFunc(diffs, func(d EcosystemDiff) bool {
-		return d.BaselineKeys > 0 || d.TargetKeys > 0
+	if slices.ContainsFunc(rows, func(r reportRow) bool {
+		return r.BaselineKeys > 0 || r.TargetKeys > 0
 	}) {
 		if _, err := fmt.Fprintf(w, `## Detection
 
-| Ecosystem | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
 `); err != nil {
 			return false, errors.Wrap(err, "write detection header")
 		}
-		for _, d := range diffs {
-			if d.BaselineKeys == 0 && d.TargetKeys == 0 {
+		for _, r := range rows {
+			if r.BaselineKeys == 0 && r.TargetKeys == 0 {
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %d | %d | %d | %d |\n",
-				d.Ecosystem, d.BaselineKeys, d.TargetKeys,
-				len(d.Added), len(d.Removed), len(d.Changed),
-				d.BaselineCriterions, d.TargetCriterions, d.MatchedCriterions); err != nil {
+			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d |\n",
+				r.Ecosystem, r.SourceID, r.BaselineKeys, r.TargetKeys,
+				len(r.Added), len(r.Removed), len(r.Changed),
+				r.BaselineCriterions, r.TargetCriterions, r.MatchedCriterions); err != nil {
 				return false, errors.Wrap(err, "write detection row")
 			}
 		}
@@ -91,24 +119,24 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 		}
 	}
 
-	if slices.ContainsFunc(diffs, func(d EcosystemDiff) bool {
-		return d.BaselineKBKeys > 0 || d.TargetKBKeys > 0
+	if slices.ContainsFunc(rows, func(r reportRow) bool {
+		return r.BaselineKBKeys > 0 || r.TargetKBKeys > 0
 	}) {
 		if _, err := fmt.Fprintf(w, `## KB
 
-| Ecosystem | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Baseline KBs | Target KBs | Matched KBs |
-|-----------|------------------|----------------|-------|---------|---------|--------------|------------|-------------|
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
 `); err != nil {
 			return false, errors.Wrap(err, "write kb header")
 		}
-		for _, d := range diffs {
-			if d.BaselineKBKeys == 0 && d.TargetKBKeys == 0 {
+		for _, r := range rows {
+			if r.BaselineKBKeys == 0 && r.TargetKBKeys == 0 {
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "| %s | %d | %d | %d | %d | %d | %d | %d | %d |\n",
-				d.Ecosystem, d.BaselineKBKeys, d.TargetKBKeys,
-				len(d.AddedKBs), len(d.RemovedKBs), len(d.ChangedKBs),
-				d.BaselineKBs, d.TargetKBs, d.MatchedKBs); err != nil {
+			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d |\n",
+				r.Ecosystem, r.SourceID, r.BaselineKBKeys, r.TargetKBKeys,
+				len(r.AddedKBs), len(r.RemovedKBs), len(r.ChangedKBs),
+				r.MatchedKBs); err != nil {
 				return false, errors.Wrap(err, "write kb row")
 			}
 		}
@@ -117,44 +145,58 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 		}
 	}
 
-	// Details for FAIL ecosystems
-	var failDiffs []EcosystemDiff
-	for _, d := range diffs {
-		if !d.Pass {
-			failDiffs = append(failDiffs, d)
+	// Details for FAIL (ecosystem, source) pairs
+	var failRows []reportRow
+	for _, r := range rows {
+		if !r.Pass {
+			failRows = append(failRows, r)
 		}
 	}
 
-	if len(failDiffs) > 0 {
-		if _, err := fmt.Fprintf(w, "## Details (FAIL ecosystems)\n\n"); err != nil {
+	if len(failRows) > 0 {
+		if _, err := fmt.Fprintf(w, "## Details (FAIL sources)\n\n"); err != nil {
 			return false, errors.Wrap(err, "write details header")
 		}
-		for _, d := range failDiffs {
-			if _, err := fmt.Fprintf(w, "### %s (%.1f%%)\n\n", d.Ecosystem, d.DetectionChangeRate); err != nil {
-				return false, errors.Wrapf(err, "write ecosystem header %s", d.Ecosystem)
+		for _, r := range failRows {
+			// A source can fail on either rate (e.g. microsoft on KB alone),
+			// so the headline shows whichever signal is larger — same rule as
+			// the summary sort.
+			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Ecosystem, r.SourceID, max(r.DetectionChangeRate, r.KBChangeRate)); err != nil {
+				return false, errors.Wrapf(err, "write source header %s/%s", r.Ecosystem, r.SourceID)
 			}
-			if err := writeIDList(w, "Added Root IDs", d.Added); err != nil {
-				return false, errors.Wrapf(err, "%s added", d.Ecosystem)
-			}
-			if err := writeIDList(w, "Removed Root IDs", d.Removed); err != nil {
-				return false, errors.Wrapf(err, "%s removed", d.Ecosystem)
-			}
-			if err := writeIDList(w, "Changed Root IDs", d.Changed); err != nil {
-				return false, errors.Wrapf(err, "%s changed", d.Ecosystem)
-			}
-			if err := writeIDList(w, "Added KB IDs", d.AddedKBs); err != nil {
-				return false, errors.Wrapf(err, "%s added KBs", d.Ecosystem)
-			}
-			if err := writeIDList(w, "Removed KB IDs", d.RemovedKBs); err != nil {
-				return false, errors.Wrapf(err, "%s removed KBs", d.Ecosystem)
-			}
-			if err := writeIDList(w, "Changed KB IDs", d.ChangedKBs); err != nil {
-				return false, errors.Wrapf(err, "%s changed KBs", d.Ecosystem)
+			for _, l := range []struct {
+				label string
+				ids   []string
+			}{
+				{"Added Root IDs", r.Added},
+				{"Removed Root IDs", r.Removed},
+				{"Changed Root IDs", r.Changed},
+				{"Added KB IDs", r.AddedKBs},
+				{"Removed KB IDs", r.RemovedKBs},
+				{"Changed KB IDs", r.ChangedKBs},
+			} {
+				// Sort a clone: the slices are shared with the caller's
+				// diffs, and rendering must not mutate its input.
+				ids := slices.Clone(l.ids)
+				slices.Sort(ids)
+				if err := writeIDList(w, l.label, ids); err != nil {
+					return false, errors.Wrapf(err, "%s/%s %s", r.Ecosystem, r.SourceID, l.label)
+				}
 			}
 		}
 	}
 
 	return pass, nil
+}
+
+// thresholdCell renders the Threshold column; a placeholder row has no
+// (ecosystem, source) for a threshold to apply to, so it renders "-" rather
+// than a misleading 0.0%.
+func thresholdCell(sd SourceDiff) string {
+	if sd.SourceID == placeholderSourceID {
+		return "-"
+	}
+	return fmt.Sprintf("%.1f%%", sd.Threshold)
 }
 
 func resultLabel(pass bool) string {

@@ -5,8 +5,10 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/v2"
+	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"runtime"
 	"slices"
@@ -50,10 +52,14 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 	opts.changeRateThresholdOverrides = map[string]float64(o)
 }
 
-// WithChangeRateThresholdOverrides supplies per-ecosystem overrides of the
-// change rate threshold. Keys are ecosystem identifiers (e.g. "ubuntu:26.04");
-// values are percentages. Missing keys fall back to the default supplied via
-// WithChangeRateThreshold. A nil or empty map preserves prior behavior.
+// WithChangeRateThresholdOverrides supplies overrides of the change rate
+// threshold. Keys are either an ecosystem identifier (e.g. "ubuntu:26.04"),
+// which applies to every source in that ecosystem, or
+// "<ecosystem>/<source ID>" (e.g. "cpe/cisco-json"), which applies to a
+// single source and takes precedence over the ecosystem-wide key. Values are
+// percentages. Missing keys fall back to the default supplied via
+// WithChangeRateThreshold; a nil or empty map leaves every
+// (ecosystem, source) on that default.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
@@ -78,45 +84,59 @@ func WithDebug(d bool) Option {
 	return debugOption(d)
 }
 
-// EcosystemDiff holds the comparison result for a single ecosystem.
+// SourceDiff holds the comparison result for a single data source within an
+// ecosystem. The change rate is computed per source so that a large source
+// (e.g. nvd-feed-cve-v2 in the cpe ecosystem) cannot mask a regression in a
+// small source (e.g. cisco-json) sharing the same ecosystem bucket.
 //
-// An ecosystem bucket may contain a `detection` sub-bucket, a `kb` sub-bucket,
-// or both. Each sub-bucket is diffed independently and has its own change
-// rate so that disparities in magnitude (e.g. many detection units vs few KB
-// units) do not hide a large relative change in the smaller bucket.
-// An ecosystem Passes only when both change rates are within the threshold.
-type EcosystemDiff struct {
-	Ecosystem ecosystemTypes.Ecosystem
+// A source may contribute to a `detection` sub-bucket, a `kb` sub-bucket, or
+// both. Each is diffed independently and has its own change rate so that
+// disparities in magnitude (e.g. many detection units vs few KB units) do not
+// hide a large relative change in the smaller bucket.
+// A source Passes only when both change rates are within its threshold.
+type SourceDiff struct {
+	SourceID sourceTypes.SourceID
 
-	// Detection bucket diff (`<ecosystem>/detection/<Root ID>`).
-	BaselineKeys       int
-	TargetKeys         int
-	Added              []string // root IDs in target but not baseline
-	Removed            []string // root IDs in baseline but not target
-	Changed            []string // root IDs in both but different detection data
-	BaselineCriterions int      // total leaf criterion count across all baseline root IDs
-	TargetCriterions   int      // total leaf criterion count across all target root IDs
+	// Detection bucket diff (`<ecosystem>/detection/<Root ID>`), restricted
+	// to the entries this source contributes to.
+	BaselineKeys       int      // root IDs whose baseline value contains this source
+	TargetKeys         int      // root IDs whose target value contains this source
+	Added              []string // root IDs where this source appears only in target
+	Removed            []string // root IDs where this source appears only in baseline
+	Changed            []string // root IDs in both but with different detection data for this source
+	BaselineCriterions int      // total leaf criterion count for this source across all baseline root IDs
+	TargetCriterions   int      // total leaf criterion count for this source across all target root IDs
 	MatchedCriterions  int      // criterions structurally identical in both (Sort + Compare == 0)
 
-	// KB bucket diff (`<ecosystem>/kb/<KB ID>`).
-	BaselineKBKeys int
-	TargetKBKeys   int
-	AddedKBs       []string // KB IDs in target but not baseline
-	RemovedKBs     []string // KB IDs in baseline but not target
-	ChangedKBs     []string // KB IDs in both but different KB data
-	BaselineKBs    int      // total (KB ID × source ID) pair count in baseline
-	TargetKBs      int      // total (KB ID × source ID) pair count in target
-	MatchedKBs     int      // KB pairs structurally identical in both (Sort + Compare == 0)
+	// KB bucket diff (`<ecosystem>/kb/<KB ID>`), restricted to the entries
+	// this source contributes to. A source stores at most one KB record per
+	// KB ID, so a per-source unit count would always equal the key count —
+	// only key counts are kept.
+	BaselineKBKeys int      // KB IDs whose baseline value contains this source
+	TargetKBKeys   int      // KB IDs whose target value contains this source
+	AddedKBs       []string // KB IDs where this source appears only in target
+	RemovedKBs     []string // KB IDs where this source appears only in baseline
+	ChangedKBs     []string // KB IDs in both but with different KB data for this source
+	MatchedKBs     int      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
 
 	// Per-bucket change rates. When a bucket is absent in both baseline
 	// and target, its rate is 0.
 	DetectionChangeRate float64
 	KBChangeRate        float64
 
-	// Threshold actually applied to this ecosystem (post override resolution).
+	// Threshold actually applied to this source (post override resolution:
+	// "<ecosystem>/<source>" > "<ecosystem>" > default).
 	Threshold float64
 
 	Pass bool
+}
+
+// EcosystemDiff holds the comparison result for a single ecosystem, broken
+// down per data source. An ecosystem Passes only when every source passes.
+type EcosystemDiff struct {
+	Ecosystem ecosystemTypes.Ecosystem
+	Sources   []SourceDiff // unordered; the report sorts for presentation
+	Pass      bool
 }
 
 // DiffBoltDB compares detection data directly between two BoltDB files.
@@ -164,10 +184,10 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if !pass {
-		// Resolved per-ecosystem threshold is rendered per row in the report's
+		// Resolved per-source threshold is rendered per row in the report's
 		// Threshold column, so the exit error stays threshold-free to avoid
 		// implying the default was the one that tripped.
-		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one ecosystem; see report for details")
+		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one (ecosystem, source) pair; see report for details")
 	}
 	return nil
 }
@@ -193,24 +213,15 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 	// New ecosystems in the target are feature additions, not regressions,
 	// so they are intentionally excluded from change rate calculation.
 	for _, eco := range baselineEcos {
-		// Resolve the per-ecosystem threshold here so diffEcosystem stays a
-		// pure per-target function that doesn't need the overrides map.
-		threshold := changeRateThreshold
-		if v, ok := overrides[string(eco)]; ok {
-			threshold = v
-		}
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, threshold)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, overrides, changeRateThreshold)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
 
-			slog.Debug("ecosystem diff done",
-				"ecosystem", eco, "pass", d.Pass,
-				"detection_change_rate", d.DetectionChangeRate, "target_criterions", d.TargetCriterions,
-				"kb_change_rate", d.KBChangeRate, "target_kbs", d.TargetKBs)
+			slog.Debug("ecosystem diff done", "ecosystem", eco, "pass", d.Pass, "sources", len(d.Sources))
 			ch <- d
 			return nil
 		})
@@ -226,6 +237,19 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 		results = append(results, d)
 	}
 	return results, nil
+}
+
+// resolveThreshold resolves the change-rate threshold for one
+// (ecosystem, source) pair.
+// Precedence: "<ecosystem>/<source>" override > "<ecosystem>" override > default.
+func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTypes.Ecosystem, sid sourceTypes.SourceID) float64 {
+	if v, ok := overrides[fmt.Sprintf("%s/%s", eco, sid)]; ok {
+		return v
+	}
+	if v, ok := overrides[string(eco)]; ok {
+		return v
+	}
+	return def
 }
 
 // changeRate computes a per-bucket change rate as a percentage:
@@ -264,11 +288,13 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 }
 
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
-// sub-buckets (detection, kb) independently. Either sub-bucket may be absent.
-// Override resolution is the caller's responsibility — this function applies
-// `threshold` verbatim.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, threshold float64) (EcosystemDiff, error) {
+// sub-buckets (detection, kb) independently, accumulating counts per data
+// source. Either sub-bucket may be absent. Per-source thresholds are
+// resolved from overrides via resolveThreshold, falling back to threshold.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
+	agg := make(map[sourceTypes.SourceID]SourceDiff)
+	skipped := make(map[sourceTypes.SourceID]int)
 
 	if err := baselineDB.View(func(btx *bolt.Tx) error {
 		return targetDB.View(func(ttx *bolt.Tx) error {
@@ -282,7 +308,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 			if tEco != nil {
 				tDet = tEco.Bucket([]byte("detection"))
 			}
-			if err := updateDetectionDiff(bDet, tDet, &diff); err != nil {
+			if err := updateDetectionDiff(bDet, tDet, agg, skipped); err != nil {
 				return errors.Wrap(err, "diff detection bucket")
 			}
 
@@ -293,7 +319,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 			if tEco != nil {
 				tKB = tEco.Bucket([]byte("kb"))
 			}
-			if err := updateKBDiff(bKB, tKB, &diff); err != nil {
+			if err := updateKBDiff(bKB, tKB, agg); err != nil {
 				return errors.Wrap(err, "diff kb bucket")
 			}
 
@@ -303,199 +329,234 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		return EcosystemDiff{}, errors.Wrap(err, "diff ecosystem")
 	}
 
-	diff.DetectionChangeRate = changeRate(diff.BaselineCriterions, diff.TargetCriterions, diff.MatchedCriterions)
-	diff.KBChangeRate = changeRate(diff.BaselineKBs, diff.TargetKBs, diff.MatchedKBs)
-	diff.Threshold = threshold
-	diff.Pass = diff.DetectionChangeRate <= threshold && diff.KBChangeRate <= threshold
+	// One aggregated warning per source keeps a widespread extraction bug
+	// from flooding the log with per-root-ID lines.
+	for sid, n := range skipped {
+		slog.Warn("skipped source with no criterions", "ecosystem", ecosystem, "source", sid, "root IDs", n)
+	}
+
+	diff.Sources = make([]SourceDiff, 0, len(agg))
+	for sid, sd := range agg {
+		sd.SourceID = sid
+		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
+		sd.KBChangeRate = changeRate(sd.BaselineKBKeys, sd.TargetKBKeys, sd.MatchedKBs)
+		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
+		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
+		diff.Sources = append(diff.Sources, sd)
+	}
+	diff.Pass = !slices.ContainsFunc(diff.Sources, func(s SourceDiff) bool { return !s.Pass })
 	return diff, nil
 }
 
-// updateDetectionDiff merge-joins two `<ecosystem>/detection` buckets on sorted
-// cursors and fills the Detection-related fields of diff. Either bucket may
-// be nil.
-func updateDetectionDiff(bDet, tDet *bolt.Bucket, diff *EcosystemDiff) error {
-	if bDet == nil && tDet == nil {
+// mergeBuckets walks two buckets in sorted key order, calling visit once per
+// key with the baseline/target values (nil where that side lacks the key).
+// Either bucket may be nil.
+func mergeBuckets(b, t *bolt.Bucket, visit func(key, bv, tv []byte) error) error {
+	switch {
+	case b == nil && t == nil:
 		return nil
+	case b == nil:
+		return t.ForEach(func(k, v []byte) error { return visit(k, nil, v) })
+	case t == nil:
+		return b.ForEach(func(k, v []byte) error { return visit(k, v, nil) })
 	}
 
-	if bDet == nil {
-		return tDet.ForEach(func(k, v []byte) error {
-			diff.TargetKeys++
-			diff.Added = append(diff.Added, string(k))
-			n, err := countCriterions(v)
-			if err != nil {
-				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
+	bc, tc := b.Cursor(), t.Cursor()
+	bk, bv := bc.First()
+	tk, tv := tc.First()
+	for bk != nil || tk != nil {
+		switch {
+		case tk == nil || (bk != nil && bytes.Compare(bk, tk) < 0): // baseline-only key
+			if err := visit(bk, bv, nil); err != nil {
+				return err
 			}
-			diff.TargetCriterions += n
-			return nil
-		})
+			bk, bv = bc.Next()
+		case bk == nil || bytes.Compare(bk, tk) > 0: // target-only key
+			if err := visit(tk, nil, tv); err != nil {
+				return err
+			}
+			tk, tv = tc.Next()
+		default: // key in both
+			if err := visit(bk, bv, tv); err != nil {
+				return err
+			}
+			bk, bv = bc.Next()
+			tk, tv = tc.Next()
+		}
 	}
+	return nil
+}
 
-	if tDet == nil {
-		return bDet.ForEach(func(k, v []byte) error {
-			diff.BaselineKeys++
-			diff.Removed = append(diff.Removed, string(k))
-			n, err := countCriterions(v)
+// updateDetectionDiff walks two `<ecosystem>/detection` buckets in sorted key
+// order and accumulates per-source Detection-related counts into agg. Either
+// bucket may be nil. Sources skipped for having zero criterions are counted
+// in skipped.
+func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
+	err := mergeBuckets(bDet, tDet, func(k, bv, tv []byte) error {
+		switch {
+		case tv == nil: // baseline-only → Removed
+			counts, err := countCriterions(bv)
 			if err != nil {
 				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(k))
 			}
-			diff.BaselineCriterions += n
-			return nil
-		})
-	}
-
-	// Merge-join: both BoltDB cursors iterate in sorted key order.
-	bc := bDet.Cursor()
-	tc := tDet.Cursor()
-
-	bk, bv := bc.First()
-	tk, tv := tc.First()
-
-	for bk != nil || tk != nil {
-		switch c := func() int {
-			if bk == nil {
-				return +1
+			for sid, count := range counts {
+				if count == 0 {
+					// A source with zero criterions can never match — an
+					// extraction bug; skip it (it exists in shipped data,
+					// e.g. fedora-api advisories without packages). The
+					// caller reports the skips in one aggregated warning
+					// per source.
+					skipped[sid]++
+					continue
+				}
+				sd := agg[sid]
+				sd.BaselineKeys++
+				sd.Removed = append(sd.Removed, string(k))
+				sd.BaselineCriterions += count
+				agg[sid] = sd
 			}
-			if tk == nil {
-				return -1
-			}
-			return bytes.Compare(bk, tk)
-		}(); c {
-		case -1: // baseline-only → Removed
-			diff.BaselineKeys++
-			diff.Removed = append(diff.Removed, string(bk))
-			n, err := countCriterions(bv)
+		case bv == nil: // target-only → Added
+			counts, err := countCriterions(tv)
 			if err != nil {
-				return errors.Wrapf(err, "count criterions for baseline. root ID: %s", string(bk))
+				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(k))
 			}
-			diff.BaselineCriterions += n
-			bk, bv = bc.Next()
-		case +1: // target-only → Added
-			diff.TargetKeys++
-			diff.Added = append(diff.Added, string(tk))
-			n, err := countCriterions(tv)
+			for sid, count := range counts {
+				if count == 0 {
+					// See the zero-criterion note above.
+					skipped[sid]++
+					continue
+				}
+				sd := agg[sid]
+				sd.TargetKeys++
+				sd.Added = append(sd.Added, string(k))
+				sd.TargetCriterions += count
+				agg[sid] = sd
+			}
+		default: // key in both → compare per source
+			tallies, err := compareCriterions(bv, tv)
 			if err != nil {
-				return errors.Wrapf(err, "count criterions for target. root ID: %s", string(tk))
+				return errors.Wrapf(err, "compare criterions for root ID: %s", string(k))
 			}
-			diff.TargetCriterions += n
-			tk, tv = tc.Next()
-		case 0: // both present → compare
-			diff.BaselineKeys++
-			diff.TargetKeys++
-			base, target, matched, err := compareCriterions(bv, tv)
-			if err != nil {
-				return errors.Wrapf(err, "compare criterions for root ID: %s", string(bk))
+			for sid, t := range tallies {
+				if t.Baseline == 0 && t.Target == 0 {
+					// Present on at least one side but with zero units on
+					// both — see the zero-criterion note above.
+					skipped[sid]++
+					continue
+				}
+				sd := agg[sid]
+				if t.Baseline > 0 {
+					sd.BaselineKeys++
+					sd.BaselineCriterions += t.Baseline
+				}
+				if t.Target > 0 {
+					sd.TargetKeys++
+					sd.TargetCriterions += t.Target
+				}
+				sd.MatchedCriterions += t.Matched
+				switch {
+				case t.Baseline > 0 && t.Target > 0:
+					if t.Matched < t.Baseline || t.Matched < t.Target {
+						sd.Changed = append(sd.Changed, string(k))
+					}
+				case t.Baseline > 0:
+					sd.Removed = append(sd.Removed, string(k))
+				case t.Target > 0:
+					sd.Added = append(sd.Added, string(k))
+				}
+				agg[sid] = sd
 			}
-			diff.BaselineCriterions += base
-			diff.TargetCriterions += target
-			diff.MatchedCriterions += matched
-			if matched < base || matched < target {
-				diff.Changed = append(diff.Changed, string(bk))
-			}
-			bk, bv = bc.Next()
-			tk, tv = tc.Next()
-		default:
-			return errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, c)
 		}
-	}
-
-	return nil
-}
-
-// updateKBDiff merge-joins two `<ecosystem>/kb` buckets on sorted cursors and
-// fills the KB-related fields of diff. Either bucket may be nil.
-func updateKBDiff(bKB, tKB *bolt.Bucket, diff *EcosystemDiff) error {
-	if bKB == nil && tKB == nil {
 		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "merge detection buckets")
 	}
-
-	if bKB == nil {
-		return tKB.ForEach(func(k, v []byte) error {
-			diff.TargetKBKeys++
-			diff.AddedKBs = append(diff.AddedKBs, string(k))
-			n, err := countKBs(v)
-			if err != nil {
-				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(k))
-			}
-			diff.TargetKBs += n
-			return nil
-		})
-	}
-
-	if tKB == nil {
-		return bKB.ForEach(func(k, v []byte) error {
-			diff.BaselineKBKeys++
-			diff.RemovedKBs = append(diff.RemovedKBs, string(k))
-			n, err := countKBs(v)
-			if err != nil {
-				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(k))
-			}
-			diff.BaselineKBs += n
-			return nil
-		})
-	}
-
-	bc := bKB.Cursor()
-	tc := tKB.Cursor()
-
-	bk, bv := bc.First()
-	tk, tv := tc.First()
-
-	for bk != nil || tk != nil {
-		switch c := func() int {
-			if bk == nil {
-				return +1
-			}
-			if tk == nil {
-				return -1
-			}
-			return bytes.Compare(bk, tk)
-		}(); c {
-		case -1:
-			diff.BaselineKBKeys++
-			diff.RemovedKBs = append(diff.RemovedKBs, string(bk))
-			n, err := countKBs(bv)
-			if err != nil {
-				return errors.Wrapf(err, "count KBs for baseline. KB ID: %s", string(bk))
-			}
-			diff.BaselineKBs += n
-			bk, bv = bc.Next()
-		case +1:
-			diff.TargetKBKeys++
-			diff.AddedKBs = append(diff.AddedKBs, string(tk))
-			n, err := countKBs(tv)
-			if err != nil {
-				return errors.Wrapf(err, "count KBs for target. KB ID: %s", string(tk))
-			}
-			diff.TargetKBs += n
-			tk, tv = tc.Next()
-		case 0:
-			diff.BaselineKBKeys++
-			diff.TargetKBKeys++
-			base, target, matched, err := compareKBs(bv, tv)
-			if err != nil {
-				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(bk))
-			}
-			diff.BaselineKBs += base
-			diff.TargetKBs += target
-			diff.MatchedKBs += matched
-			if matched < base || matched < target {
-				diff.ChangedKBs = append(diff.ChangedKBs, string(bk))
-			}
-			bk, bv = bc.Next()
-			tk, tv = tc.Next()
-		default:
-			return errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, c)
-		}
-	}
-
 	return nil
 }
 
-// compareCriterions structurally compares detection data at the Criterion (leaf) level.
-// It flattens the criteria tree in each condition to extract all criterions,
-// then uses Sort + Compare merge-join to count how many baseline criterions
-// have an identical match in the target.
+// updateKBDiff walks two `<ecosystem>/kb` buckets in sorted key order and
+// accumulates per-source KB-related counts into agg. Either bucket may be
+// nil.
+func updateKBDiff(bKB, tKB *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff) error {
+	err := mergeBuckets(bKB, tKB, func(k, bv, tv []byte) error {
+		switch {
+		case tv == nil: // baseline-only → Removed
+			sids, err := kbSources(bv)
+			if err != nil {
+				return errors.Wrapf(err, "collect KB sources for baseline. KB ID: %s", string(k))
+			}
+			for _, sid := range sids {
+				sd := agg[sid]
+				sd.BaselineKBKeys++
+				sd.RemovedKBs = append(sd.RemovedKBs, string(k))
+				agg[sid] = sd
+			}
+		case bv == nil: // target-only → Added
+			sids, err := kbSources(tv)
+			if err != nil {
+				return errors.Wrapf(err, "collect KB sources for target. KB ID: %s", string(k))
+			}
+			for _, sid := range sids {
+				sd := agg[sid]
+				sd.TargetKBKeys++
+				sd.AddedKBs = append(sd.AddedKBs, string(k))
+				agg[sid] = sd
+			}
+		default: // key in both → compare per source
+			tallies, err := compareKBs(bv, tv)
+			if err != nil {
+				return errors.Wrapf(err, "compare KBs for KB ID: %s", string(k))
+			}
+			for sid, t := range tallies {
+				sd := agg[sid]
+				if t.Baseline > 0 {
+					sd.BaselineKBKeys++
+				}
+				if t.Target > 0 {
+					sd.TargetKBKeys++
+				}
+				sd.MatchedKBs += t.Matched
+				switch {
+				case t.Baseline > 0 && t.Target > 0:
+					if t.Matched < t.Baseline || t.Matched < t.Target {
+						sd.ChangedKBs = append(sd.ChangedKBs, string(k))
+					}
+				case t.Baseline > 0:
+					sd.RemovedKBs = append(sd.RemovedKBs, string(k))
+				case t.Target > 0:
+					sd.AddedKBs = append(sd.AddedKBs, string(k))
+				}
+				agg[sid] = sd
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "merge kb buckets")
+	}
+	return nil
+}
+
+// tally tallies the units of a single key compared between baseline and
+// target, for one source. A unit is the smallest compared element feeding
+// the change rate: a leaf criterion (with its operator path) for the
+// detection bucket, and a per-source KB record (0/1 per KB ID) for the kb
+// bucket. A non-zero count doubles as presence: a source that appears in a
+// value map with zero units cannot ever match — an extraction bug (e.g.
+// fedora-api advisories without packages) — and is skipped with a warning
+// by the accumulation sites, so Baseline > 0 effectively means the source
+// is present and usable in baseline (likewise for Target).
+type tally struct {
+	Baseline int
+	Target   int
+	Matched  int
+}
+
+// compareCriterions structurally compares detection data at the Criterion (leaf) level,
+// per data source. It flattens the criteria tree in each condition to extract
+// all criterions, then uses Sort + Compare merge-join to count how many
+// baseline criterions have an identical match in the target.
 //
 // The comparison is structural, not semantic: each leaf criterion is annotated
 // with the operator path from the root Criteria down to its parent, so
@@ -505,23 +566,15 @@ func updateKBDiff(bKB, tKB *bolt.Bucket, diff *EcosystemDiff) error {
 // tree structure for a given data source version, so structural changes always
 // indicate an upstream data change worth surfacing.
 //
-// Returns (baselineCount, targetCount, matchedCount).
-func compareCriterions(baselineData, targetData []byte) (baseline, target, matched int, _ error) {
+// Returns a per-source tally over the union of source IDs in both sides, so
+// new/removed sources contribute to their own change rate.
+func compareCriterions(baselineData, targetData []byte) (map[sourceTypes.SourceID]tally, error) {
 	var bm, tm map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
-		return 0, 0, 0, errors.Wrap(err, "unmarshal baseline criterions")
+		return nil, errors.Wrap(err, "unmarshal baseline criterions")
 	}
 	if err := json.Unmarshal(targetData, &tm); err != nil {
-		return 0, 0, 0, errors.Wrap(err, "unmarshal target criterions")
-	}
-
-	// Iterate over union of source IDs so new/removed sources contribute to change rate.
-	srcs := make(map[sourceTypes.SourceID]struct{}, len(bm))
-	for src := range bm {
-		srcs[src] = struct{}{}
-	}
-	for src := range tm {
-		srcs[src] = struct{}{}
+		return nil, errors.Wrap(err, "unmarshal target criterions")
 	}
 
 	flattenAndSort := func(conds []conditionTypes.Condition) []annotatedCriterion {
@@ -536,31 +589,40 @@ func compareCriterions(baselineData, targetData []byte) (baseline, target, match
 		return cns
 	}
 
-	for src := range srcs {
-		bCns := flattenAndSort(bm[src])
-		tCns := flattenAndSort(tm[src])
+	tallies := make(map[sourceTypes.SourceID]tally, max(len(bm), len(tm)))
+	for sid := range bm {
+		tallies[sid] = tally{}
+	}
+	for sid := range tm {
+		tallies[sid] = tally{}
+	}
 
-		baseline += len(bCns)
-		target += len(tCns)
+	for sid, t := range tallies {
+		bCns := flattenAndSort(bm[sid])
+		tCns := flattenAndSort(tm[sid])
+
+		t.Baseline = len(bCns)
+		t.Target = len(tCns)
 
 		// Merge-join on sorted annotated criterions
 		bi, ti := 0, 0
 		for bi < len(bCns) && ti < len(tCns) {
-			switch c := compareAnnotated(bCns[bi], tCns[ti]); c {
+			switch cr := compareAnnotated(bCns[bi], tCns[ti]); cr {
 			case -1:
 				bi++
 			case +1:
 				ti++
 			case 0:
-				matched++
+				t.Matched++
 				bi++
 				ti++
 			default:
-				return 0, 0, 0, errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, c)
+				return nil, errors.Errorf("unexpected compare result. expected: %v, actual: %d", []int{-1, 0, +1}, cr)
 			}
 		}
+		tallies[sid] = t
 	}
-	return baseline, target, matched, nil
+	return tallies, nil
 }
 
 // annotatedCriterion pairs a leaf Criterion with the operator path from the
@@ -593,22 +655,30 @@ func walkCriteria(c criteriaTypes.Criteria, opPath []criteriaTypes.CriteriaOpera
 	return out
 }
 
-// countCriterions unmarshals detection data and returns the total leaf criterion count.
-func countCriterions(data []byte) (int, error) {
+// countCriterions unmarshals detection data and returns the leaf criterion
+// count per source. Every source ID present in the value map appears as a
+// key, even with a zero count — callers skip zero-count sources with a
+// warning (see updateDetectionDiff). A zero-length value is an error: the
+// writer always stores marshaled JSON and reads elsewhere treat empty as
+// not-found, so silently skipping it here would let the guard pass over
+// corrupt data.
+func countCriterions(data []byte) (map[sourceTypes.SourceID]int, error) {
 	if len(data) == 0 {
-		return 0, nil
+		return nil, errors.New("unexpected zero-length detection value")
 	}
 	var m map[sourceTypes.SourceID][]conditionTypes.Condition
 	if err := json.Unmarshal(data, &m); err != nil {
-		return 0, errors.Wrap(err, "unmarshal detection data")
+		return nil, errors.Wrap(err, "unmarshal detection data")
 	}
-	n := 0
-	for _, conds := range m {
+	ns := make(map[sourceTypes.SourceID]int, len(m))
+	for sid, conds := range m {
+		n := 0
 		for _, c := range conds {
 			n += countLeafCriterions(c.Criteria)
 		}
+		ns[sid] = n
 	}
-	return n, nil
+	return ns, nil
 }
 
 // countLeafCriterions recursively counts leaf Criterions in the criteria tree.
@@ -620,45 +690,50 @@ func countLeafCriterions(c criteriaTypes.Criteria) int {
 	return n
 }
 
-// compareKBs structurally compares KB data at the (KB ID × source ID) pair level.
-// The input bytes are the marshaled value of `<ecosystem>/kb/<KB ID>`, i.e. a
-// map[sourceTypes.SourceID]microsoftkbTypes.KB. Returns per-source counts:
-// (baselineCount, targetCount, matchedCount).
-func compareKBs(baselineData, targetData []byte) (baseline, target, matched int, _ error) {
+// compareKBs structurally compares KB data per data source. The input bytes
+// are the marshaled value of `<ecosystem>/kb/<KB ID>`, i.e. a
+// map[sourceTypes.SourceID]microsoftkbTypes.KB. Per-source tallies are 0/1
+// per KB ID.
+func compareKBs(baselineData, targetData []byte) (map[sourceTypes.SourceID]tally, error) {
 	var bm, tm map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(baselineData, &bm); err != nil {
-		return 0, 0, 0, errors.Wrap(err, "unmarshal baseline KBs")
+		return nil, errors.Wrap(err, "unmarshal baseline KBs")
 	}
 	if err := json.Unmarshal(targetData, &tm); err != nil {
-		return 0, 0, 0, errors.Wrap(err, "unmarshal target KBs")
+		return nil, errors.Wrap(err, "unmarshal target KBs")
 	}
 
-	baseline = len(bm)
-	target = len(tm)
-
-	for src, bKB := range bm {
-		tKB, ok := tm[src]
-		if !ok {
-			continue
+	tallies := make(map[sourceTypes.SourceID]tally, max(len(bm), len(tm)))
+	for sid, bKB := range bm {
+		t := tally{Baseline: 1}
+		if tKB, ok := tm[sid]; ok {
+			bKB.Sort()
+			tKB.Sort()
+			if microsoftkbTypes.Compare(bKB, tKB) == 0 {
+				t.Matched = 1
+			}
 		}
-		bKB.Sort()
-		tKB.Sort()
-		if microsoftkbTypes.Compare(bKB, tKB) == 0 {
-			matched++
-		}
+		tallies[sid] = t
 	}
-	return baseline, target, matched, nil
+	for sid := range tm {
+		t := tallies[sid]
+		t.Target = 1
+		tallies[sid] = t
+	}
+	return tallies, nil
 }
 
-// countKBs unmarshals KB data and returns the number of (KB ID × source ID)
-// pairs it contributes (i.e. len of the source map).
-func countKBs(data []byte) (int, error) {
+// kbSources unmarshals KB data and returns the source IDs present in the
+// value map — a source stores at most one KB record per KB ID, so only the
+// key set is meaningful. A zero-length value is an error for the same reason
+// as in countCriterions.
+func kbSources(data []byte) ([]sourceTypes.SourceID, error) {
 	if len(data) == 0 {
-		return 0, nil
+		return nil, errors.New("unexpected zero-length KB value")
 	}
 	var m map[sourceTypes.SourceID]microsoftkbTypes.KB
 	if err := json.Unmarshal(data, &m); err != nil {
-		return 0, errors.Wrap(err, "unmarshal KB data")
+		return nil, errors.Wrap(err, "unmarshal KB data")
 	}
-	return len(m), nil
+	return slices.Collect(maps.Keys(m)), nil
 }
