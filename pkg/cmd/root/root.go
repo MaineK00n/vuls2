@@ -3,6 +3,7 @@ package root
 import (
 	"github.com/spf13/cobra"
 
+	dataCmd "github.com/MaineK00n/vuls2/pkg/cmd/data"
 	dbCmd "github.com/MaineK00n/vuls2/pkg/cmd/db"
 	detectCmd "github.com/MaineK00n/vuls2/pkg/cmd/detect"
 	diffCmd "github.com/MaineK00n/vuls2/pkg/cmd/diff"
@@ -21,6 +22,7 @@ func NewCmdRoot() *cobra.Command {
 
 	cmd.AddCommand(
 		dbCmd.NewCmd(),
+		dataCmd.NewCmd(),
 		scanCmd.NewCmd(),
 		detectCmd.NewCmd(),
 		diffCmd.NewCmd(),
