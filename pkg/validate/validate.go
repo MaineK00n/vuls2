@@ -142,20 +142,28 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	// content kinds that have file-level checks selected and are actually
 	// present — with no per-file checks there is nothing to read.
 	var paths []string
-	if dir := filepath.Join(root, "data"); len(checks) > 0 && func() bool {
-		info, err := os.Stat(dir)
-		return err == nil && info.IsDir()
-	}() {
-		if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
+	if len(checks) > 0 {
+		dir := filepath.Join(root, "data")
+		switch info, err := os.Stat(dir); {
+		case err == nil && info.IsDir():
+			if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if !d.IsDir() && filepath.Ext(path) == ".json" {
+					paths = append(paths, path)
+				}
+				return nil
+			}); err != nil {
+				return nil, errors.Wrapf(err, "walk %s", dir)
 			}
-			if !d.IsDir() && filepath.Ext(path) == ".json" {
-				paths = append(paths, path)
-			}
-			return nil
-		}); err != nil {
-			return nil, errors.Wrapf(err, "walk %s", dir)
+		case err != nil && !errors.Is(err, fs.ErrNotExist):
+			// A stat error other than absence (permission, IO) must not
+			// yield a false clean result; db add treats it as fatal too.
+			return nil, errors.Wrapf(err, "stat %s", dir)
+		default:
+			// Absent, or present but not a directory — both are the layout
+			// check's findings, not a walk target.
 		}
 	}
 
