@@ -86,8 +86,12 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		return nil, errors.Wrap(err, "resolve checks")
 	}
 
-	if _, err := os.Stat(root); err != nil {
+	info, err := os.Stat(root)
+	if err != nil {
 		return nil, errors.Wrapf(err, "stat %s", root)
+	}
+	if !info.IsDir() {
+		return nil, errors.Errorf("%s is not a directory", root)
 	}
 
 	dir := filepath.Join(root, "data")

@@ -145,3 +145,13 @@ func TestValidate(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateRootIsFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(f, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Validate(f); err == nil {
+		t.Error("Validate() error = nil, want error for non-directory root")
+	}
+}
