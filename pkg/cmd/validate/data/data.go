@@ -1,4 +1,4 @@
-package validate
+package data
 
 import (
 	"encoding/json/v2"
@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/MaineK00n/vuls2/pkg/data/validate"
+	validate "github.com/MaineK00n/vuls2/pkg/validate/data"
 )
 
 func NewCmd() *cobra.Command {
@@ -25,11 +25,11 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "validate <extracted repository>",
+		Use:   "data <extracted repository>",
 		Short: "validate extracted data semantically",
 		Example: heredoc.Doc(`
-		$ vuls data validate vuls-data-extracted-nvd-api-cve
-		$ vuls data validate --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-redhat-ovalv2
+		$ vuls validate data vuls-data-extracted-nvd-api-cve
+		$ vuls validate data --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-redhat-ovalv2
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
