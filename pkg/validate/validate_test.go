@@ -1,15 +1,20 @@
-package data
+package validate
 
 import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
 func TestValidate(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "data", "2024"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "datasource.json"), []byte(`{"id": "test"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -129,13 +134,14 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("no data directory", func(t *testing.T) {
+	t.Run("empty repository", func(t *testing.T) {
 		findings, err := Validate(t.TempDir())
 		if err != nil {
 			t.Fatalf("Validate() error = %v", err)
 		}
-		if len(findings) != 0 {
-			t.Errorf("Validate() = %+v, want no findings", findings)
+		// missing datasource.json + no content directory
+		if len(findings) != 2 || findings[0].Check != "layout" || findings[1].Check != "layout" {
+			t.Errorf("Validate() = %+v, want 2 layout findings", findings)
 		}
 	})
 
@@ -184,6 +190,9 @@ func TestValidateFindingLines(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "datasource.json"), []byte(`{"id": "test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// line numbers below are load-bearing: the orphan segment element opens
 	// on line 7.
 	if err := os.WriteFile(filepath.Join(root, "data", "CVE-2024-0004.json"), []byte(`{
@@ -217,7 +226,37 @@ func TestValidateDataIsFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "data"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Validate(root); err == nil {
-		t.Error("Validate() error = nil, want error when data is not a directory")
+	findings, err := Validate(root, WithChecks([]string{"layout"}))
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if !slices.ContainsFunc(findings, func(f Finding) bool {
+		return f.Check == "layout" && f.Path == "data" && strings.Contains(f.Message, "not a directory")
+	}) {
+		t.Errorf("Validate() = %+v, want a layout finding for data not being a directory", findings)
+	}
+}
+
+func TestDetectLayout(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"data", "microsoftkb", ".git", "unknown-dir"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"datasource.json", "README.md"} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	findings, err := detectLayout(root)
+	if err != nil {
+		t.Fatalf("detectLayout() error = %v", err)
+	}
+	// data + microsoftkb coexisting is legitimate (microsoft-bulletin/cvrf);
+	// only the unknown entry must be reported.
+	if len(findings) != 1 || findings[0].Path != "unknown-dir" {
+		t.Errorf("detectLayout() = %+v, want exactly 1 finding for unknown-dir", findings)
 	}
 }

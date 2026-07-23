@@ -1,4 +1,4 @@
-package data
+package validate
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -39,9 +38,25 @@ type Detected struct {
 	Message string
 }
 
-// Checks returns the registered check table.
+// Checks returns the registered per-file check table for the data content
+// directory.
 func Checks() []Check {
 	return []Check{cpePVPCheck, emptyCriteriaCheck, orphanSegmentCheck}
+}
+
+// RepositoryCheck is one rule evaluated against the repository as a whole
+// (its top-level layout) rather than a single data file. Detect fills
+// Finding.Path/Message itself; Check and Line handling stay with the
+// framework conventions (repository findings carry no line).
+type RepositoryCheck struct {
+	Name        string
+	Description string
+	Detect      func(root string) ([]Finding, error)
+}
+
+// RepositoryChecks returns the registered repository-level check table.
+func RepositoryChecks() []RepositoryCheck {
+	return []RepositoryCheck{layoutCheck}
 }
 
 // Finding is one semantic violation found in an extracted data file. Line
@@ -86,9 +101,12 @@ func WithConcurrency(concurrency int) Option {
 	return concurrencyOption(concurrency)
 }
 
-// Validate walks the extracted data repository under root and runs the
-// selected semantic checks against every data/**/*.json file. Findings are
-// returned sorted by (Path, Check, Message, Line).
+// Validate runs the selected checks against the extracted repository under
+// root: repository-level checks against its top-level layout, and per-file
+// semantic checks against every data/**/*.json file when the data content
+// directory is present. Content directories are auto-detected — callers
+// never say which kinds the repository carries. Findings are returned
+// sorted by (Path, Check, Message, Line).
 func Validate(root string, opts ...Option) ([]Finding, error) {
 	options := &options{
 		concurrency: runtime.NumCPU(),
@@ -97,7 +115,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		o.apply(options)
 	}
 
-	checks, err := resolveChecks(options.checks)
+	checks, repoChecks, err := resolveChecks(options.checks)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve checks")
 	}
@@ -110,34 +128,37 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		return nil, errors.Errorf("%s is not a directory", root)
 	}
 
-	dir := filepath.Join(root, "data")
-	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
-		return nil, errors.Errorf("%s is not a directory", dir)
-	} else if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			slog.Warn("no data directory. nothing to validate", "dir", dir)
-			return nil, nil
-		}
-		return nil, errors.Wrapf(err, "stat %s", dir)
-	}
-
-	var paths []string
-	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	var findings []Finding
+	for _, c := range repoChecks {
+		repoFindings, err := c.Detect(root)
 		if err != nil {
-			return err
+			return nil, errors.Wrapf(err, "detect %s", c.Name)
 		}
-		if !d.IsDir() && filepath.Ext(path) == ".json" {
-			paths = append(paths, path)
-		}
-		return nil
-	}); err != nil {
-		return nil, errors.Wrapf(err, "walk %s", dir)
+		findings = append(findings, repoFindings...)
 	}
 
-	var (
-		findings []Finding
-		mu       sync.Mutex
-	)
+	// Layout problems (a content name that is not a directory, unknown
+	// entries, ...) are reported above; the per-file walk only covers the
+	// content kinds that have file-level checks and are actually present.
+	var paths []string
+	if dir := filepath.Join(root, "data"); func() bool {
+		info, err := os.Stat(dir)
+		return err == nil && info.IsDir()
+	}() {
+		if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && filepath.Ext(path) == ".json" {
+				paths = append(paths, path)
+			}
+			return nil
+		}); err != nil {
+			return nil, errors.Wrapf(err, "walk %s", dir)
+		}
+	}
+
+	var mu sync.Mutex
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(max(options.concurrency, 1))
 	for _, path := range paths {
@@ -173,27 +194,38 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	return findings, nil
 }
 
-func resolveChecks(names []string) ([]Check, error) {
-	all := Checks()
+func resolveChecks(names []string) ([]Check, []RepositoryCheck, error) {
+	all, allRepo := Checks(), RepositoryChecks()
 	if len(names) == 0 {
-		return all, nil
+		return all, allRepo, nil
 	}
 
 	checks := make([]Check, 0, len(names))
+	repoChecks := make([]RepositoryCheck, 0, len(names))
 	for _, name := range names {
-		i := slices.IndexFunc(all, func(c Check) bool { return c.Name == name })
-		if i < 0 {
-			accepted := make([]string, 0, len(all))
-			for _, c := range all {
-				accepted = append(accepted, c.Name)
+		switch i := slices.IndexFunc(all, func(c Check) bool { return c.Name == name }); {
+		case i >= 0:
+			if !slices.ContainsFunc(checks, func(c Check) bool { return c.Name == name }) {
+				checks = append(checks, all[i])
 			}
-			return nil, errors.Errorf("unknown check %q. accepts: %q", name, accepted)
-		}
-		if !slices.ContainsFunc(checks, func(c Check) bool { return c.Name == name }) {
-			checks = append(checks, all[i])
+		default:
+			j := slices.IndexFunc(allRepo, func(c RepositoryCheck) bool { return c.Name == name })
+			if j < 0 {
+				accepted := make([]string, 0, len(all)+len(allRepo))
+				for _, c := range all {
+					accepted = append(accepted, c.Name)
+				}
+				for _, c := range allRepo {
+					accepted = append(accepted, c.Name)
+				}
+				return nil, nil, errors.Errorf("unknown check %q. accepts: %q", name, accepted)
+			}
+			if !slices.ContainsFunc(repoChecks, func(c RepositoryCheck) bool { return c.Name == name }) {
+				repoChecks = append(repoChecks, allRepo[j])
+			}
 		}
 	}
-	return checks, nil
+	return checks, repoChecks, nil
 }
 
 func validateFile(root, path string, checks []Check) ([]Finding, error) {
