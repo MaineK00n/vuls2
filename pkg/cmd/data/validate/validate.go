@@ -33,6 +33,12 @@ func NewCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			switch options.format {
+			case "text", "json":
+			default:
+				return errors.Errorf("unexpected format. expected: %q, actual: %q", []string{"text", "json"}, options.format)
+			}
+
 			findings, err := validate.Validate(args[0], validate.WithChecks(options.checks), validate.WithConcurrency(options.concurrency))
 			if err != nil {
 				return errors.Wrap(err, "data validate")
@@ -48,8 +54,6 @@ func NewCmd() *cobra.Command {
 						return errors.Wrap(err, "marshal finding")
 					}
 					fmt.Printf("%s\n", bs)
-				default:
-					return errors.Errorf("unexpected format. expected: %q, actual: %q", []string{"text", "json"}, options.format)
 				}
 			}
 

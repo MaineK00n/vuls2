@@ -120,13 +120,13 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	g.SetLimit(max(options.concurrency, 1))
 	for _, path := range paths {
 		g.Go(func() error {
-			fs, err := validateFile(root, path, checks)
+			fileFindings, err := validateFile(root, path, checks)
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
 			}
-			if len(fs) > 0 {
+			if len(fileFindings) > 0 {
 				mu.Lock()
-				findings = append(findings, fs...)
+				findings = append(findings, fileFindings...)
 				mu.Unlock()
 			}
 			return nil
