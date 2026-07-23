@@ -59,7 +59,7 @@ func detectLayout(root string) ([]Finding, error) {
 	}
 
 	if contents == 0 {
-		add("", fmt.Sprintf("no content directory (expected at least one of: %s)", strings.Join(contentDirs, ", ")))
+		add(".", fmt.Sprintf("no content directory (expected at least one of: %s)", strings.Join(contentDirs, ", ")))
 	}
 
 	return findings, nil

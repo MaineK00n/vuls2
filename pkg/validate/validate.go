@@ -139,9 +139,10 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 
 	// Layout problems (a content name that is not a directory, unknown
 	// entries, ...) are reported above; the per-file walk only covers the
-	// content kinds that have file-level checks and are actually present.
+	// content kinds that have file-level checks selected and are actually
+	// present — with no per-file checks there is nothing to read.
 	var paths []string
-	if dir := filepath.Join(root, "data"); func() bool {
+	if dir := filepath.Join(root, "data"); len(checks) > 0 && func() bool {
 		info, err := os.Stat(dir)
 		return err == nil && info.IsDir()
 	}() {
