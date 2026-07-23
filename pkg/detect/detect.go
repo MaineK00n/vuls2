@@ -15,6 +15,8 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	warningTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/warning"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -243,6 +245,13 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 		detected[rootID] = base
 	}
 
+	// Aggregate the evaluation warnings recorded on the FilteredCriteria
+	// trees before the affected gate below prunes not-affected conditions —
+	// an unevaluable criterion contributes "not affected", so its condition
+	// is exactly the kind the gate drops, and collecting afterwards would
+	// silently lose the recorded skips.
+	warnings := collectWarnings(detected)
+
 	// util.Detect now passes every condition through unconditionally, so
 	// apply the per-condition Affected gate here for the default consumer
 	// path. Conditions whose FilteredCriteria evaluates as not-affected are
@@ -308,6 +317,7 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 
 		Detected:    slices.Collect(maps.Values(detected)),
 		DataSources: datasources,
+		Warnings:    warnings,
 
 		DetectedAt: time.Now(),
 		DetectedBy: version.String(),
@@ -321,6 +331,37 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 // ospkg.Detect / cpe.Detect / util.Detect that want to apply different
 // filtering rules (e.g. ecosystem-specific relaxation) can do so without
 // being short-circuited upstream.
+// collectWarnings gathers the non-fatal evaluation warnings recorded on every
+// FilteredCriterion across the detection results, deduplicated and in
+// warning.Compare order for deterministic output.
+func collectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warningTypes.Warning {
+	var ws []warningTypes.Warning
+	var walk func(fca criteriaTypes.FilteredCriteria)
+	walk = func(fca criteriaTypes.FilteredCriteria) {
+		for _, ca := range fca.Criterias {
+			walk(ca)
+		}
+		for _, cn := range fca.Criterions {
+			for _, w := range cn.Warnings {
+				if !slices.Contains(ws, w) {
+					ws = append(ws, w)
+				}
+			}
+		}
+	}
+	for _, data := range detected {
+		for _, d := range data.Detections {
+			for _, conds := range d.Contents {
+				for _, cond := range conds {
+					walk(cond.Criteria)
+				}
+			}
+		}
+	}
+	slices.SortFunc(ws, warningTypes.Compare)
+	return ws
+}
+
 func filterAffected(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) (map[dataTypes.RootID]detectTypes.VulnerabilityData, error) {
 	out := make(map[dataTypes.RootID]detectTypes.VulnerabilityData, len(detected))
 	for rootID, data := range detected {

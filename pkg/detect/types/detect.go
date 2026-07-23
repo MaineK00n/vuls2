@@ -5,6 +5,7 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	warningTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/warning"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -18,6 +19,15 @@ type DetectResult struct {
 
 	Detected    []VulnerabilityData          `json:"detected,omitempty"`
 	DataSources []datasourceTypes.DataSource `json:"datasources,omitempty"`
+
+	// Warnings aggregates the non-fatal evaluation warnings recorded on the
+	// FilteredCriteria trees (e.g. enum values this build could not evaluate
+	// — data from a newer vuls-data-update), deduplicated across the whole
+	// result. It is collected before the affected gate prunes not-affected
+	// conditions, so a skip stays observable even when the condition carrying
+	// it is dropped from Detected. Consumers (e.g. vuls0's ScanResult
+	// warnings) can surface these without walking the trees.
+	Warnings []warningTypes.Warning `json:"warnings,omitempty"`
 
 	DetectedAt time.Time `json:"detected_at,omitzero"`
 	DetectedBy string    `json:"detected_by,omitempty"`
