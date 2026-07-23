@@ -166,6 +166,9 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			break
 		}
 		g.Go(func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			fileFindings, err := validateFile(root, path, checks)
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
