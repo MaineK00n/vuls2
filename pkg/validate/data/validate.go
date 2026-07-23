@@ -249,6 +249,10 @@ func resolveLines(bs []byte, pointers []string) map[string]int {
 
 	lines := make(map[string]int, len(wanted))
 	dec := jsontext.NewDecoder(bytes.NewReader(bs))
+	// The decoder advances monotonically, so the line counter is carried
+	// incrementally between matches; every byte is scanned exactly once
+	// regardless of how many pointers resolve.
+	line, counted := 1, int64(0)
 	for len(lines) < len(wanted) {
 		if _, err := dec.ReadToken(); err != nil {
 			// io.EOF, or a malformed tail that Unmarshal tolerated; report
@@ -263,7 +267,9 @@ func resolveLines(bs []byte, pointers []string) map[string]int {
 			continue
 		}
 		offset := min(dec.InputOffset(), int64(len(bs)))
-		lines[ptr] = 1 + bytes.Count(bs[:offset], []byte("\n"))
+		line += bytes.Count(bs[counted:offset], []byte("\n"))
+		counted = offset
+		lines[ptr] = line
 	}
 	return lines
 }
