@@ -132,7 +132,7 @@ func TestDetectCPEPVP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := detectCPEPVP(tt.data); len(got) != tt.want {
-				t.Errorf("detectCPEPVP() = %q, want %d finding(s)", got, tt.want)
+				t.Errorf("detectCPEPVP() = %+v, want %d finding(s)", got, tt.want)
 			}
 		})
 	}

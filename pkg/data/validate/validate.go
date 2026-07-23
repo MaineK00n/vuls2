@@ -1,9 +1,12 @@
 package validate
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -24,7 +27,16 @@ import (
 type Check struct {
 	Name        string
 	Description string
-	Detect      func(data dataTypes.Data) []string
+	Detect      func(data dataTypes.Data) []Detected
+}
+
+// Detected is one violation reported by a Check. Pointer addresses the
+// offending element within the file as an RFC 6901 JSON pointer (e.g.
+// /advisories/0/segments/2); it is resolved to a line number by the
+// framework and never leaves this package.
+type Detected struct {
+	Pointer string
+	Message string
 }
 
 // Checks returns the registered check table.
@@ -32,9 +44,12 @@ func Checks() []Check {
 	return []Check{cpePVPCheck, emptyCriteriaCheck, orphanSegmentCheck}
 }
 
-// Finding is one semantic violation found in an extracted data file.
+// Finding is one semantic violation found in an extracted data file. Line
+// is the 1-based line number of the offending element (0 when it could not
+// be resolved).
 type Finding struct {
 	Path    string           `json:"path"`
+	Line    int              `json:"line,omitempty"`
 	ID      dataTypes.RootID `json:"id,omitempty"`
 	Check   string           `json:"check"`
 	Message string           `json:"message"`
@@ -149,6 +164,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			cmp.Compare(x.Path, y.Path),
 			cmp.Compare(x.Check, y.Check),
 			cmp.Compare(x.Message, y.Message),
+			cmp.Compare(x.Line, y.Line),
 		)
 	})
 
@@ -179,14 +195,13 @@ func resolveChecks(names []string) ([]Check, error) {
 }
 
 func validateFile(root, path string, checks []Check) ([]Finding, error) {
-	f, err := os.Open(path)
+	bs, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "open %s", path)
+		return nil, errors.Wrapf(err, "read %s", path)
 	}
-	defer f.Close()
 
 	var data dataTypes.Data
-	if err := json.UnmarshalRead(f, &data); err != nil {
+	if err := json.Unmarshal(bs, &data); err != nil {
 		return nil, errors.Wrapf(err, "unmarshal %s", path)
 	}
 
@@ -195,26 +210,71 @@ func validateFile(root, path string, checks []Check) ([]Finding, error) {
 		rel = path
 	}
 
-	var findings []Finding
+	var (
+		findings []Finding
+		pointers []string
+	)
 	for _, c := range checks {
-		for _, m := range c.Detect(data) {
+		for _, d := range c.Detect(data) {
 			findings = append(findings, Finding{
 				Path:    filepath.ToSlash(rel),
 				ID:      data.ID,
 				Check:   c.Name,
-				Message: m,
+				Message: d.Message,
 			})
+			pointers = append(pointers, d.Pointer)
 		}
+	}
+	if len(findings) == 0 {
+		return nil, nil
+	}
+
+	lines := resolveLines(bs, pointers)
+	for i := range findings {
+		findings[i].Line = lines[pointers[i]]
 	}
 	return findings, nil
 }
 
-// walkCriteria visits every criterion in the criteria tree rooted at ca.
-func walkCriteria(ca criteriaTypes.Criteria, fn func(cn criterionTypes.Criterion)) {
-	for _, child := range ca.Criterias {
-		walkCriteria(child, fn)
+// resolveLines maps each JSON pointer in pointers to the 1-based line number
+// of its value in bs. Only files that produced findings pay for this second
+// tokenizing pass. Pointers that cannot be located map to 0.
+func resolveLines(bs []byte, pointers []string) map[string]int {
+	wanted := make(map[string]struct{}, len(pointers))
+	for _, p := range pointers {
+		if p != "" {
+			wanted[p] = struct{}{}
+		}
 	}
-	for _, cn := range ca.Criterions {
-		fn(cn)
+
+	lines := make(map[string]int, len(wanted))
+	dec := jsontext.NewDecoder(bytes.NewReader(bs))
+	for len(lines) < len(wanted) {
+		if _, err := dec.ReadToken(); err != nil {
+			// io.EOF, or a malformed tail that Unmarshal tolerated; report
+			// what has been resolved so far.
+			break
+		}
+		ptr := string(dec.StackPointer())
+		if _, ok := wanted[ptr]; !ok {
+			continue
+		}
+		if _, done := lines[ptr]; done {
+			continue
+		}
+		offset := min(dec.InputOffset(), int64(len(bs)))
+		lines[ptr] = 1 + bytes.Count(bs[:offset], []byte("\n"))
+	}
+	return lines
+}
+
+// walkCriteria visits every criterion in the criteria tree rooted at ca,
+// passing the JSON pointer of each criterion relative to the tree root ptr.
+func walkCriteria(ptr string, ca criteriaTypes.Criteria, fn func(ptr string, cn criterionTypes.Criterion)) {
+	for i, child := range ca.Criterias {
+		walkCriteria(fmt.Sprintf("%s/criterias/%d", ptr, i), child, fn)
+	}
+	for i, cn := range ca.Criterions {
+		fn(fmt.Sprintf("%s/criterions/%d", ptr, i), cn)
 	}
 }

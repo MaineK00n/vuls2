@@ -102,7 +102,7 @@ func TestDetectOrphanSegment(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := detectOrphanSegment(tt.data); len(got) != tt.want {
-				t.Errorf("detectOrphanSegment() = %q, want %d finding(s)", got, tt.want)
+				t.Errorf("detectOrphanSegment() = %+v, want %d finding(s)", got, tt.want)
 			}
 		})
 	}

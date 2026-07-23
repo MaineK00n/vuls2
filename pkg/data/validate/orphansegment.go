@@ -16,7 +16,7 @@ var orphanSegmentCheck = Check{
 
 // detectOrphanSegment reports advisory and vulnerability segments whose
 // (ecosystem, tag) pair matches no detection condition in the same file.
-func detectOrphanSegment(data dataTypes.Data) []string {
+func detectOrphanSegment(data dataTypes.Data) []Detected {
 	type key struct {
 		ecosystem ecosystemTypes.Ecosystem
 		tag       segmentTypes.DetectionTag
@@ -29,20 +29,26 @@ func detectOrphanSegment(data dataTypes.Data) []string {
 		}
 	}
 
-	var msgs []string
-	for _, a := range data.Advisories {
-		for _, s := range a.Segments {
+	var ds []Detected
+	for ai, a := range data.Advisories {
+		for si, s := range a.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				msgs = append(msgs, fmt.Sprintf("advisory %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", a.Content.ID, s.Ecosystem, s.Tag))
+				ds = append(ds, Detected{
+					Pointer: fmt.Sprintf("/advisories/%d/segments/%d", ai, si),
+					Message: fmt.Sprintf("advisory %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", a.Content.ID, s.Ecosystem, s.Tag),
+				})
 			}
 		}
 	}
-	for _, v := range data.Vulnerabilities {
-		for _, s := range v.Segments {
+	for vi, v := range data.Vulnerabilities {
+		for si, s := range v.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				msgs = append(msgs, fmt.Sprintf("vulnerability %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", v.Content.ID, s.Ecosystem, s.Tag))
+				ds = append(ds, Detected{
+					Pointer: fmt.Sprintf("/vulnerabilities/%d/segments/%d", vi, si),
+					Message: fmt.Sprintf("vulnerability %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", v.Content.ID, s.Ecosystem, s.Tag),
+				})
 			}
 		}
 	}
-	return msgs
+	return ds
 }

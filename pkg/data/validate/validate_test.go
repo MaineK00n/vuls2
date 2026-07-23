@@ -178,3 +178,36 @@ func TestValidateDuplicateChecks(t *testing.T) {
 		t.Errorf("Validate() = %d finding(s), want 1 (duplicate check names must be deduplicated)", len(findings))
 	}
 }
+
+func TestValidateFindingLines(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// line numbers below are load-bearing: the orphan segment element opens
+	// on line 7.
+	if err := os.WriteFile(filepath.Join(root, "data", "CVE-2024-0004.json"), []byte(`{
+	"id": "CVE-2024-0004",
+	"vulnerabilities": [
+		{
+			"content": {"id": "CVE-2024-0004"},
+			"segments": [
+				{"ecosystem": "cpe", "tag": "orphan"}
+			]
+		}
+	]
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	findings, err := Validate(root)
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("Validate() = %+v, want 1 finding", findings)
+	}
+	if findings[0].Line != 7 {
+		t.Errorf("Finding.Line = %d, want 7", findings[0].Line)
+	}
+}

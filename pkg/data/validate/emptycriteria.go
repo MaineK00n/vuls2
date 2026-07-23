@@ -17,32 +17,35 @@ var emptyCriteriaCheck = Check{
 // present but semantically empty: detections without conditions, criteria
 // nodes (at any depth) with neither criterias nor criterions, and criteria
 // nodes that have children but no valid operator.
-func detectEmptyCriteria(data dataTypes.Data) []string {
-	var msgs []string
-	for _, d := range data.Detections {
+func detectEmptyCriteria(data dataTypes.Data) []Detected {
+	var ds []Detected
+	for di, d := range data.Detections {
 		if len(d.Conditions) == 0 {
-			msgs = append(msgs, fmt.Sprintf("detection %s: no conditions", d.Ecosystem))
+			ds = append(ds, Detected{
+				Pointer: fmt.Sprintf("/detections/%d", di),
+				Message: fmt.Sprintf("detection %s: no conditions", d.Ecosystem),
+			})
 		}
-		for _, cond := range d.Conditions {
-			msgs = append(msgs, emptyCriteriaNodes(fmt.Sprintf("detection %s: condition %q: criteria", d.Ecosystem, cond.Tag), cond.Criteria)...)
+		for ci, cond := range d.Conditions {
+			ds = append(ds, emptyCriteriaNodes(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), fmt.Sprintf("detection %s: condition %q: criteria", d.Ecosystem, cond.Tag), cond.Criteria)...)
 		}
 	}
-	return msgs
+	return ds
 }
 
-func emptyCriteriaNodes(at string, ca criteriaTypes.Criteria) []string {
+func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Detected {
 	if len(ca.Criterias) == 0 && len(ca.Criterions) == 0 {
-		return []string{fmt.Sprintf("%s: no criterias and no criterions", at)}
+		return []Detected{{Pointer: ptr, Message: fmt.Sprintf("%s: no criterias and no criterions", at)}}
 	}
 
-	var msgs []string
+	var ds []Detected
 	switch ca.Operator {
 	case criteriaTypes.CriteriaOperatorTypeOR, criteriaTypes.CriteriaOperatorTypeAND:
 	default:
-		msgs = append(msgs, fmt.Sprintf("%s: no operator", at))
+		ds = append(ds, Detected{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
 	}
 	for i, child := range ca.Criterias {
-		msgs = append(msgs, emptyCriteriaNodes(fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
+		ds = append(ds, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
 	}
-	return msgs
+	return ds
 }

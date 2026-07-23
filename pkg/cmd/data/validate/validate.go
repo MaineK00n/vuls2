@@ -47,7 +47,12 @@ func NewCmd() *cobra.Command {
 			for _, f := range findings {
 				switch options.format {
 				case "text":
-					fmt.Printf("%s: %s: %s\n", f.Path, f.Check, f.Message)
+					switch {
+					case f.Line > 0:
+						fmt.Printf("%s:%d: %s: %s\n", f.Path, f.Line, f.Check, f.Message)
+					default:
+						fmt.Printf("%s: %s: %s\n", f.Path, f.Check, f.Message)
+					}
 				case "json":
 					bs, err := json.Marshal(f)
 					if err != nil {
