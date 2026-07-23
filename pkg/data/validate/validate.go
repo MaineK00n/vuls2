@@ -152,23 +152,22 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 }
 
 func resolveChecks(names []string) ([]Check, error) {
+	all := Checks()
 	if len(names) == 0 {
-		return Checks(), nil
+		return all, nil
 	}
 
-	var checks []Check
+	checks := make([]Check, 0, len(names))
 	for _, name := range names {
-		i := slices.IndexFunc(Checks(), func(c Check) bool { return c.Name == name })
+		i := slices.IndexFunc(all, func(c Check) bool { return c.Name == name })
 		if i < 0 {
-			return nil, errors.Errorf("unknown check %q. accepts: %q", name, slices.Collect(func(yield func(string) bool) {
-				for _, c := range Checks() {
-					if !yield(c.Name) {
-						return
-					}
-				}
-			}))
+			accepted := make([]string, 0, len(all))
+			for _, c := range all {
+				accepted = append(accepted, c.Name)
+			}
+			return nil, errors.Errorf("unknown check %q. accepts: %q", name, accepted)
 		}
-		checks = append(checks, Checks()[i])
+		checks = append(checks, all[i])
 	}
 	return checks, nil
 }
