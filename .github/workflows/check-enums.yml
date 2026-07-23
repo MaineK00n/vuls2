@@ -1,0 +1,37 @@
+name: Check vuls-data-update enums
+
+on:
+  pull_request:
+  schedule:
+    - cron: '23 21 * * *'
+
+permissions: {}
+
+jobs:
+  enum-diff:
+    name: Enum list diff
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GOEXPERIMENT: jsonv2
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v7
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: 'go.mod'
+
+    # The extracted-data schema's enum vocabularies are lenient at unmarshal:
+    # data carrying values this build does not know is read losslessly but
+    # skipped (with a recorded warning) at evaluation. This job fails when the
+    # vuls-data-update pinned in go.mod knows fewer enum values than the
+    # nightly branch — i.e. when a dependency bump is required before data
+    # produced with the new values reaches detection. The known sets are
+    # append-only, so a plain diff suffices.
+    - name: Diff known enum sets against vuls-data-update nightly
+      run: |
+        diff <(go run github.com/MaineK00n/vuls-data-update/tools/print-enums) \
+             <(go run github.com/MaineK00n/vuls-data-update/tools/print-enums@nightly)
