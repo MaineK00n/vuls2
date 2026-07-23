@@ -32,8 +32,8 @@ type Check struct {
 
 // Detected is one violation reported by a Check. Pointer addresses the
 // offending element within the file as an RFC 6901 JSON pointer (e.g.
-// /advisories/0/segments/2); it is resolved to a line number by the
-// framework and never leaves this package.
+// /advisories/0/segments/2); Validate resolves it to Finding.Line, and the
+// pointer itself is not carried on Finding.
 type Detected struct {
 	Pointer string
 	Message string
@@ -88,7 +88,7 @@ func WithConcurrency(concurrency int) Option {
 
 // Validate walks the extracted data repository under root and runs the
 // selected semantic checks against every data/**/*.json file. Findings are
-// returned sorted by (Path, Check, Message).
+// returned sorted by (Path, Check, Message, Line).
 func Validate(root string, opts ...Option) ([]Finding, error) {
 	options := &options{
 		concurrency: runtime.NumCPU(),
