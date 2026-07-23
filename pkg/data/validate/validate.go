@@ -2,6 +2,7 @@ package validate
 
 import (
 	"cmp"
+	"context"
 	"encoding/json/v2"
 	"io/fs"
 	"log/slog"
@@ -120,9 +121,12 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		findings []Finding
 		mu       sync.Mutex
 	)
-	g := errgroup.Group{}
+	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(max(options.concurrency, 1))
 	for _, path := range paths {
+		if ctx.Err() != nil {
+			break
+		}
 		g.Go(func() error {
 			fileFindings, err := validateFile(root, path, checks)
 			if err != nil {
@@ -167,7 +171,9 @@ func resolveChecks(names []string) ([]Check, error) {
 			}
 			return nil, errors.Errorf("unknown check %q. accepts: %q", name, accepted)
 		}
-		checks = append(checks, all[i])
+		if !slices.ContainsFunc(checks, func(c Check) bool { return c.Name == name }) {
+			checks = append(checks, all[i])
+		}
 	}
 	return checks, nil
 }

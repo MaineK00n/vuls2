@@ -155,3 +155,26 @@ func TestValidateRootIsFile(t *testing.T) {
 		t.Error("Validate() error = nil, want error for non-directory root")
 	}
 }
+
+func TestValidateDuplicateChecks(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "data", "CVE-2024-0003.json"), []byte(`{
+		"id": "CVE-2024-0003",
+		"vulnerabilities": [
+			{"content": {"id": "CVE-2024-0003"}, "segments": [{"ecosystem": "cpe", "tag": "orphan"}]}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	findings, err := Validate(root, WithChecks([]string{"orphan-segment", "orphan-segment"}))
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(findings) != 1 {
+		t.Errorf("Validate() = %d finding(s), want 1 (duplicate check names must be deduplicated)", len(findings))
+	}
+}
