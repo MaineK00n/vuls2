@@ -111,7 +111,9 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	}
 
 	dir := filepath.Join(root, "data")
-	if _, err := os.Stat(dir); err != nil {
+	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+		return nil, errors.Errorf("%s is not a directory", dir)
+	} else if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			slog.Warn("no data directory. nothing to validate", "dir", dir)
 			return nil, nil

@@ -211,3 +211,13 @@ func TestValidateFindingLines(t *testing.T) {
 		t.Errorf("Finding.Line = %d, want 7", findings[0].Line)
 	}
 }
+
+func TestValidateDataIsFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "data"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Validate(root); err == nil {
+		t.Error("Validate() error = nil, want error when data is not a directory")
+	}
+}
