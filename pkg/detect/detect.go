@@ -324,13 +324,6 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 	}, nil
 }
 
-// filterAffected drops conditions whose FilteredCriteria evaluates as
-// not-affected, restoring the per-condition gate that util.Detect no longer
-// applies. Detections with no remaining conditions and VulnerabilityData
-// with no remaining detections are pruned. Callers of the lower-level
-// ospkg.Detect / cpe.Detect / util.Detect that want to apply different
-// filtering rules (e.g. ecosystem-specific relaxation) can do so without
-// being short-circuited upstream.
 // CollectWarnings gathers the non-fatal evaluation warnings recorded on every
 // FilteredCriterion across the detection results, deduplicated and in
 // warning.Compare order for deterministic output. It is exported for
@@ -339,6 +332,7 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 // any affected gate, because an unevaluable criterion contributes "not
 // affected" and pruning would silently lose the recorded skips.
 func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warningTypes.Warning {
+	seen := make(map[warningTypes.Warning]struct{})
 	var ws []warningTypes.Warning
 	var walk func(fca criteriaTypes.FilteredCriteria)
 	walk = func(fca criteriaTypes.FilteredCriteria) {
@@ -347,7 +341,8 @@ func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData
 		}
 		for _, cn := range fca.Criterions {
 			for _, w := range cn.Warnings {
-				if !slices.Contains(ws, w) {
+				if _, ok := seen[w]; !ok {
+					seen[w] = struct{}{}
 					ws = append(ws, w)
 				}
 			}
@@ -366,6 +361,13 @@ func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData
 	return ws
 }
 
+// filterAffected drops conditions whose FilteredCriteria evaluates as
+// not-affected, restoring the per-condition gate that util.Detect no longer
+// applies. Detections with no remaining conditions and VulnerabilityData
+// with no remaining detections are pruned. Callers of the lower-level
+// ospkg.Detect / cpe.Detect / util.Detect that want to apply different
+// filtering rules (e.g. ecosystem-specific relaxation) can do so without
+// being short-circuited upstream.
 func filterAffected(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) (map[dataTypes.RootID]detectTypes.VulnerabilityData, error) {
 	out := make(map[dataTypes.RootID]detectTypes.VulnerabilityData, len(detected))
 	for rootID, data := range detected {
