@@ -250,7 +250,7 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 	// an unevaluable criterion contributes "not affected", so its condition
 	// is exactly the kind the gate drops, and collecting afterwards would
 	// silently lose the recorded skips.
-	warnings := collectWarnings(detected)
+	warnings := CollectWarnings(detected)
 
 	// util.Detect now passes every condition through unconditionally, so
 	// apply the per-condition Affected gate here for the default consumer
@@ -331,10 +331,14 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 // ospkg.Detect / cpe.Detect / util.Detect that want to apply different
 // filtering rules (e.g. ecosystem-specific relaxation) can do so without
 // being short-circuited upstream.
-// collectWarnings gathers the non-fatal evaluation warnings recorded on every
+// CollectWarnings gathers the non-fatal evaluation warnings recorded on every
 // FilteredCriterion across the detection results, deduplicated and in
-// warning.Compare order for deterministic output.
-func collectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warningTypes.Warning {
+// warning.Compare order for deterministic output. It is exported for
+// consumers (e.g. vuls0) that call the lower-level ospkg / cpe detect
+// functions and assemble a DetectResult themselves: collect before applying
+// any affected gate, because an unevaluable criterion contributes "not
+// affected" and pruning would silently lose the recorded skips.
+func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warningTypes.Warning {
 	var ws []warningTypes.Warning
 	var walk func(fca criteriaTypes.FilteredCriteria)
 	walk = func(fca criteriaTypes.FilteredCriteria) {

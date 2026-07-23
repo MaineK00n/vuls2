@@ -21,7 +21,7 @@ import (
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 )
 
-func Test_collectWarnings(t *testing.T) {
+func TestCollectWarnings(t *testing.T) {
 	tests := []struct {
 		name     string
 		detected map[dataTypes.RootID]detectTypes.VulnerabilityData
@@ -79,8 +79,8 @@ func Test_collectWarnings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, collectWarnings(tt.detected)); diff != "" {
-				t.Errorf("collectWarnings() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, CollectWarnings(tt.detected)); diff != "" {
+				t.Errorf("CollectWarnings() (-expected +got):\n%s", diff)
 			}
 		})
 	}
