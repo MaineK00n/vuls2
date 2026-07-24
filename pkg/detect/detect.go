@@ -15,6 +15,8 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
+	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
+	warningTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/warning"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -243,6 +245,13 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 		detected[rootID] = base
 	}
 
+	// Aggregate the evaluation warnings recorded on the FilteredCriteria
+	// trees before the affected gate below prunes not-affected conditions —
+	// an unevaluable criterion contributes "not affected", so its condition
+	// is exactly the kind the gate drops, and collecting afterwards would
+	// silently lose the recorded skips.
+	warnings := CollectWarnings(detected)
+
 	// util.Detect now passes every condition through unconditionally, so
 	// apply the per-condition Affected gate here for the default consumer
 	// path. Conditions whose FilteredCriteria evaluates as not-affected are
@@ -308,10 +317,56 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 
 		Detected:    slices.Collect(maps.Values(detected)),
 		DataSources: datasources,
+		Warnings:    warnings,
 
 		DetectedAt: time.Now(),
 		DetectedBy: version.String(),
 	}, nil
+}
+
+// CollectWarnings gathers the non-fatal evaluation warnings recorded on every
+// FilteredCriterion across the detection results, grouped by data source and
+// warning kind with the raw Cause values deduplicated per group — see
+// DetectResult.Warnings for the shape, ordering and empty-string semantics. It
+// is exported for consumers (e.g. vuls0) that call the lower-level ospkg /
+// cpe detect functions and assemble a DetectResult themselves: collect
+// before applying any affected gate, because an unevaluable criterion
+// contributes "not affected" and pruning would silently lose the recorded
+// skips.
+func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) map[sourceTypes.SourceID]map[warningTypes.Kind][]string {
+	ws := make(map[sourceTypes.SourceID]map[warningTypes.Kind][]string)
+	var walk func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID)
+	walk = func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID) {
+		for _, ca := range fca.Criterias {
+			walk(ca, sid)
+		}
+		for _, cn := range fca.Criterions {
+			for _, w := range cn.Warnings {
+				if _, ok := ws[sid]; !ok {
+					ws[sid] = make(map[warningTypes.Kind][]string)
+				}
+				// The cause list is bounded by the enum cardinality behind
+				// one (source, kind) pair — a few dozen at the extreme — so
+				// a linear scan beats set bookkeeping.
+				if !slices.Contains(ws[sid][w.Kind], w.Cause) {
+					ws[sid][w.Kind] = append(ws[sid][w.Kind], w.Cause)
+				}
+			}
+		}
+	}
+	for _, data := range detected {
+		for _, d := range data.Detections {
+			for sid, conds := range d.Contents {
+				for _, cond := range conds {
+					walk(cond.Criteria, sid)
+				}
+			}
+		}
+	}
+	if len(ws) == 0 {
+		return nil
+	}
+	return ws
 }
 
 // filterAffected drops conditions whose FilteredCriteria evaluates as
