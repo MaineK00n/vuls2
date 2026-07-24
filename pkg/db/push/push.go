@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -56,7 +57,9 @@ func WithDigestWriter(w io.Writer) Option {
 type annotationsOption map[string]string
 
 func (o annotationsOption) apply(opts *options) {
-	opts.annotations = map[string]string(o)
+	// Cloned so that callers mutating the map after this call cannot
+	// change what Push sends.
+	opts.annotations = maps.Clone(map[string]string(o))
 }
 
 // WithAnnotations sets manifest-level OCI annotations on the pushed
