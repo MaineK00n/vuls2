@@ -25,7 +25,7 @@ func TestCollectWarnings(t *testing.T) {
 	tests := []struct {
 		name     string
 		detected map[dataTypes.RootID]detectTypes.VulnerabilityData
-		want     []warningTypes.Warning
+		want     map[sourceTypes.SourceID]map[warningTypes.Kind][]string
 	}{
 		{
 			name:     "no warnings yields nil",
@@ -33,10 +33,13 @@ func TestCollectWarnings(t *testing.T) {
 			want:     nil,
 		},
 		{
-			// The same warning recorded on multiple criterions — including one
-			// nested a level down — appears once, and distinct warnings come
-			// out in warning.Compare order regardless of input order.
-			name: "deduplicates across conditions and sorts deterministically",
+			// Warnings group by (source, kind): the same warning recorded on
+			// multiple criterions — including one nested a level down and one
+			// in another source — is deduplicated per group, causes come out
+			// sorted, and the raw empty-string cause is preserved verbatim
+			// (unset datum for cause-carrying kinds; the constant [""] for
+			// cause-less kinds like empty-range).
+			name: "groups by source and kind, dedups and sorts causes",
 			detected: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"ROOT-ID": {
 					ID: "ROOT-ID",
@@ -49,7 +52,11 @@ func TestCollectWarnings(t *testing.T) {
 										Operator: criteriaTypes.CriteriaOperatorTypeOR,
 										Criterions: []criterionTypes.FilteredCriterion{{
 											Criterion: criterionTypes.Criterion{Type: criterionTypes.CriterionType("future-criterion")},
-											Warnings:  []warningTypes.Warning{{Kind: warningTypes.KindEmptyRange}, {Kind: warningTypes.KindUnevaluableCriterionType, Cause: "future-criterion"}},
+											Warnings: []warningTypes.Warning{
+												{Kind: warningTypes.KindEmptyRange},
+												{Kind: warningTypes.KindUnevaluablePackageType},
+												{Kind: warningTypes.KindUnevaluablePackageType, Cause: "future-package"},
+											},
 										}},
 									},
 								},
@@ -60,8 +67,22 @@ func TestCollectWarnings(t *testing.T) {
 											Operator: criteriaTypes.CriteriaOperatorTypeAND,
 											Criterions: []criterionTypes.FilteredCriterion{{
 												Criterion: criterionTypes.Criterion{Type: criterionTypes.CriterionType("future-criterion")},
-												Warnings:  []warningTypes.Warning{{Kind: warningTypes.KindUnevaluableCriterionType, Cause: "future-criterion"}, {Kind: warningTypes.KindUnevaluableRangeType, Cause: "future-range"}},
+												Warnings: []warningTypes.Warning{
+													{Kind: warningTypes.KindUnevaluablePackageType, Cause: "future-package"},
+													{Kind: warningTypes.KindUnevaluableRangeType, Cause: "future-range"},
+												},
 											}},
+										}},
+									},
+								},
+							},
+							sourceTypes.RedHatCSAF: {
+								{
+									Criteria: criteriaTypes.FilteredCriteria{
+										Operator: criteriaTypes.CriteriaOperatorTypeOR,
+										Criterions: []criterionTypes.FilteredCriterion{{
+											Criterion: criterionTypes.Criterion{Type: criterionTypes.CriterionType("future-criterion")},
+											Warnings:  []warningTypes.Warning{{Kind: warningTypes.KindUnevaluableRangeType, Cause: "future-range"}},
 										}},
 									},
 								},
@@ -70,10 +91,15 @@ func TestCollectWarnings(t *testing.T) {
 					}},
 				},
 			},
-			want: []warningTypes.Warning{
-				{Kind: warningTypes.KindUnevaluableCriterionType, Cause: "future-criterion"},
-				{Kind: warningTypes.KindUnevaluableRangeType, Cause: "future-range"},
-				{Kind: warningTypes.KindEmptyRange},
+			want: map[sourceTypes.SourceID]map[warningTypes.Kind][]string{
+				sourceTypes.RedHatOVALv2: {
+					warningTypes.KindEmptyRange:             {""},
+					warningTypes.KindUnevaluablePackageType: {"", "future-package"},
+					warningTypes.KindUnevaluableRangeType:   {"future-range"},
+				},
+				sourceTypes.RedHatCSAF: {
+					warningTypes.KindUnevaluableRangeType: {"future-range"},
+				},
 			},
 		},
 	}

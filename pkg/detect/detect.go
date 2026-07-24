@@ -325,39 +325,53 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 }
 
 // CollectWarnings gathers the non-fatal evaluation warnings recorded on every
-// FilteredCriterion across the detection results, deduplicated and in
-// warning.Compare order for deterministic output. It is exported for
-// consumers (e.g. vuls0) that call the lower-level ospkg / cpe detect
-// functions and assemble a DetectResult themselves: collect before applying
-// any affected gate, because an unevaluable criterion contributes "not
-// affected" and pruning would silently lose the recorded skips.
-func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warningTypes.Warning {
-	seen := make(map[warningTypes.Warning]struct{})
-	var ws []warningTypes.Warning
-	var walk func(fca criteriaTypes.FilteredCriteria)
-	walk = func(fca criteriaTypes.FilteredCriteria) {
+// FilteredCriterion across the detection results, grouped by data source and
+// warning kind with the raw Cause values deduplicated and sorted per group —
+// see DetectResult.Warnings for the shape and the empty-string semantics. It
+// is exported for consumers (e.g. vuls0) that call the lower-level ospkg /
+// cpe detect functions and assemble a DetectResult themselves: collect
+// before applying any affected gate, because an unevaluable criterion
+// contributes "not affected" and pruning would silently lose the recorded
+// skips.
+func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) map[sourceTypes.SourceID]map[warningTypes.Kind][]string {
+	seen := make(map[sourceTypes.SourceID]map[warningTypes.Kind]map[string]struct{})
+	var walk func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID)
+	walk = func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID) {
 		for _, ca := range fca.Criterias {
-			walk(ca)
+			walk(ca, sid)
 		}
 		for _, cn := range fca.Criterions {
 			for _, w := range cn.Warnings {
-				if _, ok := seen[w]; !ok {
-					seen[w] = struct{}{}
-					ws = append(ws, w)
+				if _, ok := seen[sid]; !ok {
+					seen[sid] = make(map[warningTypes.Kind]map[string]struct{})
 				}
+				if _, ok := seen[sid][w.Kind]; !ok {
+					seen[sid][w.Kind] = make(map[string]struct{})
+				}
+				seen[sid][w.Kind][w.Cause] = struct{}{}
 			}
 		}
 	}
 	for _, data := range detected {
 		for _, d := range data.Detections {
-			for _, conds := range d.Contents {
+			for sid, conds := range d.Contents {
 				for _, cond := range conds {
-					walk(cond.Criteria)
+					walk(cond.Criteria, sid)
 				}
 			}
 		}
 	}
-	slices.SortFunc(ws, warningTypes.Compare)
+	if len(seen) == 0 {
+		return nil
+	}
+	ws := make(map[sourceTypes.SourceID]map[warningTypes.Kind][]string, len(seen))
+	for sid, kinds := range seen {
+		m := make(map[warningTypes.Kind][]string, len(kinds))
+		for kind, causes := range kinds {
+			m[kind] = slices.Sorted(maps.Keys(causes))
+		}
+		ws[sid] = m
+	}
 	return ws
 }
 

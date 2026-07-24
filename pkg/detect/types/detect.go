@@ -22,12 +22,19 @@ type DetectResult struct {
 
 	// Warnings aggregates the non-fatal evaluation warnings recorded on the
 	// FilteredCriteria trees (e.g. enum values this build could not evaluate
-	// — data from a newer vuls-data-update), deduplicated across the whole
-	// result. It is collected before the affected gate prunes not-affected
-	// conditions, so a skip stays observable even when the condition carrying
-	// it is dropped from Detected. Consumers (e.g. vuls0's ScanResult
-	// warnings) can surface these without walking the trees.
-	Warnings []warningTypes.Warning `json:"warnings,omitempty"`
+	// — data from a newer vuls-data-update), grouped by data source and
+	// warning kind: provenance at the grain that is actionable (which
+	// source's data needs a newer build) without per-root noise. The inner
+	// slice carries the deduplicated raw Warning.Cause values in
+	// lexicographic order, verbatim — an empty string is preserved (for
+	// cause-carrying kinds it means the datum was unset; kinds that carry no
+	// cause by design, e.g. empty-range, collect [""]) and interpretation is
+	// per kind. It is collected before the affected gate prunes not-affected
+	// conditions, so a skip stays observable even when the condition
+	// carrying it is dropped from Detected. Consumers (e.g. vuls0's
+	// ScanResult warnings) can surface these without walking the trees;
+	// iterate map keys in sorted order where deterministic output matters.
+	Warnings map[sourceTypes.SourceID]map[warningTypes.Kind][]string `json:"warnings,omitempty"`
 
 	DetectedAt time.Time `json:"detected_at,omitzero"`
 	DetectedBy string    `json:"detected_by,omitempty"`
