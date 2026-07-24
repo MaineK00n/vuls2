@@ -34,11 +34,12 @@ var (
 )
 
 type Metadata struct {
-	SchemaVersion uint       `json:"schema_version"`
-	CreatedBy     string     `json:"created_by,omitempty"`
-	LastModified  time.Time  `json:"last_modified,omitzero"`
-	Digest        *string    `json:"digest,omitempty"`
-	Downloaded    *time.Time `json:"downloaded,omitempty"`
+	SchemaVersion uint              `json:"schema_version"`
+	CreatedBy     string            `json:"created_by,omitempty"`
+	LastModified  time.Time         `json:"last_modified,omitzero"`
+	Digest        *string           `json:"digest,omitempty"`
+	Downloaded    *time.Time        `json:"downloaded,omitempty"`
+	Annotations   map[string]string `json:"annotations,omitempty"`
 }
 
 type VulnerabilityData struct {
