@@ -41,7 +41,7 @@ func TestCollectWarnings(t *testing.T) {
 			// like empty-range). Cause order carries no guarantee; this
 			// single-root fixture makes the encounter order deterministic so
 			// exact expectations stay valid.
-			name: "groups by source and kind, dedups and sorts causes",
+			name: "groups by source and kind, dedups causes",
 			detected: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"ROOT-ID": {
 					ID: "ROOT-ID",
