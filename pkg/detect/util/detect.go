@@ -153,8 +153,16 @@ func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteria
 			cn.Accepts.CPE.VersionUnconfirmed = versionUnconfirmed
 			replaced.Criterions = append(replaced.Criterions, cn)
 		default:
+			// A type in this build's vocabulary reaching this default means
+			// the vocabulary gained a criterion type without this switch
+			// gaining its remap arm — a bug in this build, not newer data:
+			// its accepted indexes would silently go un-remapped. Fail
+			// loudly, mirroring the upstream dispatch contract.
+			if cn.Criterion.Type.Known() {
+				return criteriaTypes.FilteredCriteria{}, errors.Errorf("unexpected criterion type. expected: %q, actual: %q", criterionTypes.CriterionTypes(), cn.Criterion.Type)
+			}
 			// A criterion type outside this build's vocabulary (data from a
-			// newer vuls-data-update). Accept degraded it to a non-match and
+			// newer vuls-data-update): Accept degraded it to a non-match and
 			// recorded the skip on FilteredCriterion.Warnings, so it accepted
 			// no queries and there are no indexes to remap — pass it through
 			// unchanged to keep the recorded skip observable downstream.
