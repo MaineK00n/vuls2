@@ -35,10 +35,12 @@ func TestCollectWarnings(t *testing.T) {
 		{
 			// Warnings group by (source, kind): the same warning recorded on
 			// multiple criterions — including one nested a level down and one
-			// in another source — is deduplicated per group, causes come out
-			// sorted, and the raw empty-string cause is preserved verbatim
-			// (unset datum for cause-carrying kinds; the constant [""] for
-			// cause-less kinds like empty-range).
+			// in another source — is deduplicated per group, and the raw
+			// empty-string cause is preserved verbatim (unset datum for
+			// cause-carrying kinds; the constant [""] for cause-less kinds
+			// like empty-range). Cause order carries no guarantee; this
+			// single-root fixture makes the encounter order deterministic so
+			// exact expectations stay valid.
 			name: "groups by source and kind, dedups and sorts causes",
 			detected: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"ROOT-ID": {
