@@ -108,6 +108,36 @@ func TestPush(t *testing.T) {
 			},
 		},
 		{
+			name: "with manifest annotations",
+			args: args{
+				image:   "ghcr.io/vulsio/vuls-nightly-db",
+				dbBytes: newBytes,
+				dbName:  "vuls.db.zst",
+				token:   "gho_xxx",
+				opts: []push.Option{push.WithAnnotations(map[string]string{
+					"org.opencontainers.image.revision": "0123abc",
+					"io.vuls.db.branch":                 "nightly",
+				})},
+			},
+			want: ocispec.Manifest{
+				Versioned:    specs.Versioned{SchemaVersion: 2},
+				MediaType:    ocispec.MediaTypeImageManifest,
+				ArtifactType: "application/vnd.vulsio.vuls.db+type",
+				Config:       ocispec.DescriptorEmptyJSON,
+				Layers: []ocispec.Descriptor{{
+					MediaType:   "application/vnd.vulsio.vuls.db.layer.v1+zstd",
+					Digest:      godigest.Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(newBytes))),
+					Size:        int64(len(newBytes)),
+					Annotations: map[string]string{ocispec.AnnotationTitle: "vuls.db.zst"},
+				}},
+				Annotations: map[string]string{
+					"org.opencontainers.image.created":  time.Now().UTC().Format(time.RFC3339),
+					"org.opencontainers.image.revision": "0123abc",
+					"io.vuls.db.branch":                 "nightly",
+				},
+			},
+		},
+		{
 			name: "tag already exists",
 			args: args{
 				image:   "ghcr.io/vulsio/vuls-nightly-db:existing",

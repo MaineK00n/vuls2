@@ -20,6 +20,7 @@ import (
 type options struct {
 	force        bool
 	digestWriter io.Writer
+	annotations  map[string]string
 }
 
 type Option interface {
@@ -50,6 +51,20 @@ func (o digestWriterOption) apply(opts *options) {
 // digest is reported even when the subsequent tagging step fails.
 func WithDigestWriter(w io.Writer) Option {
 	return digestWriterOption{w: w}
+}
+
+type annotationsOption map[string]string
+
+func (o annotationsOption) apply(opts *options) {
+	opts.annotations = map[string]string(o)
+}
+
+// WithAnnotations sets manifest-level OCI annotations on the pushed
+// manifest. oras.PackManifest adds "org.opencontainers.image.created"
+// automatically only when it is not present, so passing it here overrides
+// the auto-generated timestamp.
+func WithAnnotations(annotations map[string]string) Option {
+	return annotationsOption(annotations)
 }
 
 // Push uploads the vuls db to the given registry reference.
@@ -135,7 +150,10 @@ func Push(image, dbpath, token string, opts ...Option) error {
 		layerDescriptor.Annotations[ocispec.AnnotationTitle] = filepath.Base(dbpath)
 	}
 
-	desc, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, "application/vnd.vulsio.vuls.db+type", oras.PackManifestOptions{Layers: []ocispec.Descriptor{layerDescriptor}})
+	desc, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, "application/vnd.vulsio.vuls.db+type", oras.PackManifestOptions{
+		Layers:              []ocispec.Descriptor{layerDescriptor},
+		ManifestAnnotations: options.annotations,
+	})
 	if err != nil {
 		return errors.Wrap(err, "pack manifest")
 	}
