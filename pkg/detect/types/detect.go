@@ -25,8 +25,9 @@ type DetectResult struct {
 	// — data from a newer vuls-data-update), grouped by data source and
 	// warning kind: provenance at the grain that is actionable (which
 	// source's data needs a newer build) without per-root noise. The inner
-	// slice carries the deduplicated raw Warning.Cause values in
-	// lexicographic order, verbatim — an empty string is preserved (for
+	// slice carries the deduplicated raw Warning.Cause values verbatim, in
+	// first-seen order — sorting, like the rest of rendering, is the
+	// presentation layer's job — and an empty string is preserved (for
 	// cause-carrying kinds it means the datum was unset; kinds that carry no
 	// cause by design, e.g. empty-range, collect [""]) and interpretation is
 	// per kind. It is collected before the affected gate prunes not-affected
