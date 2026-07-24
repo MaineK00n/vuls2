@@ -355,6 +355,17 @@ func checkManifest(repo *remote.Repository, reference string, want ocispec.Manif
 		return errors.Errorf("manifest mismatch (-got +want):\n%s", diff)
 	}
 
+	// The diff above ignores "org.opencontainers.image.created" because its
+	// value is time-dependent, so assert its presence and format separately:
+	// oras must auto-add it, and custom annotations must not displace it.
+	created, ok := got.Annotations["org.opencontainers.image.created"]
+	if !ok {
+		return errors.Errorf("annotation %q not found in manifest", "org.opencontainers.image.created")
+	}
+	if _, err := time.Parse(time.RFC3339, created); err != nil {
+		return errors.Wrapf(err, "parse annotation %q value %q as RFC3339", "org.opencontainers.image.created", created)
+	}
+
 	return nil
 }
 
