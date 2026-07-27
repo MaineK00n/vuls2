@@ -28,6 +28,10 @@ jobs:
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v7
+      with:
+        # This job executes code fetched from the upstream branch (go run);
+        # do not leave the repo-scoped token readable in git config.
+        persist-credentials: false
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v6
