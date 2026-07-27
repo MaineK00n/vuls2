@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
@@ -19,13 +20,14 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
+	"github.com/MaineK00n/vuls2/pkg/types/warning"
 )
 
 func TestCollectWarnings(t *testing.T) {
 	tests := []struct {
 		name     string
 		detected map[dataTypes.RootID]detectTypes.VulnerabilityData
-		want     map[sourceTypes.SourceID]map[warningTypes.Kind][]string
+		want     []warning.Warning
 	}{
 		{
 			name:     "no warnings yields nil",
@@ -33,15 +35,15 @@ func TestCollectWarnings(t *testing.T) {
 			want:     nil,
 		},
 		{
-			// Warnings group by (source, kind): the same warning recorded on
-			// multiple criterions — including one nested a level down and one
-			// in another source — is deduplicated per group, and the raw
+			// Each entry is deduplicated on the whole (Kind, Cause, Source):
+			// the same warning recorded on multiple criterions — including
+			// one nested a level down — appears once, the same (kind, cause)
+			// under another source stays a separate entry, and the raw
 			// empty-string cause is preserved verbatim (unset datum for
-			// cause-carrying kinds; the constant [""] for cause-less kinds
-			// like empty-range). Cause order carries no guarantee; this
-			// single-root fixture makes the encounter order deterministic so
-			// exact expectations stay valid.
-			name: "groups by source and kind, dedups causes",
+			// cause-carrying kinds; always empty for cause-less kinds like
+			// empty-range). Entry order carries no guarantee, so the
+			// comparison sorts both sides.
+			name: "dedups entries and attributes them to their source",
 			detected: map[dataTypes.RootID]detectTypes.VulnerabilityData{
 				"ROOT-ID": {
 					ID: "ROOT-ID",
@@ -93,21 +95,27 @@ func TestCollectWarnings(t *testing.T) {
 					}},
 				},
 			},
-			want: map[sourceTypes.SourceID]map[warningTypes.Kind][]string{
-				sourceTypes.RedHatOVALv2: {
-					warningTypes.KindEmptyRange:             {""},
-					warningTypes.KindUnevaluablePackageType: {"", "future-package"},
-					warningTypes.KindUnevaluableRangeType:   {"future-range"},
-				},
-				sourceTypes.RedHatCSAF: {
-					warningTypes.KindUnevaluableRangeType: {"future-range"},
-				},
+			want: []warning.Warning{
+				{Kind: warning.Kind(warningTypes.KindEmptyRange), Source: sourceTypes.RedHatOVALv2},
+				{Kind: warning.Kind(warningTypes.KindUnevaluablePackageType), Source: sourceTypes.RedHatOVALv2},
+				{Kind: warning.Kind(warningTypes.KindUnevaluablePackageType), Cause: "future-package", Source: sourceTypes.RedHatOVALv2},
+				{Kind: warning.Kind(warningTypes.KindUnevaluableRangeType), Cause: "future-range", Source: sourceTypes.RedHatOVALv2},
+				{Kind: warning.Kind(warningTypes.KindUnevaluableRangeType), Cause: "future-range", Source: sourceTypes.RedHatCSAF},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, CollectWarnings(tt.detected)); diff != "" {
+			less := func(a, b warning.Warning) bool {
+				if a.Source != b.Source {
+					return a.Source < b.Source
+				}
+				if a.Kind != b.Kind {
+					return a.Kind < b.Kind
+				}
+				return a.Cause < b.Cause
+			}
+			if diff := cmp.Diff(tt.want, CollectWarnings(tt.detected), cmpopts.SortSlices(less)); diff != "" {
 				t.Errorf("CollectWarnings() (-expected +got):\n%s", diff)
 			}
 		})

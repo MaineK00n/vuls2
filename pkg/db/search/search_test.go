@@ -347,7 +347,7 @@ func TestPrintKBExpandTree(t *testing.T) {
 				"      └─ [microsoft-cvrf, KB-level, superseded by] 5001330  [discovered, unapplied]",
 			},
 			wantNotContains: []string{
-				"Applied:   \n",      // no stray leading/trailing space from "" entry
+				"Applied:   \n",       // no stray leading/trailing space from "" entry
 				"Applied:    5000802", // no double-space caused by leading "" in join
 				"\n  \n",              // no blank root line in Supersession chains
 			},

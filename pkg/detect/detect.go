@@ -16,7 +16,6 @@ import (
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
-	warningTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/warning"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -25,6 +24,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
+	"github.com/MaineK00n/vuls2/pkg/types/warning"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )
@@ -325,16 +325,19 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 }
 
 // CollectWarnings gathers the non-fatal evaluation warnings recorded on every
-// FilteredCriterion across the detection results, grouped by data source and
-// warning kind with the raw Cause values deduplicated per group — see
-// DetectResult.Warnings for the shape, ordering and empty-string semantics. It
-// is exported for consumers (e.g. vuls0) that call the lower-level ospkg /
-// cpe detect functions and assemble a DetectResult themselves: collect
-// before applying any affected gate, because an unevaluable criterion
-// contributes "not affected" and pruning would silently lose the recorded
-// skips.
-func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) map[sourceTypes.SourceID]map[warningTypes.Kind][]string {
-	ws := make(map[sourceTypes.SourceID]map[warningTypes.Kind][]string)
+// FilteredCriterion across the detection results as flat warning entries,
+// attributing each to the data source whose data recorded it — see
+// DetectResult.Warnings for the ordering and empty-string semantics.
+// Deduplicating on the whole (Kind, Cause, Source) entry carries exactly the
+// information the criterion-level warnings do, and the set stays bounded by
+// the finite enum vocabularies behind it, so a linear scan beats set
+// bookkeeping. It is exported for consumers (e.g. vuls0) that call the
+// lower-level ospkg / cpe detect functions and assemble a DetectResult
+// themselves: collect before applying any affected gate, because an
+// unevaluable criterion contributes "not affected" and pruning would
+// silently lose the recorded skips.
+func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warning.Warning {
+	var ws []warning.Warning
 	var walk func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID)
 	walk = func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID) {
 		for _, ca := range fca.Criterias {
@@ -342,14 +345,9 @@ func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData
 		}
 		for _, cn := range fca.Criterions {
 			for _, w := range cn.Warnings {
-				if _, ok := ws[sid]; !ok {
-					ws[sid] = make(map[warningTypes.Kind][]string)
-				}
-				// The cause list is bounded by the enum cardinality behind
-				// one (source, kind) pair — a few dozen at the extreme — so
-				// a linear scan beats set bookkeeping.
-				if !slices.Contains(ws[sid][w.Kind], w.Cause) {
-					ws[sid][w.Kind] = append(ws[sid][w.Kind], w.Cause)
+				e := warning.Warning{Kind: warning.Kind(w.Kind), Cause: w.Cause, Source: sid}
+				if !slices.Contains(ws, e) {
+					ws = append(ws, e)
 				}
 			}
 		}
@@ -362,9 +360,6 @@ func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData
 				}
 			}
 		}
-	}
-	if len(ws) == 0 {
-		return nil
 	}
 	return ws
 }
