@@ -3,6 +3,8 @@
 package warning
 
 import (
+	"cmp"
+
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 )
 
@@ -30,4 +32,18 @@ type Warning struct {
 	// Source is the data source the warning is attributable to; empty for
 	// warnings that are not about a data source's data.
 	Source sourceTypes.SourceID `json:"source,omitempty"`
+}
+
+// Compare orders warnings by (Kind, Cause, Source), each lexicographically —
+// vuls2 keeps no vocabulary rank for its own kinds. It is the canonical
+// comparator for the append-only struct: fields added later are appended to
+// the comparison so existing orderings are preserved, and callers comparing
+// through it (dedup, sorting) stay source-compatible even when a future
+// field makes the struct non-comparable in the Go sense.
+func Compare(x, y Warning) int {
+	return cmp.Or(
+		cmp.Compare(x.Kind, y.Kind),
+		cmp.Compare(x.Cause, y.Cause),
+		cmp.Compare(x.Source, y.Source),
+	)
 }

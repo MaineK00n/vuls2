@@ -107,13 +107,7 @@ func TestCollectWarnings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			less := func(a, b warning.Warning) bool {
-				if a.Source != b.Source {
-					return a.Source < b.Source
-				}
-				if a.Kind != b.Kind {
-					return a.Kind < b.Kind
-				}
-				return a.Cause < b.Cause
+				return warning.Compare(a, b) < 0
 			}
 			if diff := cmp.Diff(tt.want, CollectWarnings(tt.detected), cmpopts.SortSlices(less)); diff != "" {
 				t.Errorf("CollectWarnings() (-expected +got):\n%s", diff)

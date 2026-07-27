@@ -357,7 +357,7 @@ func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData
 		for _, cn := range fca.Criterions {
 			for _, w := range cn.Warnings {
 				e := warning.Warning{Kind: warning.Kind(w.Kind), Cause: w.Cause, Source: sid}
-				if !slices.Contains(ws, e) {
+				if !slices.ContainsFunc(ws, func(x warning.Warning) bool { return warning.Compare(x, e) == 0 }) {
 					ws = append(ws, e)
 				}
 			}
