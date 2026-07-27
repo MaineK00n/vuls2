@@ -23,8 +23,8 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/detect/cpe"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
+	"github.com/MaineK00n/vuls2/pkg/detect/types/warning"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
-	"github.com/MaineK00n/vuls2/pkg/types/warning"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
 )

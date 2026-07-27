@@ -20,7 +20,7 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
-	"github.com/MaineK00n/vuls2/pkg/types/warning"
+	"github.com/MaineK00n/vuls2/pkg/detect/types/warning"
 )
 
 func TestCollectWarnings(t *testing.T) {

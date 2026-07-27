@@ -9,7 +9,7 @@ import (
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
-	"github.com/MaineK00n/vuls2/pkg/types/warning"
+	"github.com/MaineK00n/vuls2/pkg/detect/types/warning"
 )
 
 type DetectResult struct {
