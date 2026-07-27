@@ -300,6 +300,17 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 			}
 		}
 	}
+	// Warnings are collected before the affected gate, so they can reference
+	// sources whose conditions were all pruned from Detected; include them
+	// so every source ID in the result resolves against DataSources.
+	for _, w := range warnings {
+		if w.Source == "" {
+			continue
+		}
+		if !slices.Contains(sourceIDs, w.Source) {
+			sourceIDs = append(sourceIDs, w.Source)
+		}
+	}
 
 	datasources := make([]datasourceTypes.DataSource, 0, len(sourceIDs))
 	for _, sourceID := range sourceIDs {
