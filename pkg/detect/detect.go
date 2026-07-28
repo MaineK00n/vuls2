@@ -15,7 +15,6 @@ import (
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -23,7 +22,6 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/detect/cpe"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg"
 	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
-	"github.com/MaineK00n/vuls2/pkg/detect/types/warning"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
 	"github.com/MaineK00n/vuls2/pkg/version"
@@ -245,13 +243,6 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 		detected[rootID] = base
 	}
 
-	// Aggregate the evaluation warnings recorded on the FilteredCriteria
-	// trees before the affected gate below prunes not-affected conditions —
-	// an unevaluable criterion contributes "not affected", so its condition
-	// is exactly the kind the gate drops, and collecting afterwards would
-	// silently lose the recorded skips.
-	warnings := CollectWarnings(detected)
-
 	// util.Detect now passes every condition through unconditionally, so
 	// apply the per-condition Affected gate here for the default consumer
 	// path. Conditions whose FilteredCriteria evaluates as not-affected are
@@ -300,17 +291,6 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 			}
 		}
 	}
-	// Warnings are collected before the affected gate, so they can reference
-	// sources whose conditions were all pruned from Detected; include them
-	// so every source ID in the result resolves against DataSources.
-	for _, w := range warnings {
-		if w.Source == "" {
-			continue
-		}
-		if !slices.Contains(sourceIDs, w.Source) {
-			sourceIDs = append(sourceIDs, w.Source)
-		}
-	}
 
 	datasources := make([]datasourceTypes.DataSource, 0, len(sourceIDs))
 	for _, sourceID := range sourceIDs {
@@ -328,51 +308,10 @@ func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detec
 
 		Detected:    slices.Collect(maps.Values(detected)),
 		DataSources: datasources,
-		Warnings:    warnings,
 
 		DetectedAt: time.Now(),
 		DetectedBy: version.String(),
 	}, nil
-}
-
-// CollectWarnings gathers the non-fatal evaluation warnings recorded on every
-// FilteredCriterion across the detection results as flat warning entries,
-// attributing each to the data source whose data recorded it — see
-// DetectResult.Warnings for the ordering and empty-string semantics.
-// Deduplicating on the whole (Kind, Cause, Source) entry carries exactly the
-// information the criterion-level warnings do, and the set stays bounded by
-// the finite enum vocabularies behind it, so a linear scan beats set
-// bookkeeping. It is exported for consumers (e.g. vuls0) that call the
-// lower-level ospkg / cpe detect functions and assemble a DetectResult
-// themselves: collect before applying any affected gate, because an
-// unevaluable criterion contributes "not affected" and pruning would
-// silently lose the recorded skips.
-func CollectWarnings(detected map[dataTypes.RootID]detectTypes.VulnerabilityData) []warning.Warning {
-	var ws []warning.Warning
-	var walk func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID)
-	walk = func(fca criteriaTypes.FilteredCriteria, sid sourceTypes.SourceID) {
-		for _, ca := range fca.Criterias {
-			walk(ca, sid)
-		}
-		for _, cn := range fca.Criterions {
-			for _, w := range cn.Warnings {
-				e := warning.Warning{Kind: warning.Kind(w.Kind), Cause: w.Cause, Source: sid}
-				if !slices.ContainsFunc(ws, func(x warning.Warning) bool { return warning.Compare(x, e) == 0 }) {
-					ws = append(ws, e)
-				}
-			}
-		}
-	}
-	for _, data := range detected {
-		for _, d := range data.Detections {
-			for sid, conds := range d.Contents {
-				for _, cond := range conds {
-					walk(cond.Criteria, sid)
-				}
-			}
-		}
-	}
-	return ws
 }
 
 // filterAffected drops conditions whose FilteredCriteria evaluates as
