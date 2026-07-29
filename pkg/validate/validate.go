@@ -253,7 +253,7 @@ func validateFile(root, path string, dataRules []DataRule) ([]Finding, error) {
 
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
-		rel = path
+		return nil, errors.Wrapf(err, "rel %s %s", root, path)
 	}
 
 	var (
