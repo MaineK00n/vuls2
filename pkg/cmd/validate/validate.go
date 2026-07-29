@@ -37,13 +37,15 @@ func NewCmd() *cobra.Command {
 		$ vuls validate --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-nvd-feed-cve-v2
 		`),
 		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		PreRunE: func(_ *cobra.Command, _ []string) error {
 			switch options.format {
 			case "text", "json":
+				return nil
 			default:
 				return errors.Errorf("unexpected format. expected: %q, actual: %q", []string{"text", "json"}, options.format)
 			}
-
+		},
+		RunE: func(_ *cobra.Command, args []string) error {
 			findings, err := validate.Validate(args[0], validate.WithChecks(options.checks), validate.WithConcurrency(options.concurrency))
 			if err != nil {
 				return errors.Wrap(err, "validate")
@@ -64,6 +66,9 @@ func NewCmd() *cobra.Command {
 						return errors.Wrap(err, "marshal finding")
 					}
 					fmt.Printf("%s\n", bs)
+				default:
+					// Unreachable: PreRunE already validated the format.
+					return errors.Errorf("unexpected format. expected: %q, actual: %q", []string{"text", "json"}, options.format)
 				}
 			}
 
