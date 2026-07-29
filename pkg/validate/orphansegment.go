@@ -8,7 +8,7 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
-var orphanSegmentCheck = Check{
+var orphanSegmentRule = Rule{
 	Name:        "orphan-segment",
 	Description: "advisory/vulnerability: every segment has a corresponding detection condition",
 	Inspect:     inspectOrphanSegment,

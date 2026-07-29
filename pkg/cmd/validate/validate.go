@@ -15,11 +15,11 @@ import (
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		checks      []string
+		rules       []string
 		format      string
 		concurrency int
 	}{
-		checks:      nil,
+		rules:       nil,
 		format:      "text",
 		concurrency: runtime.NumCPU(),
 	}
@@ -30,11 +30,11 @@ func NewCmd() *cobra.Command {
 		Long: heredoc.Doc(`
 		Validate an extracted repository. The repository layout is checked as a
 		whole, and content directories (data, ...) are discovered automatically and
-		validated with their own checks when present.
+		validated with their own rules when present.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls validate vuls-data-extracted-redhat-cve
-		$ vuls validate --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-nvd-feed-cve-v2
+		$ vuls validate --rules cpe-pvp,orphan-segment --format json vuls-data-extracted-nvd-feed-cve-v2
 		`),
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(_ *cobra.Command, _ []string) error {
@@ -46,7 +46,7 @@ func NewCmd() *cobra.Command {
 			}
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
-			findings, err := validate.Validate(args[0], validate.WithChecks(options.checks), validate.WithConcurrency(options.concurrency))
+			findings, err := validate.Validate(args[0], validate.WithRules(options.rules), validate.WithConcurrency(options.concurrency))
 			if err != nil {
 				return errors.Wrap(err, "validate")
 			}
@@ -56,9 +56,9 @@ func NewCmd() *cobra.Command {
 				case "text":
 					switch {
 					case f.Line > 0:
-						fmt.Printf("%s:%d: %s: %s\n", f.Path, f.Line, f.Check, f.Message)
+						fmt.Printf("%s:%d: %s: %s\n", f.Path, f.Line, f.Rule, f.Message)
 					default:
-						fmt.Printf("%s: %s: %s\n", f.Path, f.Check, f.Message)
+						fmt.Printf("%s: %s: %s\n", f.Path, f.Rule, f.Message)
 					}
 				case "json":
 					bs, err := json.Marshal(f)
@@ -79,12 +79,12 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringSliceVarP(&options.checks, "checks", "", options.checks, fmt.Sprintf("checks to run (default: all, accepts: [%s])", strings.Join(func() []string {
+	cmd.Flags().StringSliceVarP(&options.rules, "rules", "", options.rules, fmt.Sprintf("rules to run (default: all, accepts: [%s])", strings.Join(func() []string {
 		var names []string
-		for _, c := range validate.RepositoryChecks() {
+		for _, c := range validate.RepositoryRules() {
 			names = append(names, c.Name)
 		}
-		for _, c := range validate.Checks() {
+		for _, c := range validate.Rules() {
 			names = append(names, c.Name)
 		}
 		return names

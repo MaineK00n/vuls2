@@ -14,7 +14,7 @@ import (
 // are legitimate: microsoft-bulletin/cvrf emit both data and microsoftkb.
 var contentDirs = []string{"attack", "capec", "cwe", "data", "eol", "microsoftkb"}
 
-var layoutCheck = RepositoryCheck{
+var layoutRule = RepositoryRule{
 	Name:        "layout",
 	Description: "repository layout: datasource.json exists, only known top-level entries, at least one content directory",
 	Inspect:     inspectLayout,
@@ -32,7 +32,7 @@ func inspectLayout(root string) ([]Finding, error) {
 
 	var findings []Finding
 	add := func(path, message string) {
-		findings = append(findings, Finding{Path: path, Check: "layout", Message: message})
+		findings = append(findings, Finding{Path: path, Rule: "layout", Message: message})
 	}
 
 	if !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == "datasource.json" }) {

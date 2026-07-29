@@ -10,7 +10,7 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 )
 
-var cpePVPCheck = Check{
+var cpePVPRule = Rule{
 	Name:        "cpe-pvp",
 	Description: "cpe criterion: criterion cpe and cpe_matches agree on part:vendor:product",
 	Inspect:     inspectCPEPVP,

@@ -22,14 +22,14 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 )
 
-// Check is one semantic rule evaluated against a single data.Data.
-type Check struct {
+// Rule is one semantic rule evaluated against a single data.Data.
+type Rule struct {
 	Name        string
 	Description string
 	Inspect     func(data dataTypes.Data) []Violation
 }
 
-// Violation is a single rule violation reported by a Check. Pointer
+// Violation is a single rule violation reported by a Rule. Pointer
 // addresses the offending element within the file as an RFC 6901 JSON
 // pointer (e.g. /advisories/0/segments/2); Validate resolves it to
 // Finding.Line, and the pointer itself is not carried on Finding.
@@ -38,25 +38,25 @@ type Violation struct {
 	Message string
 }
 
-// Checks returns the registered per-file check table for the data content
+// Rules returns the registered per-file rule table for the data content
 // directory.
-func Checks() []Check {
-	return []Check{cpePVPCheck, emptyCriteriaCheck, orphanSegmentCheck}
+func Rules() []Rule {
+	return []Rule{cpePVPRule, emptyCriteriaRule, orphanSegmentRule}
 }
 
-// RepositoryCheck is one rule evaluated against the repository as a whole
+// RepositoryRule is one rule evaluated against the repository as a whole
 // (its top-level layout) rather than a single data file. Inspect fills
-// Finding.Path/Message itself; Check and Line handling stay with the
+// Finding.Path/Message itself; Rule and Line handling stay with the
 // framework conventions (repository findings carry no line).
-type RepositoryCheck struct {
+type RepositoryRule struct {
 	Name        string
 	Description string
 	Inspect     func(root string) ([]Finding, error)
 }
 
-// RepositoryChecks returns the registered repository-level check table.
-func RepositoryChecks() []RepositoryCheck {
-	return []RepositoryCheck{layoutCheck}
+// RepositoryRules returns the registered repository-level rule table.
+func RepositoryRules() []RepositoryRule {
+	return []RepositoryRule{layoutRule}
 }
 
 // Finding is one semantic violation found in an extracted data file. Line
@@ -64,14 +64,14 @@ func RepositoryChecks() []RepositoryCheck {
 // be resolved).
 type Finding struct {
 	Path    string           `json:"path"`
-	Line    int              `json:"line,omitempty"`
+	Line    int              `json:"line,omitzero"`
 	ID      dataTypes.RootID `json:"id,omitempty"`
-	Check   string           `json:"check"`
+	Rule    string           `json:"rule"`
 	Message string           `json:"message"`
 }
 
 type options struct {
-	checks      []string
+	rules       []string
 	concurrency int
 }
 
@@ -79,15 +79,15 @@ type Option interface {
 	apply(*options)
 }
 
-type checksOption []string
+type rulesOption []string
 
-func (o checksOption) apply(opts *options) {
-	opts.checks = []string(o)
+func (o rulesOption) apply(opts *options) {
+	opts.rules = []string(o)
 }
 
-// WithChecks selects checks by name. An empty list means all checks.
-func WithChecks(checks []string) Option {
-	return checksOption(checks)
+// WithRules selects rules by name. An empty list means all rules.
+func WithRules(rules []string) Option {
+	return rulesOption(rules)
 }
 
 type concurrencyOption int
@@ -101,12 +101,12 @@ func WithConcurrency(concurrency int) Option {
 	return concurrencyOption(concurrency)
 }
 
-// Validate runs the selected checks against the extracted repository under
-// root: repository-level checks against its top-level layout, and per-file
-// semantic checks against every data/**/*.json file when the data content
+// Validate runs the selected rules against the extracted repository under
+// root: repository-level rules against its top-level layout, and per-file
+// semantic rules against every data/**/*.json file when the data content
 // directory is present. Content directories are auto-detected — callers
 // never say which kinds the repository carries. Findings are returned
-// sorted by (Path, Check, Message, Line).
+// sorted by (Path, Rule, Message, Line).
 func Validate(root string, opts ...Option) ([]Finding, error) {
 	options := &options{
 		concurrency: runtime.NumCPU(),
@@ -115,9 +115,9 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		o.apply(options)
 	}
 
-	checks, repoChecks, err := resolveChecks(options.checks)
+	rules, repoRules, err := resolveRules(options.rules)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve checks")
+		return nil, errors.Wrap(err, "resolve rules")
 	}
 
 	info, err := os.Stat(root)
@@ -129,7 +129,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	}
 
 	var findings []Finding
-	for _, c := range repoChecks {
+	for _, c := range repoRules {
 		repoFindings, err := c.Inspect(root)
 		if err != nil {
 			return nil, errors.Wrapf(err, "inspect %s", c.Name)
@@ -139,10 +139,10 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 
 	// Layout problems (a content name that is not a directory, unknown
 	// entries, ...) are reported above; the per-file walk only covers the
-	// content kinds that have file-level checks selected and are actually
-	// present — with no per-file checks there is nothing to read.
+	// content kinds that have file-level rules selected and are actually
+	// present — with no per-file rules there is nothing to read.
 	var paths []string
-	if len(checks) > 0 {
+	if len(rules) > 0 {
 		dir := filepath.Join(root, "data")
 		switch info, err := os.Stat(dir); {
 		case err == nil && info.IsDir():
@@ -163,7 +163,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			return nil, errors.Wrapf(err, "stat %s", dir)
 		default:
 			// Absent, or present but not a directory — both are the layout
-			// check's findings, not a walk target.
+			// rule's findings, not a walk target.
 		}
 	}
 
@@ -178,7 +178,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			fileFindings, err := validateFile(root, path, checks)
+			fileFindings, err := validateFile(root, path, rules)
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
 			}
@@ -197,7 +197,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	slices.SortFunc(findings, func(x, y Finding) int {
 		return cmp.Or(
 			cmp.Compare(x.Path, y.Path),
-			cmp.Compare(x.Check, y.Check),
+			cmp.Compare(x.Rule, y.Rule),
 			cmp.Compare(x.Message, y.Message),
 			cmp.Compare(x.Line, y.Line),
 		)
@@ -206,22 +206,22 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	return findings, nil
 }
 
-func resolveChecks(names []string) ([]Check, []RepositoryCheck, error) {
-	all, allRepo := Checks(), RepositoryChecks()
+func resolveRules(names []string) ([]Rule, []RepositoryRule, error) {
+	all, allRepo := Rules(), RepositoryRules()
 	if len(names) == 0 {
 		return all, allRepo, nil
 	}
 
-	checks := make([]Check, 0, len(names))
-	repoChecks := make([]RepositoryCheck, 0, len(names))
+	rules := make([]Rule, 0, len(names))
+	repoRules := make([]RepositoryRule, 0, len(names))
 	for _, name := range names {
-		switch i := slices.IndexFunc(all, func(c Check) bool { return c.Name == name }); {
+		switch i := slices.IndexFunc(all, func(c Rule) bool { return c.Name == name }); {
 		case i >= 0:
-			if !slices.ContainsFunc(checks, func(c Check) bool { return c.Name == name }) {
-				checks = append(checks, all[i])
+			if !slices.ContainsFunc(rules, func(c Rule) bool { return c.Name == name }) {
+				rules = append(rules, all[i])
 			}
 		default:
-			j := slices.IndexFunc(allRepo, func(c RepositoryCheck) bool { return c.Name == name })
+			j := slices.IndexFunc(allRepo, func(c RepositoryRule) bool { return c.Name == name })
 			if j < 0 {
 				accepted := make([]string, 0, len(all)+len(allRepo))
 				for _, c := range all {
@@ -230,17 +230,17 @@ func resolveChecks(names []string) ([]Check, []RepositoryCheck, error) {
 				for _, c := range allRepo {
 					accepted = append(accepted, c.Name)
 				}
-				return nil, nil, errors.Errorf("unknown check %q. accepts: %q", name, accepted)
+				return nil, nil, errors.Errorf("unknown rule %q. accepts: %q", name, accepted)
 			}
-			if !slices.ContainsFunc(repoChecks, func(c RepositoryCheck) bool { return c.Name == name }) {
-				repoChecks = append(repoChecks, allRepo[j])
+			if !slices.ContainsFunc(repoRules, func(c RepositoryRule) bool { return c.Name == name }) {
+				repoRules = append(repoRules, allRepo[j])
 			}
 		}
 	}
-	return checks, repoChecks, nil
+	return rules, repoRules, nil
 }
 
-func validateFile(root, path string, checks []Check) ([]Finding, error) {
+func validateFile(root, path string, rules []Rule) ([]Finding, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read %s", path)
@@ -260,12 +260,12 @@ func validateFile(root, path string, checks []Check) ([]Finding, error) {
 		findings []Finding
 		pointers []string
 	)
-	for _, c := range checks {
+	for _, c := range rules {
 		for _, d := range c.Inspect(data) {
 			findings = append(findings, Finding{
 				Path:    filepath.ToSlash(rel),
 				ID:      data.ID,
-				Check:   c.Name,
+				Rule:    c.Name,
 				Message: d.Message,
 			})
 			pointers = append(pointers, d.Pointer)
