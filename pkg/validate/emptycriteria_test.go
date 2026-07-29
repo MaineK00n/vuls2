@@ -13,14 +13,6 @@ import (
 )
 
 func TestInspectEmptyCriteria(t *testing.T) {
-	criterion := criterionTypes.Criterion{
-		Type: criterionTypes.CriterionTypeCPE,
-		CPE: &cpecriterionTypes.Criterion{
-			Vulnerable: true,
-			CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-		},
-	}
-
 	tests := []struct {
 		name string
 		data dataTypes.Data
@@ -36,8 +28,16 @@ func TestInspectEmptyCriteria(t *testing.T) {
 						Conditions: []conditionTypes.Condition{
 							{
 								Criteria: criteriaTypes.Criteria{
-									Operator:   criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.Criterion{criterion},
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+											},
+										},
+									},
 								},
 								Tag: "vulnerable",
 							},
@@ -85,8 +85,16 @@ func TestInspectEmptyCriteria(t *testing.T) {
 									Operator: criteriaTypes.CriteriaOperatorTypeAND,
 									Criterias: []criteriaTypes.Criteria{
 										{
-											Operator:   criteriaTypes.CriteriaOperatorTypeOR,
-											Criterions: []criterionTypes.Criterion{criterion},
+											Operator: criteriaTypes.CriteriaOperatorTypeOR,
+											Criterions: []criterionTypes.Criterion{
+												{
+													Type: criterionTypes.CriterionTypeCPE,
+													CPE: &cpecriterionTypes.Criterion{
+														Vulnerable: true,
+														CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+													},
+												},
+											},
 										},
 										{Operator: criteriaTypes.CriteriaOperatorTypeOR},
 									},
@@ -109,7 +117,15 @@ func TestInspectEmptyCriteria(t *testing.T) {
 						Conditions: []conditionTypes.Condition{
 							{
 								Criteria: criteriaTypes.Criteria{
-									Criterions: []criterionTypes.Criterion{criterion},
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+											},
+										},
+									},
 								},
 								Tag: "vulnerable",
 							},

@@ -15,13 +15,6 @@ import (
 )
 
 func TestInspectOrphanSegment(t *testing.T) {
-	detection := detectionTypes.Detection{
-		Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-		Conditions: []conditionTypes.Condition{
-			{Tag: "vulnerable"},
-		},
-	}
-
 	tests := []struct {
 		name string
 		data dataTypes.Data
@@ -43,7 +36,14 @@ func TestInspectOrphanSegment(t *testing.T) {
 						Segments: []segmentTypes.Segment{{Ecosystem: ecosystemTypes.EcosystemTypeCPE, Tag: "vulnerable"}},
 					},
 				},
-				Detections: []detectionTypes.Detection{detection},
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{Tag: "vulnerable"},
+						},
+					},
+				},
 			},
 			want: 0,
 		},
@@ -57,7 +57,14 @@ func TestInspectOrphanSegment(t *testing.T) {
 						Segments: []segmentTypes.Segment{{Ecosystem: ecosystemTypes.EcosystemTypeCPE, Tag: "other"}},
 					},
 				},
-				Detections: []detectionTypes.Detection{detection},
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{Tag: "vulnerable"},
+						},
+					},
+				},
 			},
 			want: 1,
 		},
@@ -71,7 +78,14 @@ func TestInspectOrphanSegment(t *testing.T) {
 						Segments: []segmentTypes.Segment{{Ecosystem: ecosystemTypes.EcosystemTypeFedora, Tag: "vulnerable"}},
 					},
 				},
-				Detections: []detectionTypes.Detection{detection},
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{Tag: "vulnerable"},
+						},
+					},
+				},
 			},
 			want: 1,
 		},
