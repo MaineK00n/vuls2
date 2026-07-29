@@ -480,11 +480,11 @@ func TestFilterAffected(t *testing.T) {
 						Ecosystem: ecosystemTypes.Ecosystem("redhat:9"),
 						Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
 							sourceTypes.RedHatOVALv2: {{
-								// Out-of-range operator triggers the default branch
-								// of FilteredCriteria.Affected() and returns an
-								// error. The valid values are the AND/OR iota
-								// constants, so any other int falls through.
-								Criteria: criteriaTypes.FilteredCriteria{Operator: criteriaTypes.CriteriaOperatorType(-1)},
+								// An out-of-vocabulary operator triggers the default
+								// branch of FilteredCriteria.Affected() and returns
+								// an error: operator evaluation is deliberately
+								// strict, unlike the other (lenient) enums.
+								Criteria: criteriaTypes.FilteredCriteria{Operator: criteriaTypes.CriteriaOperatorType("future-operator")},
 							}},
 						},
 					}},

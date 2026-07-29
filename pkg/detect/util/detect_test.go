@@ -23,6 +23,7 @@ import (
 	vcFixStatusTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/fixstatus"
 	vcPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package"
 	vcBinaryPackageTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion/package/binary"
+	warningTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/warning"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
@@ -825,6 +826,34 @@ func Test_replaceIndexes(t *testing.T) {
 							},
 						},
 						Accepts: criterionTypes.AcceptQueries{KB: criterionTypes.KB{Unapplied: true}},
+					},
+				},
+			},
+		},
+		{
+			// A criterion type outside this build's vocabulary (data from a
+			// newer vuls-data-update) accepted nothing and carries only its
+			// recorded warnings; it must pass through unchanged instead of
+			// aborting the whole replacement.
+			name: "out-of-vocabulary criterion type passes through with its warnings",
+			args: args{
+				fca: criteriaTypes.FilteredCriteria{
+					Operator: criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.FilteredCriterion{
+						{
+							Criterion: criterionTypes.Criterion{Type: criterionTypes.CriterionType("future-criterion")},
+							Warnings:  []warningTypes.Warning{{Kind: warningTypes.KindUnevaluableCriterionType, Cause: "future-criterion"}},
+						},
+					},
+				},
+				indexes: []int{5},
+			},
+			want: criteriaTypes.FilteredCriteria{
+				Operator: criteriaTypes.CriteriaOperatorTypeOR,
+				Criterions: []criterionTypes.FilteredCriterion{
+					{
+						Criterion: criterionTypes.Criterion{Type: criterionTypes.CriterionType("future-criterion")},
+						Warnings:  []warningTypes.Warning{{Kind: warningTypes.KindUnevaluableCriterionType, Cause: "future-criterion"}},
 					},
 				},
 			},
