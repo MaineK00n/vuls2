@@ -261,14 +261,14 @@ func validateFile(root, path string, dataRules []DataRule) ([]Finding, error) {
 		pointers []string
 	)
 	for _, c := range dataRules {
-		for _, d := range c.Inspect(data) {
+		for _, v := range c.Inspect(data) {
 			findings = append(findings, Finding{
 				Path:    filepath.ToSlash(rel),
 				ID:      data.ID,
 				Rule:    c.Name,
-				Message: d.Message,
+				Message: v.Message,
 			})
-			pointers = append(pointers, d.Pointer)
+			pointers = append(pointers, v.Pointer)
 		}
 	}
 	if len(findings) == 0 {

@@ -29,11 +29,11 @@ func inspectOrphanSegment(data dataTypes.Data) []Violation {
 		}
 	}
 
-	var ds []Violation
+	var vs []Violation
 	for ai, a := range data.Advisories {
 		for si, s := range a.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				ds = append(ds, Violation{
+				vs = append(vs, Violation{
 					Pointer: fmt.Sprintf("/advisories/%d/segments/%d", ai, si),
 					Message: fmt.Sprintf("advisory %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", a.Content.ID, s.Ecosystem, s.Tag),
 				})
@@ -43,12 +43,12 @@ func inspectOrphanSegment(data dataTypes.Data) []Violation {
 	for vi, v := range data.Vulnerabilities {
 		for si, s := range v.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				ds = append(ds, Violation{
+				vs = append(vs, Violation{
 					Pointer: fmt.Sprintf("/vulnerabilities/%d/segments/%d", vi, si),
 					Message: fmt.Sprintf("vulnerability %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", v.Content.ID, s.Ecosystem, s.Tag),
 				})
 			}
 		}
 	}
-	return ds
+	return vs
 }

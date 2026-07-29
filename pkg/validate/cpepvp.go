@@ -21,7 +21,7 @@ var cpePVPRule = DataRule{
 // logical value (ANY, NA) on either side is treated as compatible; only two
 // concrete, differing values are a mismatch.
 func inspectCPEPVP(data dataTypes.Data) []Violation {
-	var ds []Violation
+	var vs []Violation
 	for di, d := range data.Detections {
 		for ci, cond := range d.Conditions {
 			walkCriteria(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), cond.Criteria, func(ptr string, cn criterionTypes.Criterion) {
@@ -31,7 +31,7 @@ func inspectCPEPVP(data dataTypes.Data) []Violation {
 
 				cWFN, err := naming.UnbindFS(string(cn.CPE.CPE))
 				if err != nil {
-					ds = append(ds, Violation{
+					vs = append(vs, Violation{
 						Pointer: ptr + "/cpe/cpe",
 						Message: fmt.Sprintf("detection %s: condition %q: unbind criterion cpe %q to WFN: %v", d.Ecosystem, cond.Tag, cn.CPE.CPE, err),
 					})
@@ -41,7 +41,7 @@ func inspectCPEPVP(data dataTypes.Data) []Violation {
 				for mi, m := range cn.CPE.CPEMatches {
 					mWFN, err := naming.UnbindFS(string(m))
 					if err != nil {
-						ds = append(ds, Violation{
+						vs = append(vs, Violation{
 							Pointer: fmt.Sprintf("%s/cpe/cpe_matches/%d", ptr, mi),
 							Message: fmt.Sprintf("detection %s: condition %q: criterion cpe %q: unbind cpe_match %q to WFN: %v", d.Ecosystem, cond.Tag, cn.CPE.CPE, m, err),
 						})
@@ -56,7 +56,7 @@ func inspectCPEPVP(data dataTypes.Data) []Violation {
 							continue
 						}
 						if cv, mv := cWFN.GetString(attr), mWFN.GetString(attr); cv != mv {
-							ds = append(ds, Violation{
+							vs = append(vs, Violation{
 								Pointer: fmt.Sprintf("%s/cpe/cpe_matches/%d", ptr, mi),
 								Message: fmt.Sprintf("detection %s: condition %q: criterion cpe %q and cpe_match %q disagree on %s: %q != %q", d.Ecosystem, cond.Tag, cn.CPE.CPE, m, attr, cv, mv),
 							})
@@ -66,5 +66,5 @@ func inspectCPEPVP(data dataTypes.Data) []Violation {
 			})
 		}
 	}
-	return ds
+	return vs
 }

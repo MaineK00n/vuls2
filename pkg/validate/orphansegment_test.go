@@ -3,6 +3,8 @@ package validate
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	advisoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory"
 	advisoryContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/advisory/content"
@@ -18,7 +20,7 @@ func TestInspectOrphanSegment(t *testing.T) {
 	tests := []struct {
 		name string
 		data dataTypes.Data
-		want int
+		want []Violation
 	}{
 		{
 			name: "ok",
@@ -45,7 +47,6 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: 0,
 		},
 		{
 			name: "advisory segment with unknown tag",
@@ -66,7 +67,12 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: 1,
+			want: []Violation{
+				{
+					Pointer: "/advisories/0/segments/0",
+					Message: "advisory ADV-2024-0001: segment (ecosystem: cpe, tag: other) has no corresponding detection condition",
+				},
+			},
 		},
 		{
 			name: "vulnerability segment with unknown ecosystem",
@@ -87,7 +93,12 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: 1,
+			want: []Violation{
+				{
+					Pointer: "/vulnerabilities/0/segments/0",
+					Message: "vulnerability CVE-2024-0001: segment (ecosystem: fedora, tag: vulnerable) has no corresponding detection condition",
+				},
+			},
 		},
 		{
 			name: "segments without any detections",
@@ -100,7 +111,12 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: 1,
+			want: []Violation{
+				{
+					Pointer: "/vulnerabilities/0/segments/0",
+					Message: "vulnerability CVE-2024-0001: segment (ecosystem: cpe, tag: vulnerable) has no corresponding detection condition",
+				},
+			},
 		},
 		{
 			name: "content without segments",
@@ -110,13 +126,12 @@ func TestInspectOrphanSegment(t *testing.T) {
 					{Content: vulnerabilityContentTypes.Content{ID: "CVE-2024-0001"}},
 				},
 			},
-			want: 0,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := inspectOrphanSegment(tt.data); len(got) != tt.want {
-				t.Errorf("inspectOrphanSegment() = %+v, want %d finding(s)", got, tt.want)
+			if diff := cmp.Diff(tt.want, inspectOrphanSegment(tt.data)); diff != "" {
+				t.Errorf("inspectOrphanSegment() (-expected +got):\n%s", diff)
 			}
 		})
 	}

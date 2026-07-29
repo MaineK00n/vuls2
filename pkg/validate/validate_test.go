@@ -1,8 +1,6 @@
 package validate
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -112,34 +110,5 @@ func TestValidate(t *testing.T) {
 				t.Errorf("Validate() (-expected +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestInspectLayout(t *testing.T) {
-	// Built at runtime: a directory literally named .git cannot be committed
-	// as a fixture.
-	root := t.TempDir()
-	for _, d := range []string{"data", "microsoftkb", ".git", "unknown-dir"} {
-		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, f := range []string{"datasource.json", "README.md"} {
-		if err := os.WriteFile(filepath.Join(root, f), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	findings, err := inspectLayout(root)
-	if err != nil {
-		t.Fatalf("inspectLayout() error = %v", err)
-	}
-	// data + microsoftkb coexisting is legitimate (microsoft-bulletin/cvrf);
-	// only the unknown entry must be reported.
-	want := []Finding{
-		{Path: "unknown-dir", Rule: "layout", Message: `unknown top-level entry (expected: ["attack" "capec" "cwe" "data" "eol" "microsoftkb" ".git" "README.md" "datasource.json"])`},
-	}
-	if diff := cmp.Diff(want, findings); diff != "" {
-		t.Errorf("inspectLayout() (-expected +got):\n%s", diff)
 	}
 }

@@ -18,19 +18,19 @@ var emptyCriteriaRule = DataRule{
 // nodes (at any depth) with neither criterias nor criterions, and criteria
 // nodes that have children but no valid operator.
 func inspectEmptyCriteria(data dataTypes.Data) []Violation {
-	var ds []Violation
+	var vs []Violation
 	for di, d := range data.Detections {
 		if len(d.Conditions) == 0 {
-			ds = append(ds, Violation{
+			vs = append(vs, Violation{
 				Pointer: fmt.Sprintf("/detections/%d", di),
 				Message: fmt.Sprintf("detection %s: no conditions", d.Ecosystem),
 			})
 		}
 		for ci, cond := range d.Conditions {
-			ds = append(ds, emptyCriteriaNodes(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), fmt.Sprintf("detection %s: condition %q: criteria", d.Ecosystem, cond.Tag), cond.Criteria)...)
+			vs = append(vs, emptyCriteriaNodes(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), fmt.Sprintf("detection %s: condition %q: criteria", d.Ecosystem, cond.Tag), cond.Criteria)...)
 		}
 	}
-	return ds
+	return vs
 }
 
 func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Violation {
@@ -38,14 +38,14 @@ func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Violation {
 		return []Violation{{Pointer: ptr, Message: fmt.Sprintf("%s: no criterias and no criterions", at)}}
 	}
 
-	var ds []Violation
+	var vs []Violation
 	switch ca.Operator {
 	case criteriaTypes.CriteriaOperatorTypeOR, criteriaTypes.CriteriaOperatorTypeAND:
 	default:
-		ds = append(ds, Violation{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
+		vs = append(vs, Violation{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
 	}
 	for i, child := range ca.Criterias {
-		ds = append(ds, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
+		vs = append(vs, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
 	}
-	return ds
+	return vs
 }
