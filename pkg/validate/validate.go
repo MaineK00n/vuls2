@@ -21,14 +21,14 @@ import (
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 )
 
-// Rule is one semantic rule evaluated against a single data.Data.
-type Rule struct {
+// DataRule is one semantic rule evaluated against a single data.Data.
+type DataRule struct {
 	Name        string
 	Description string
 	Inspect     func(data dataTypes.Data) []Violation
 }
 
-// Violation is a single rule violation reported by a Rule. Pointer
+// Violation is a single rule violation reported by a DataRule. Pointer
 // addresses the offending element within the file as an RFC 6901 JSON
 // pointer (e.g. /advisories/0/segments/2); Validate resolves it to
 // Finding.Line, and the pointer itself is not carried on Finding.
@@ -37,10 +37,10 @@ type Violation struct {
 	Message string
 }
 
-// Rules returns the registered per-file rule table for the data content
+// DataRules returns the registered per-file rule table for the data content
 // directory.
-func Rules() []Rule {
-	return []Rule{cpePVPRule, emptyCriteriaRule, orphanSegmentRule}
+func DataRules() []DataRule {
+	return []DataRule{cpePVPRule, emptyCriteriaRule, orphanSegmentRule}
 }
 
 // RepositoryRule is one rule evaluated against the repository as a whole
@@ -114,7 +114,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		o.apply(options)
 	}
 
-	rules, repoRules, err := resolveRules(options.rules)
+	dataRules, repoRules, err := resolveRules(options.rules)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve rules")
 	}
@@ -141,7 +141,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	// content kinds that have file-level rules selected and are actually
 	// present — with no per-file rules there is nothing to read.
 	var paths []string
-	if len(rules) > 0 {
+	if len(dataRules) > 0 {
 		dir := filepath.Join(root, "data")
 		switch info, err := os.Stat(dir); {
 		case err == nil && info.IsDir():
@@ -179,7 +179,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			fileFindings, err := validateFile(root, path, rules)
+			fileFindings, err := validateFile(root, path, dataRules)
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
 			}
@@ -206,25 +206,25 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	return findings, nil
 }
 
-func resolveRules(names []string) ([]Rule, []RepositoryRule, error) {
-	all, allRepo := Rules(), RepositoryRules()
+func resolveRules(names []string) ([]DataRule, []RepositoryRule, error) {
+	allData, allRepo := DataRules(), RepositoryRules()
 	if len(names) == 0 {
-		return all, allRepo, nil
+		return allData, allRepo, nil
 	}
 
-	rules := make([]Rule, 0, len(names))
+	dataRules := make([]DataRule, 0, len(names))
 	repoRules := make([]RepositoryRule, 0, len(names))
 	for _, name := range names {
-		switch i := slices.IndexFunc(all, func(c Rule) bool { return c.Name == name }); {
+		switch i := slices.IndexFunc(allData, func(c DataRule) bool { return c.Name == name }); {
 		case i >= 0:
-			if !slices.ContainsFunc(rules, func(c Rule) bool { return c.Name == name }) {
-				rules = append(rules, all[i])
+			if !slices.ContainsFunc(dataRules, func(c DataRule) bool { return c.Name == name }) {
+				dataRules = append(dataRules, allData[i])
 			}
 		default:
 			j := slices.IndexFunc(allRepo, func(c RepositoryRule) bool { return c.Name == name })
 			if j < 0 {
-				accepted := make([]string, 0, len(all)+len(allRepo))
-				for _, c := range all {
+				accepted := make([]string, 0, len(allData)+len(allRepo))
+				for _, c := range allData {
 					accepted = append(accepted, c.Name)
 				}
 				for _, c := range allRepo {
@@ -237,10 +237,10 @@ func resolveRules(names []string) ([]Rule, []RepositoryRule, error) {
 			}
 		}
 	}
-	return rules, repoRules, nil
+	return dataRules, repoRules, nil
 }
 
-func validateFile(root, path string, rules []Rule) ([]Finding, error) {
+func validateFile(root, path string, dataRules []DataRule) ([]Finding, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read %s", path)
@@ -260,7 +260,7 @@ func validateFile(root, path string, rules []Rule) ([]Finding, error) {
 		findings []Finding
 		pointers []string
 	)
-	for _, c := range rules {
+	for _, c := range dataRules {
 		for _, d := range c.Inspect(data) {
 			findings = append(findings, Finding{
 				Path:    filepath.ToSlash(rel),

@@ -7,7 +7,7 @@ import (
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 )
 
-var emptyCriteriaRule = Rule{
+var emptyCriteriaRule = DataRule{
 	Name:        "empty-criteria",
 	Description: "detection: no empty conditions or empty/operator-less criteria nodes",
 	Inspect:     inspectEmptyCriteria,
