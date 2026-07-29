@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"sync"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -167,10 +166,12 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		}
 	}
 
-	var mu sync.Mutex
+	// Each worker owns its own results slot, so no lock is needed; the
+	// happens-before edge of g.Wait makes the writes visible here.
+	results := make([][]Finding, len(paths))
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(max(options.concurrency, 1))
-	for _, path := range paths {
+	for i, path := range paths {
 		if ctx.Err() != nil {
 			break
 		}
@@ -182,16 +183,15 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
 			}
-			if len(fileFindings) > 0 {
-				mu.Lock()
-				findings = append(findings, fileFindings...)
-				mu.Unlock()
-			}
+			results[i] = fileFindings
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+	for _, fileFindings := range results {
+		findings = append(findings, fileFindings...)
 	}
 
 	slices.SortFunc(findings, func(x, y Finding) int {
