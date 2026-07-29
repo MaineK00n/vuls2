@@ -33,8 +33,8 @@ func NewCmd() *cobra.Command {
 		validated with their own checks when present.
 		`),
 		Example: heredoc.Doc(`
-		$ vuls validate vuls-data-extracted-nvd-api-cve
-		$ vuls validate --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-redhat-ovalv2
+		$ vuls validate vuls-data-extracted-redhat-cve
+		$ vuls validate --checks cpe-pvp,orphan-segment --format json vuls-data-extracted-nvd-feed-cve-v2
 		`),
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
