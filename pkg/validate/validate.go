@@ -40,7 +40,7 @@ type Violation struct {
 // DataRules returns the registered per-file rule table for the data content
 // directory.
 func DataRules() []DataRule {
-	return []DataRule{cpePVPRule, emptyCriteriaRule, orphanSegmentRule}
+	return []DataRule{cpePVPRule, criteriaOperatorRule, emptyCriteriaRule, orphanSegmentRule}
 }
 
 // RepositoryRule is one rule evaluated against the repository as a whole

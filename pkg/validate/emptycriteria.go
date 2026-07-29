@@ -9,14 +9,15 @@ import (
 
 var emptyCriteriaRule = DataRule{
 	Name:        "empty-criteria",
-	Description: "detection: no empty conditions or empty/operator-less criteria nodes",
+	Description: "detection: no empty conditions or empty criteria nodes",
 	Inspect:     inspectEmptyCriteria,
 }
 
 // inspectEmptyCriteria reports detection tree nodes that are structurally
-// present but semantically empty: detections without conditions, criteria
-// nodes (at any depth) with neither criterias nor criterions, and criteria
-// nodes that have children but no valid operator.
+// present but semantically empty: detections without conditions, and
+// criteria nodes (at any depth) with neither criterias nor criterions.
+// Operator validity of non-empty nodes is the criteria-operator rule's
+// concern.
 func inspectEmptyCriteria(data dataTypes.Data) []Violation {
 	var vs []Violation
 	for di, d := range data.Detections {
@@ -39,11 +40,6 @@ func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Violation {
 	}
 
 	var vs []Violation
-	switch ca.Operator {
-	case criteriaTypes.CriteriaOperatorTypeOR, criteriaTypes.CriteriaOperatorTypeAND:
-	default:
-		vs = append(vs, Violation{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
-	}
 	for i, child := range ca.Criterias {
 		vs = append(vs, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
 	}
