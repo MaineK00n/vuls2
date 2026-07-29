@@ -3,241 +3,121 @@ package validate
 import (
 	"os"
 	"path/filepath"
-	"reflect"
-	"slices"
-	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestValidate(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "data", "2024"), 0o755); err != nil {
-		t.Fatal(err)
+	type args struct {
+		root string
+		opts []Option
 	}
-	if err := os.WriteFile(filepath.Join(root, "datasource.json"), []byte(`{"id": "test"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// clean: detection condition (cpe, vulnerable) referenced by the vulnerability segment
-	if err := os.WriteFile(filepath.Join(root, "data", "2024", "CVE-2024-0001.json"), []byte(`{
-		"id": "CVE-2024-0001",
-		"vulnerabilities": [
-			{
-				"content": {"id": "CVE-2024-0001"},
-				"segments": [{"ecosystem": "cpe", "tag": "vulnerable"}]
-			}
-		],
-		"detections": [
-			{
-				"ecosystem": "cpe",
-				"conditions": [
-					{
-						"criteria": {
-							"operator": "OR",
-							"criterions": [
-								{
-									"type": "cpe",
-									"cpe": {
-										"vulnerable": true,
-										"cpe": "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-										"cpe_matches": ["cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"]
-									}
-								}
-							]
-						},
-						"tag": "vulnerable"
-					}
-				]
-			}
-		]
-	}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// broken: pvp mismatch in cpe_matches + orphan segment on the advisory
-	if err := os.WriteFile(filepath.Join(root, "data", "2024", "CVE-2024-0002.json"), []byte(`{
-		"id": "CVE-2024-0002",
-		"advisories": [
-			{
-				"content": {"id": "ADV-2024-0002"},
-				"segments": [{"ecosystem": "cpe", "tag": "orphan"}]
-			}
-		],
-		"detections": [
-			{
-				"ecosystem": "cpe",
-				"conditions": [
-					{
-						"criteria": {
-							"operator": "OR",
-							"criterions": [
-								{
-									"type": "cpe",
-									"cpe": {
-										"vulnerable": true,
-										"cpe": "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-										"cpe_matches": ["cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*"]
-									}
-								}
-							]
-						},
-						"tag": "vulnerable"
-					}
-				]
-			}
-		]
-	}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("all rules", func(t *testing.T) {
-		findings, err := Validate(root)
-		if err != nil {
-			t.Fatalf("Validate() error = %v", err)
-		}
-
-		var got []struct {
-			path  string
-			rule string
-		}
-		for _, f := range findings {
-			got = append(got, struct {
-				path  string
-				rule string
-			}{path: f.Path, rule: f.Rule})
-		}
-		want := []struct {
-			path  string
-			rule string
-		}{
-			{path: "data/2024/CVE-2024-0002.json", rule: "cpe-pvp"},
-			{path: "data/2024/CVE-2024-0002.json", rule: "orphan-segment"},
-		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Validate() = %+v, want %+v", got, want)
-		}
-	})
-
-	t.Run("selected rule only", func(t *testing.T) {
-		findings, err := Validate(root, WithRules([]string{"orphan-segment"}))
-		if err != nil {
-			t.Fatalf("Validate() error = %v", err)
-		}
-		if len(findings) != 1 || findings[0].Rule != "orphan-segment" || findings[0].ID != "CVE-2024-0002" {
-			t.Errorf("Validate() = %+v, want 1 orphan-segment finding for CVE-2024-0002", findings)
-		}
-	})
-
-	t.Run("unknown rule", func(t *testing.T) {
-		if _, err := Validate(root, WithRules([]string{"no-such-rule"})); err == nil {
-			t.Error("Validate() error = nil, want error")
-		}
-	})
-
-	t.Run("empty repository", func(t *testing.T) {
-		findings, err := Validate(t.TempDir())
-		if err != nil {
-			t.Fatalf("Validate() error = %v", err)
-		}
-		// missing datasource.json + no content directory
-		if len(findings) != 2 || findings[0].Rule != "layout" || findings[1].Rule != "layout" {
-			t.Errorf("Validate() = %+v, want 2 layout findings", findings)
-		}
-	})
-
-	t.Run("root does not exist", func(t *testing.T) {
-		if _, err := Validate(filepath.Join(root, "no-such-dir")); err == nil {
-			t.Error("Validate() error = nil, want error")
-		}
-	})
-}
-
-func TestValidateRootIsFile(t *testing.T) {
-	f := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(f, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Validate(f); err == nil {
-		t.Error("Validate() error = nil, want error for non-directory root")
-	}
-}
-
-func TestValidateDuplicateChecks(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "data", "CVE-2024-0003.json"), []byte(`{
-		"id": "CVE-2024-0003",
-		"vulnerabilities": [
-			{"content": {"id": "CVE-2024-0003"}, "segments": [{"ecosystem": "cpe", "tag": "orphan"}]}
-		]
-	}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	findings, err := Validate(root, WithRules([]string{"orphan-segment", "orphan-segment"}))
-	if err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if len(findings) != 1 {
-		t.Errorf("Validate() = %d finding(s), want 1 (duplicate rule names must be deduplicated)", len(findings))
-	}
-}
-
-func TestValidateFindingLines(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "data"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "datasource.json"), []byte(`{"id": "test"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// line numbers below are load-bearing: the orphan segment element opens
-	// on line 7.
-	if err := os.WriteFile(filepath.Join(root, "data", "CVE-2024-0004.json"), []byte(`{
-	"id": "CVE-2024-0004",
-	"vulnerabilities": [
+	tests := []struct {
+		name    string
+		args    args
+		want    []Finding
+		wantErr bool
+	}{
 		{
-			"content": {"id": "CVE-2024-0004"},
-			"segments": [
-				{"ecosystem": "cpe", "tag": "orphan"}
-			]
-		}
-	]
-}`), 0o644); err != nil {
-		t.Fatal(err)
+			name: "clean",
+			args: args{root: "./testdata/fixtures/clean"},
+		},
+		{
+			name: "broken",
+			args: args{root: "./testdata/fixtures/broken"},
+			want: []Finding{
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    22,
+					ID:      "CVE-2024-0002",
+					Rule:    "cpe-pvp",
+					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*" disagree on product: "product" != "other"`,
+				},
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    6,
+					ID:      "CVE-2024-0002",
+					Rule:    "orphan-segment",
+					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
+				},
+			},
+		},
+		{
+			name: "selected rule only",
+			args: args{root: "./testdata/fixtures/broken", opts: []Option{WithRules([]string{"orphan-segment"})}},
+			want: []Finding{
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    6,
+					ID:      "CVE-2024-0002",
+					Rule:    "orphan-segment",
+					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
+				},
+			},
+		},
+		{
+			name: "duplicate rule names are deduplicated",
+			args: args{root: "./testdata/fixtures/broken", opts: []Option{WithRules([]string{"orphan-segment", "orphan-segment"})}},
+			want: []Finding{
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    6,
+					ID:      "CVE-2024-0002",
+					Rule:    "orphan-segment",
+					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
+				},
+			},
+		},
+		{
+			name:    "unknown rule",
+			args:    args{root: "./testdata/fixtures/clean", opts: []Option{WithRules([]string{"no-such-rule"})}},
+			wantErr: true,
+		},
+		{
+			name: "no content directory",
+			args: args{root: "./testdata/fixtures/no-content"},
+			want: []Finding{
+				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
+				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
+			},
+		},
+		{
+			name: "data is not a directory",
+			args: args{root: "./testdata/fixtures/data-is-file"},
+			want: []Finding{
+				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
+				{Path: "data", Rule: "layout", Message: "data is not a directory"},
+				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
+			},
+		},
+		{
+			name:    "root does not exist",
+			args:    args{root: "./testdata/fixtures/no-such-dir"},
+			wantErr: true,
+		},
+		{
+			name:    "root is not a directory",
+			args:    args{root: "./testdata/fixtures/clean/datasource.json"},
+			wantErr: true,
+		},
 	}
-
-	findings, err := Validate(root)
-	if err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if len(findings) != 1 {
-		t.Fatalf("Validate() = %+v, want 1 finding", findings)
-	}
-	if findings[0].Line != 7 {
-		t.Errorf("Finding.Line = %d, want 7", findings[0].Line)
-	}
-}
-
-func TestValidateDataIsFile(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "data"), []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	findings, err := Validate(root, WithRules([]string{"layout"}))
-	if err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if !slices.ContainsFunc(findings, func(f Finding) bool {
-		return f.Rule == "layout" && f.Path == "data" && strings.Contains(f.Message, "not a directory")
-	}) {
-		t.Errorf("Validate() = %+v, want a layout finding for data not being a directory", findings)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Validate(tt.args.root, tt.args.opts...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("Validate() (-expected +got):\n%s", diff)
+			}
+		})
 	}
 }
 
 func TestInspectLayout(t *testing.T) {
+	// Built at runtime: a directory literally named .git cannot be committed
+	// as a fixture.
 	root := t.TempDir()
 	for _, d := range []string{"data", "microsoftkb", ".git", "unknown-dir"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
@@ -256,7 +136,10 @@ func TestInspectLayout(t *testing.T) {
 	}
 	// data + microsoftkb coexisting is legitimate (microsoft-bulletin/cvrf);
 	// only the unknown entry must be reported.
-	if len(findings) != 1 || findings[0].Path != "unknown-dir" {
-		t.Errorf("inspectLayout() = %+v, want exactly 1 finding for unknown-dir", findings)
+	want := []Finding{
+		{Path: "unknown-dir", Rule: "layout", Message: `unknown top-level entry (expected: ["attack" "capec" "cwe" "data" "eol" "microsoftkb" ".git" "README.md" "datasource.json"])`},
+	}
+	if diff := cmp.Diff(want, findings); diff != "" {
+		t.Errorf("inspectLayout() (-expected +got):\n%s", diff)
 	}
 }
