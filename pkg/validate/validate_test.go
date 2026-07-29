@@ -237,7 +237,7 @@ func TestValidateDataIsFile(t *testing.T) {
 	}
 }
 
-func TestDetectLayout(t *testing.T) {
+func TestInspectLayout(t *testing.T) {
 	root := t.TempDir()
 	for _, d := range []string{"data", "microsoftkb", ".git", "unknown-dir"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
@@ -250,13 +250,13 @@ func TestDetectLayout(t *testing.T) {
 		}
 	}
 
-	findings, err := detectLayout(root)
+	findings, err := inspectLayout(root)
 	if err != nil {
-		t.Fatalf("detectLayout() error = %v", err)
+		t.Fatalf("inspectLayout() error = %v", err)
 	}
 	// data + microsoftkb coexisting is legitimate (microsoft-bulletin/cvrf);
 	// only the unknown entry must be reported.
 	if len(findings) != 1 || findings[0].Path != "unknown-dir" {
-		t.Errorf("detectLayout() = %+v, want exactly 1 finding for unknown-dir", findings)
+		t.Errorf("inspectLayout() = %+v, want exactly 1 finding for unknown-dir", findings)
 	}
 }

@@ -29,7 +29,7 @@ func NewCmd() *cobra.Command {
 		Short: "validate an extracted repository semantically",
 		Long: heredoc.Doc(`
 		Validate an extracted repository. The repository layout is checked as a
-		whole, and content directories (data, ...) are auto-detected and
+		whole, and content directories (data, ...) are discovered automatically and
 		validated with their own checks when present.
 		`),
 		Example: heredoc.Doc(`

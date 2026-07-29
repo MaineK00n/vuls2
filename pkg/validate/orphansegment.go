@@ -11,12 +11,12 @@ import (
 var orphanSegmentCheck = Check{
 	Name:        "orphan-segment",
 	Description: "advisory/vulnerability: every segment has a corresponding detection condition",
-	Detect:      detectOrphanSegment,
+	Inspect:     inspectOrphanSegment,
 }
 
-// detectOrphanSegment reports advisory and vulnerability segments whose
+// inspectOrphanSegment reports advisory and vulnerability segments whose
 // (ecosystem, tag) pair matches no detection condition in the same file.
-func detectOrphanSegment(data dataTypes.Data) []Detected {
+func inspectOrphanSegment(data dataTypes.Data) []Violation {
 	type key struct {
 		ecosystem ecosystemTypes.Ecosystem
 		tag       segmentTypes.DetectionTag
@@ -29,11 +29,11 @@ func detectOrphanSegment(data dataTypes.Data) []Detected {
 		}
 	}
 
-	var ds []Detected
+	var ds []Violation
 	for ai, a := range data.Advisories {
 		for si, s := range a.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				ds = append(ds, Detected{
+				ds = append(ds, Violation{
 					Pointer: fmt.Sprintf("/advisories/%d/segments/%d", ai, si),
 					Message: fmt.Sprintf("advisory %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", a.Content.ID, s.Ecosystem, s.Tag),
 				})
@@ -43,7 +43,7 @@ func detectOrphanSegment(data dataTypes.Data) []Detected {
 	for vi, v := range data.Vulnerabilities {
 		for si, s := range v.Segments {
 			if _, ok := known[key{ecosystem: s.Ecosystem, tag: s.Tag}]; !ok {
-				ds = append(ds, Detected{
+				ds = append(ds, Violation{
 					Pointer: fmt.Sprintf("/vulnerabilities/%d/segments/%d", vi, si),
 					Message: fmt.Sprintf("vulnerability %s: segment (ecosystem: %s, tag: %s) has no corresponding detection condition", v.Content.ID, s.Ecosystem, s.Tag),
 				})

@@ -17,14 +17,14 @@ var contentDirs = []string{"attack", "capec", "cwe", "data", "eol", "microsoftkb
 var layoutCheck = RepositoryCheck{
 	Name:        "layout",
 	Description: "repository layout: datasource.json exists, only known top-level entries, at least one content directory",
-	Detect:      detectLayout,
+	Inspect:     inspectLayout,
 }
 
-// detectLayout reports structural problems of the repository root: a missing
+// inspectLayout reports structural problems of the repository root: a missing
 // datasource.json, top-level entries that neither db add nor the dotgit
 // tooling knows about, entries of the wrong kind (a content name that is not
 // a directory), and the absence of any known content directory.
-func detectLayout(root string) ([]Finding, error) {
+func inspectLayout(root string) ([]Finding, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read %s", root)

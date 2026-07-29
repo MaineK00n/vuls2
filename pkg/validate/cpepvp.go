@@ -13,15 +13,15 @@ import (
 var cpePVPCheck = Check{
 	Name:        "cpe-pvp",
 	Description: "cpe criterion: criterion cpe and cpe_matches agree on part:vendor:product",
-	Detect:      detectCPEPVP,
+	Inspect:     inspectCPEPVP,
 }
 
-// detectCPEPVP reports cpe criterions whose cpe_matches entries disagree
+// inspectCPEPVP reports cpe criterions whose cpe_matches entries disagree
 // with the criterion CPE on the part, vendor or product WFN attribute. A
 // logical value (ANY, NA) on either side is treated as compatible; only two
 // concrete, differing values are a mismatch.
-func detectCPEPVP(data dataTypes.Data) []Detected {
-	var ds []Detected
+func inspectCPEPVP(data dataTypes.Data) []Violation {
+	var ds []Violation
 	for di, d := range data.Detections {
 		for ci, cond := range d.Conditions {
 			walkCriteria(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), cond.Criteria, func(ptr string, cn criterionTypes.Criterion) {
@@ -31,7 +31,7 @@ func detectCPEPVP(data dataTypes.Data) []Detected {
 
 				cWFN, err := naming.UnbindFS(string(cn.CPE.CPE))
 				if err != nil {
-					ds = append(ds, Detected{
+					ds = append(ds, Violation{
 						Pointer: ptr + "/cpe/cpe",
 						Message: fmt.Sprintf("detection %s: condition %q: unbind criterion cpe %q to WFN: %v", d.Ecosystem, cond.Tag, cn.CPE.CPE, err),
 					})
@@ -41,7 +41,7 @@ func detectCPEPVP(data dataTypes.Data) []Detected {
 				for mi, m := range cn.CPE.CPEMatches {
 					mWFN, err := naming.UnbindFS(string(m))
 					if err != nil {
-						ds = append(ds, Detected{
+						ds = append(ds, Violation{
 							Pointer: fmt.Sprintf("%s/cpe/cpe_matches/%d", ptr, mi),
 							Message: fmt.Sprintf("detection %s: condition %q: criterion cpe %q: unbind cpe_match %q to WFN: %v", d.Ecosystem, cond.Tag, cn.CPE.CPE, m, err),
 						})
@@ -56,7 +56,7 @@ func detectCPEPVP(data dataTypes.Data) []Detected {
 							continue
 						}
 						if cv, mv := cWFN.GetString(attr), mWFN.GetString(attr); cv != mv {
-							ds = append(ds, Detected{
+							ds = append(ds, Violation{
 								Pointer: fmt.Sprintf("%s/cpe/cpe_matches/%d", ptr, mi),
 								Message: fmt.Sprintf("detection %s: condition %q: criterion cpe %q and cpe_match %q disagree on %s: %q != %q", d.Ecosystem, cond.Tag, cn.CPE.CPE, m, attr, cv, mv),
 							})

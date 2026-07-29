@@ -14,7 +14,7 @@ import (
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
 )
 
-func TestDetectOrphanSegment(t *testing.T) {
+func TestInspectOrphanSegment(t *testing.T) {
 	detection := detectionTypes.Detection{
 		Ecosystem: ecosystemTypes.EcosystemTypeCPE,
 		Conditions: []conditionTypes.Condition{
@@ -101,8 +101,8 @@ func TestDetectOrphanSegment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := detectOrphanSegment(tt.data); len(got) != tt.want {
-				t.Errorf("detectOrphanSegment() = %+v, want %d finding(s)", got, tt.want)
+			if got := inspectOrphanSegment(tt.data); len(got) != tt.want {
+				t.Errorf("inspectOrphanSegment() = %+v, want %d finding(s)", got, tt.want)
 			}
 		})
 	}

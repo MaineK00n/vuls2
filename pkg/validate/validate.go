@@ -26,14 +26,14 @@ import (
 type Check struct {
 	Name        string
 	Description string
-	Detect      func(data dataTypes.Data) []Detected
+	Inspect     func(data dataTypes.Data) []Violation
 }
 
-// Detected is one violation reported by a Check. Pointer addresses the
-// offending element within the file as an RFC 6901 JSON pointer (e.g.
-// /advisories/0/segments/2); Validate resolves it to Finding.Line, and the
-// pointer itself is not carried on Finding.
-type Detected struct {
+// Violation is a single rule violation reported by a Check. Pointer
+// addresses the offending element within the file as an RFC 6901 JSON
+// pointer (e.g. /advisories/0/segments/2); Validate resolves it to
+// Finding.Line, and the pointer itself is not carried on Finding.
+type Violation struct {
 	Pointer string
 	Message string
 }
@@ -45,13 +45,13 @@ func Checks() []Check {
 }
 
 // RepositoryCheck is one rule evaluated against the repository as a whole
-// (its top-level layout) rather than a single data file. Detect fills
+// (its top-level layout) rather than a single data file. Inspect fills
 // Finding.Path/Message itself; Check and Line handling stay with the
 // framework conventions (repository findings carry no line).
 type RepositoryCheck struct {
 	Name        string
 	Description string
-	Detect      func(root string) ([]Finding, error)
+	Inspect     func(root string) ([]Finding, error)
 }
 
 // RepositoryChecks returns the registered repository-level check table.
@@ -130,9 +130,9 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 
 	var findings []Finding
 	for _, c := range repoChecks {
-		repoFindings, err := c.Detect(root)
+		repoFindings, err := c.Inspect(root)
 		if err != nil {
-			return nil, errors.Wrapf(err, "detect %s", c.Name)
+			return nil, errors.Wrapf(err, "inspect %s", c.Name)
 		}
 		findings = append(findings, repoFindings...)
 	}
@@ -261,7 +261,7 @@ func validateFile(root, path string, checks []Check) ([]Finding, error) {
 		pointers []string
 	)
 	for _, c := range checks {
-		for _, d := range c.Detect(data) {
+		for _, d := range c.Inspect(data) {
 			findings = append(findings, Finding{
 				Path:    filepath.ToSlash(rel),
 				ID:      data.ID,

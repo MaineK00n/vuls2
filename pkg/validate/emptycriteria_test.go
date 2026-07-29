@@ -12,7 +12,7 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
-func TestDetectEmptyCriteria(t *testing.T) {
+func TestInspectEmptyCriteria(t *testing.T) {
 	criterion := criterionTypes.Criterion{
 		Type: criterionTypes.CriterionTypeCPE,
 		CPE: &cpecriterionTypes.Criterion{
@@ -127,8 +127,8 @@ func TestDetectEmptyCriteria(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := detectEmptyCriteria(tt.data); len(got) != tt.want {
-				t.Errorf("detectEmptyCriteria() = %+v, want %d finding(s)", got, tt.want)
+			if got := inspectEmptyCriteria(tt.data); len(got) != tt.want {
+				t.Errorf("inspectEmptyCriteria() = %+v, want %d finding(s)", got, tt.want)
 			}
 		})
 	}

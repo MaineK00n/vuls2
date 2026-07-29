@@ -10,18 +10,18 @@ import (
 var emptyCriteriaCheck = Check{
 	Name:        "empty-criteria",
 	Description: "detection: no empty conditions or empty/operator-less criteria nodes",
-	Detect:      detectEmptyCriteria,
+	Inspect:     inspectEmptyCriteria,
 }
 
-// detectEmptyCriteria reports detection tree nodes that are structurally
+// inspectEmptyCriteria reports detection tree nodes that are structurally
 // present but semantically empty: detections without conditions, criteria
 // nodes (at any depth) with neither criterias nor criterions, and criteria
 // nodes that have children but no valid operator.
-func detectEmptyCriteria(data dataTypes.Data) []Detected {
-	var ds []Detected
+func inspectEmptyCriteria(data dataTypes.Data) []Violation {
+	var ds []Violation
 	for di, d := range data.Detections {
 		if len(d.Conditions) == 0 {
-			ds = append(ds, Detected{
+			ds = append(ds, Violation{
 				Pointer: fmt.Sprintf("/detections/%d", di),
 				Message: fmt.Sprintf("detection %s: no conditions", d.Ecosystem),
 			})
@@ -33,16 +33,16 @@ func detectEmptyCriteria(data dataTypes.Data) []Detected {
 	return ds
 }
 
-func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Detected {
+func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Violation {
 	if len(ca.Criterias) == 0 && len(ca.Criterions) == 0 {
-		return []Detected{{Pointer: ptr, Message: fmt.Sprintf("%s: no criterias and no criterions", at)}}
+		return []Violation{{Pointer: ptr, Message: fmt.Sprintf("%s: no criterias and no criterions", at)}}
 	}
 
-	var ds []Detected
+	var ds []Violation
 	switch ca.Operator {
 	case criteriaTypes.CriteriaOperatorTypeOR, criteriaTypes.CriteriaOperatorTypeAND:
 	default:
-		ds = append(ds, Detected{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
+		ds = append(ds, Violation{Pointer: ptr, Message: fmt.Sprintf("%s: no operator", at)})
 	}
 	for i, child := range ca.Criterias {
 		ds = append(ds, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
