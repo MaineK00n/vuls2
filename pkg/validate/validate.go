@@ -241,17 +241,17 @@ func resolveRules(names []string) ([]DataRule, []CriteriaRule, []RepositoryRule,
 				repoRules = append(repoRules, allRepo[i])
 			}
 		default:
-			accepted := make([]string, 0, len(allData)+len(allCriteria)+len(allRepo))
+			acceptable := make([]string, 0, len(allData)+len(allCriteria)+len(allRepo))
 			for _, c := range allData {
-				accepted = append(accepted, c.Name)
+				acceptable = append(acceptable, c.Name)
 			}
 			for _, c := range allCriteria {
-				accepted = append(accepted, c.Name)
+				acceptable = append(acceptable, c.Name)
 			}
 			for _, c := range allRepo {
-				accepted = append(accepted, c.Name)
+				acceptable = append(acceptable, c.Name)
 			}
-			return nil, nil, nil, errors.Errorf("unknown rule %q. accepts: %q", name, accepted)
+			return nil, nil, nil, errors.Errorf("unknown rule %q. accepts: %q", name, acceptable)
 		}
 	}
 	return dataRules, criteriaRules, repoRules, nil
