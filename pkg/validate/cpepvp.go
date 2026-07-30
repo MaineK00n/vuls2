@@ -27,7 +27,7 @@ func inspectCPEPVP(ctx CriteriaContext, cn criterionTypes.Criterion) []Violation
 	cWFN, err := naming.UnbindFS(string(cn.CPE.CPE))
 	if err != nil {
 		return []Violation{{
-			Pointer: ctx.Pointer + "/cpe/cpe",
+			Pointer: fmt.Sprintf("%s/cpe/cpe", ctx.Pointer),
 			Message: fmt.Sprintf("detection %s: condition %q: unbind criterion cpe %q to WFN: %v", ctx.Ecosystem, ctx.Tag, cn.CPE.CPE, err),
 		}}
 	}
