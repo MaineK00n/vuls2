@@ -154,13 +154,19 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			}); err != nil {
 				return nil, errors.Wrapf(err, "walk %s", dir)
 			}
-		case err != nil && !errors.Is(err, fs.ErrNotExist):
+		case err == nil:
+			// Present but not a directory: the repository is statically
+			// broken for per-file rules, so fail instead of silently
+			// producing a result that never read any file.
+			return nil, errors.Errorf("%s is not a directory", dir)
+		case !errors.Is(err, fs.ErrNotExist):
 			// A stat error other than absence (permission, IO) must not
 			// yield a false clean result; db add treats it as fatal too.
 			return nil, errors.Wrapf(err, "stat %s", dir)
 		default:
-			// Absent, or present but not a directory — both are the layout
-			// rule's findings, not a walk target.
+			// Absent is a legitimate layout — repositories without data
+			// content exist; whether that is a problem is the layout
+			// rule's finding, not a walk error.
 		}
 	}
 

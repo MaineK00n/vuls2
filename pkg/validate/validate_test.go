@@ -81,8 +81,13 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "data is not a directory",
-			args: args{root: "./testdata/fixtures/data-is-file"},
+			name:    "data is not a directory",
+			args:    args{root: "./testdata/fixtures/data-is-file"},
+			wantErr: true,
+		},
+		{
+			name: "data is not a directory with layout rule only",
+			args: args{root: "./testdata/fixtures/data-is-file", opts: []Option{WithRules([]string{"layout"})}},
 			want: []Finding{
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
 				{Path: "data", Rule: "layout", Message: "data is not a directory"},
