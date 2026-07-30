@@ -105,8 +105,3 @@ func walkCriteriaNode(ctx CriteriaContext, ca criteriaTypes.Criteria, rules []Cr
 		}
 	}
 }
-
-// inspect runs the shared walk with only this rule; test helper.
-func (r CriteriaRule) inspect(data dataTypes.Data) []Violation {
-	return inspectCriteria(data, []CriteriaRule{r})
-}

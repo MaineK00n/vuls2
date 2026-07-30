@@ -1,4 +1,4 @@
-package validate
+package validate_test
 
 import (
 	"testing"
@@ -14,13 +14,15 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	vulnerabilityTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability"
 	vulnerabilityContentTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/vulnerability/content"
+
+	"github.com/MaineK00n/vuls2/pkg/validate"
 )
 
 func TestInspectOrphanSegment(t *testing.T) {
 	tests := []struct {
 		name string
 		data dataTypes.Data
-		want []Violation
+		want []validate.Violation
 	}{
 		{
 			name: "ok",
@@ -67,7 +69,7 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: []Violation{
+			want: []validate.Violation{
 				{
 					Pointer: "/advisories/0/segments/0",
 					Message: "advisory ADV-2024-0001: segment (ecosystem: cpe, tag: other) has no corresponding detection condition",
@@ -93,7 +95,7 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: []Violation{
+			want: []validate.Violation{
 				{
 					Pointer: "/vulnerabilities/0/segments/0",
 					Message: "vulnerability CVE-2024-0001: segment (ecosystem: fedora, tag: vulnerable) has no corresponding detection condition",
@@ -111,7 +113,7 @@ func TestInspectOrphanSegment(t *testing.T) {
 					},
 				},
 			},
-			want: []Violation{
+			want: []validate.Violation{
 				{
 					Pointer: "/vulnerabilities/0/segments/0",
 					Message: "vulnerability CVE-2024-0001: segment (ecosystem: cpe, tag: vulnerable) has no corresponding detection condition",
@@ -130,8 +132,8 @@ func TestInspectOrphanSegment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, inspectOrphanSegment(tt.data)); diff != "" {
-				t.Errorf("inspectOrphanSegment() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, validate.InspectOrphanSegment(tt.data)); diff != "" {
+				t.Errorf("InspectOrphanSegment() (-expected +got):\n%s", diff)
 			}
 		})
 	}

@@ -1,141 +1,91 @@
-package validate
+package validate_test
 
 import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
-	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
-	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
-	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
-	cpecriterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/cpecriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+
+	"github.com/MaineK00n/vuls2/pkg/validate"
 )
 
 func TestInspectCriteriaOperator(t *testing.T) {
+	type args struct {
+		ctx validate.CriteriaContext
+		ca  criteriaTypes.Criteria
+	}
 	tests := []struct {
 		name string
-		data dataTypes.Data
-		want []Violation
+		args args
+		want []validate.Violation
 	}{
 		{
-			name: "ok",
-			data: dataTypes.Data{
-				ID: "CVE-2024-0001",
-				Detections: []detectionTypes.Detection{
-					{
-						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-						Conditions: []conditionTypes.Condition{
-							{
-								Criteria: criteriaTypes.Criteria{
-									Operator: criteriaTypes.CriteriaOperatorTypeOR,
-									Criterions: []criterionTypes.Criterion{
-										{
-											Type: criterionTypes.CriterionTypeCPE,
-											CPE: &cpecriterionTypes.Criterion{
-												Vulnerable: true,
-												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-											},
-										},
-									},
-								},
-								Tag: "vulnerable",
-							},
-						},
-					},
+			name: "or with criterions",
+			args: args{
+				ctx: validate.CriteriaContext{
+					Pointer:   "/detections/0/conditions/0/criteria",
+					At:        `detection cpe: condition "vulnerable": criteria`,
+					Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+					Tag:       "vulnerable",
+				},
+				ca: criteriaTypes.Criteria{
+					Operator:   criteriaTypes.CriteriaOperatorTypeOR,
+					Criterions: []criterionTypes.Criterion{{Type: criterionTypes.CriterionTypeVersion}},
 				},
 			},
 		},
 		{
-			name: "criteria with children but no operator",
-			data: dataTypes.Data{
-				ID: "CVE-2024-0001",
-				Detections: []detectionTypes.Detection{
-					{
-						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-						Conditions: []conditionTypes.Condition{
-							{
-								Criteria: criteriaTypes.Criteria{
-									Criterions: []criterionTypes.Criterion{
-										{
-											Type: criterionTypes.CriterionTypeCPE,
-											CPE: &cpecriterionTypes.Criterion{
-												Vulnerable: true,
-												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-											},
-										},
-									},
-								},
-								Tag: "vulnerable",
-							},
-						},
-					},
+			name: "and with child criterias",
+			args: args{
+				ctx: validate.CriteriaContext{
+					Pointer:   "/detections/0/conditions/0/criteria",
+					At:        `detection cpe: condition "vulnerable": criteria`,
+					Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+					Tag:       "vulnerable",
 				},
-			},
-			want: []Violation{
-				{Rule: "criteria-operator", Pointer: "/detections/0/conditions/0/criteria", Message: `detection cpe: condition "vulnerable": criteria: no operator`},
+				ca: criteriaTypes.Criteria{
+					Operator:  criteriaTypes.CriteriaOperatorTypeAND,
+					Criterias: []criteriaTypes.Criteria{{Operator: criteriaTypes.CriteriaOperatorTypeOR}},
+				},
 			},
 		},
 		{
-			name: "nested criteria without operator",
-			data: dataTypes.Data{
-				ID: "CVE-2024-0001",
-				Detections: []detectionTypes.Detection{
-					{
-						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-						Conditions: []conditionTypes.Condition{
-							{
-								Criteria: criteriaTypes.Criteria{
-									Operator: criteriaTypes.CriteriaOperatorTypeAND,
-									Criterias: []criteriaTypes.Criteria{
-										{
-											Criterions: []criterionTypes.Criterion{
-												{
-													Type: criterionTypes.CriterionTypeCPE,
-													CPE: &cpecriterionTypes.Criterion{
-														Vulnerable: true,
-														CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-													},
-												},
-											},
-										},
-									},
-								},
-								Tag: "vulnerable",
-							},
-						},
-					},
+			name: "children but no operator",
+			args: args{
+				ctx: validate.CriteriaContext{
+					Pointer:   "/detections/0/conditions/0/criteria/criterias/0",
+					At:        `detection cpe: condition "vulnerable": criteria: criterias[0]`,
+					Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+					Tag:       "vulnerable",
+				},
+				ca: criteriaTypes.Criteria{
+					Criterions: []criterionTypes.Criterion{{Type: criterionTypes.CriterionTypeVersion}},
 				},
 			},
-			want: []Violation{
-				{Rule: "criteria-operator", Pointer: "/detections/0/conditions/0/criteria/criterias/0", Message: `detection cpe: condition "vulnerable": criteria: criterias[0]: no operator`},
+			want: []validate.Violation{
+				{Pointer: "/detections/0/conditions/0/criteria/criterias/0", Message: `detection cpe: condition "vulnerable": criteria: criterias[0]: no operator`},
 			},
 		},
 		{
 			name: "empty criteria is not this rule's concern",
-			data: dataTypes.Data{
-				ID: "CVE-2024-0001",
-				Detections: []detectionTypes.Detection{
-					{
-						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-						Conditions: []conditionTypes.Condition{
-							{Tag: "vulnerable"},
-						},
-					},
+			args: args{
+				ctx: validate.CriteriaContext{
+					Pointer:   "/detections/0/conditions/0/criteria",
+					At:        `detection cpe: condition "vulnerable": criteria`,
+					Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+					Tag:       "vulnerable",
 				},
+				ca: criteriaTypes.Criteria{},
 			},
-		},
-		{
-			name: "no detections",
-			data: dataTypes.Data{ID: "CVE-2024-0001"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, criteriaOperatorRule.inspect(tt.data)); diff != "" {
-				t.Errorf("criteriaOperatorRule.inspect() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, validate.InspectCriteriaOperator(tt.args.ctx, tt.args.ca)); diff != "" {
+				t.Errorf("InspectCriteriaOperator() (-expected +got):\n%s", diff)
 			}
 		})
 	}

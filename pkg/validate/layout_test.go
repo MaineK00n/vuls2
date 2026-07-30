@@ -1,4 +1,4 @@
-package validate
+package validate_test
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/MaineK00n/vuls2/pkg/validate"
 )
 
 func TestInspectLayout(t *testing.T) {
@@ -15,7 +17,7 @@ func TestInspectLayout(t *testing.T) {
 		name  string
 		dirs  []string
 		files []string
-		want  []Finding
+		want  []validate.Finding
 	}{
 		{
 			name:  "ok",
@@ -28,28 +30,28 @@ func TestInspectLayout(t *testing.T) {
 			name:  "unknown top-level entry",
 			dirs:  []string{"data", "unknown-dir"},
 			files: []string{"datasource.json"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: "unknown-dir", Rule: "layout", Message: `unknown top-level entry (expected: ["attack" "capec" "cwe" "data" "eol" "microsoftkb" ".git" "README.md" "datasource.json"])`},
 			},
 		},
 		{
 			name: "missing datasource.json",
 			dirs: []string{"data"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
 			},
 		},
 		{
 			name:  "no content directory",
 			files: []string{"datasource.json", "README.md"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
 			},
 		},
 		{
 			name:  "content name is not a directory",
 			files: []string{"data", "datasource.json"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: "data", Rule: "layout", Message: "data is not a directory"},
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
 			},
@@ -57,7 +59,7 @@ func TestInspectLayout(t *testing.T) {
 		{
 			name: "datasource.json is not a regular file",
 			dirs: []string{"data", "datasource.json"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is not a regular file"},
 			},
 		},
@@ -65,7 +67,7 @@ func TestInspectLayout(t *testing.T) {
 			name:  "README.md is not a regular file",
 			dirs:  []string{"data", "README.md"},
 			files: []string{"datasource.json"},
-			want: []Finding{
+			want: []validate.Finding{
 				{Path: "README.md", Rule: "layout", Message: "README.md is not a regular file"},
 			},
 		},
@@ -84,12 +86,12 @@ func TestInspectLayout(t *testing.T) {
 				}
 			}
 
-			got, err := inspectLayout(root)
+			got, err := validate.InspectLayout(root)
 			if err != nil {
-				t.Fatalf("inspectLayout() error = %v", err)
+				t.Fatalf("validate.InspectLayout() error = %v", err)
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("inspectLayout() (-expected +got):\n%s", diff)
+				t.Errorf("InspectLayout() (-expected +got):\n%s", diff)
 			}
 		})
 	}
