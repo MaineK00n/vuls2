@@ -78,6 +78,7 @@ func TestValidate(t *testing.T) {
 			args: args{root: "./testdata/fixtures/no-content"},
 			want: []Finding{
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
+				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
 			},
 		},
 		{
@@ -91,12 +92,8 @@ func TestValidate(t *testing.T) {
 			want: []Finding{
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
 				{Path: "data", Rule: "layout", Message: "data is not a directory"},
+				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
 			},
-		},
-		{
-			name:    "datasource.json is missing",
-			args:    args{root: "./testdata/fixtures/no-datasource"},
-			wantErr: true,
 		},
 		{
 			name:    "root does not exist",

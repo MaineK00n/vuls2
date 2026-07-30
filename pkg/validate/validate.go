@@ -139,19 +139,6 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		return nil, errors.Errorf("%s is not a directory", root)
 	}
 
-	// datasource.json is what identifies the target as an extracted
-	// repository in the first place; without it there is nothing to
-	// validate, so like a missing root this is an error, not a finding.
-	switch info, err := os.Stat(filepath.Join(root, "datasource.json")); {
-	case err == nil && info.Mode().IsRegular():
-	case err == nil:
-		return nil, errors.Errorf("%s is not a regular file", filepath.Join(root, "datasource.json"))
-	case errors.Is(err, fs.ErrNotExist):
-		return nil, errors.Errorf("%s is missing", filepath.Join(root, "datasource.json"))
-	default:
-		return nil, errors.Wrapf(err, "stat %s", filepath.Join(root, "datasource.json"))
-	}
-
 	var findings []Finding
 	for _, c := range repoRules {
 		repoFindings, err := c.Inspect(root)
