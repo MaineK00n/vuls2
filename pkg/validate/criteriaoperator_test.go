@@ -134,8 +134,8 @@ func TestInspectCriteriaOperator(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, inspectCriteriaOperator(tt.data)); diff != "" {
-				t.Errorf("inspectCriteriaOperator() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, criteriaOperatorRule.inspect(tt.data)); diff != "" {
+				t.Errorf("criteriaOperatorRule.inspect() (-expected +got):\n%s", diff)
 			}
 		})
 	}

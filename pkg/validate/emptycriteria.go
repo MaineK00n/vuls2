@@ -3,45 +3,32 @@ package validate
 import (
 	"fmt"
 
-	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
+	detectionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
 )
 
-var emptyCriteriaRule = DataRule{
+var emptyCriteriaRule = CriteriaRule{
 	Name:        "empty-criteria",
 	Description: "detection: no empty conditions or empty criteria nodes",
-	Inspect:     inspectEmptyCriteria,
+	Detection:   inspectNoConditions,
+	Node:        inspectEmptyCriteria,
 }
 
-// inspectEmptyCriteria reports detection tree nodes that are structurally
-// present but semantically empty: detections without conditions, and
-// criteria nodes (at any depth) with neither criterias nor criterions.
-// Operator validity of non-empty nodes is the criteria-operator rule's
-// concern.
-func inspectEmptyCriteria(data dataTypes.Data) []Violation {
-	var vs []Violation
-	for di, d := range data.Detections {
-		if len(d.Conditions) == 0 {
-			vs = append(vs, Violation{
-				Pointer: fmt.Sprintf("/detections/%d", di),
-				Message: fmt.Sprintf("detection %s: no conditions", d.Ecosystem),
-			})
-		}
-		for ci, cond := range d.Conditions {
-			vs = append(vs, emptyCriteriaNodes(fmt.Sprintf("/detections/%d/conditions/%d/criteria", di, ci), fmt.Sprintf("detection %s: condition %q: criteria", d.Ecosystem, cond.Tag), cond.Criteria)...)
-		}
+// inspectNoConditions reports detections that carry no conditions at all.
+func inspectNoConditions(ctx CriteriaContext, d detectionTypes.Detection) []Violation {
+	if len(d.Conditions) > 0 {
+		return nil
 	}
-	return vs
+	return []Violation{{Pointer: ctx.Pointer, Message: fmt.Sprintf("%s: no conditions", ctx.At)}}
 }
 
-func emptyCriteriaNodes(ptr, at string, ca criteriaTypes.Criteria) []Violation {
-	if len(ca.Criterias) == 0 && len(ca.Criterions) == 0 {
-		return []Violation{{Pointer: ptr, Message: fmt.Sprintf("%s: no criterias and no criterions", at)}}
+// inspectEmptyCriteria reports criteria nodes (at any depth) with neither
+// criterias nor criterions — nodes that can never match anything and usually
+// mean the extractor dropped content on the floor. Operator validity of
+// non-empty nodes is the criteria-operator rule's concern.
+func inspectEmptyCriteria(ctx CriteriaContext, ca criteriaTypes.Criteria) []Violation {
+	if len(ca.Criterias) > 0 || len(ca.Criterions) > 0 {
+		return nil
 	}
-
-	var vs []Violation
-	for i, child := range ca.Criterias {
-		vs = append(vs, emptyCriteriaNodes(fmt.Sprintf("%s/criterias/%d", ptr, i), fmt.Sprintf("%s: criterias[%d]", at, i), child)...)
-	}
-	return vs
+	return []Violation{{Pointer: ctx.Pointer, Message: fmt.Sprintf("%s: no criterias and no criterions", ctx.At)}}
 }

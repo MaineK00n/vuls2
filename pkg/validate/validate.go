@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,8 +16,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
-	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
-	criterionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion"
 )
 
 // DataRule is one semantic rule evaluated against a single data.Data.
@@ -38,9 +35,10 @@ type Violation struct {
 }
 
 // DataRules returns the registered per-file rule table for the data content
-// directory.
+// directory. Rules that inspect the detection criteria trees live in the
+// CriteriaRules table instead and share a single walk.
 func DataRules() []DataRule {
-	return []DataRule{cpePVPRule, criteriaOperatorRule, emptyCriteriaRule, orphanSegmentRule}
+	return []DataRule{orphanSegmentRule}
 }
 
 // RepositoryRule is one rule evaluated against the repository as a whole
@@ -114,7 +112,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		o.apply(options)
 	}
 
-	dataRules, repoRules, err := resolveRules(options.rules)
+	dataRules, criteriaRules, repoRules, err := resolveRules(options.rules)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve rules")
 	}
@@ -141,7 +139,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	// content kinds that have file-level rules selected and are actually
 	// present — with no per-file rules there is nothing to read.
 	var paths []string
-	if len(dataRules) > 0 {
+	if len(dataRules)+len(criteriaRules) > 0 {
 		dir := filepath.Join(root, "data")
 		switch info, err := os.Stat(dir); {
 		case err == nil && info.IsDir():
@@ -179,7 +177,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			fileFindings, err := validateFile(root, path, dataRules)
+			fileFindings, err := validateFile(root, path, dataRules, criteriaRules)
 			if err != nil {
 				return errors.Wrapf(err, "validate %s", path)
 			}
@@ -206,41 +204,50 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	return findings, nil
 }
 
-func resolveRules(names []string) ([]DataRule, []RepositoryRule, error) {
-	allData, allRepo := DataRules(), RepositoryRules()
+func resolveRules(names []string) ([]DataRule, []CriteriaRule, []RepositoryRule, error) {
+	allData, allCriteria, allRepo := DataRules(), CriteriaRules(), RepositoryRules()
 	if len(names) == 0 {
-		return allData, allRepo, nil
+		return allData, allCriteria, allRepo, nil
 	}
 
 	dataRules := make([]DataRule, 0, len(names))
+	criteriaRules := make([]CriteriaRule, 0, len(names))
 	repoRules := make([]RepositoryRule, 0, len(names))
 	for _, name := range names {
-		switch i := slices.IndexFunc(allData, func(c DataRule) bool { return c.Name == name }); {
-		case i >= 0:
+		switch {
+		case slices.ContainsFunc(allData, func(c DataRule) bool { return c.Name == name }):
+			i := slices.IndexFunc(allData, func(c DataRule) bool { return c.Name == name })
 			if !slices.ContainsFunc(dataRules, func(c DataRule) bool { return c.Name == name }) {
 				dataRules = append(dataRules, allData[i])
 			}
-		default:
-			j := slices.IndexFunc(allRepo, func(c RepositoryRule) bool { return c.Name == name })
-			if j < 0 {
-				accepted := make([]string, 0, len(allData)+len(allRepo))
-				for _, c := range allData {
-					accepted = append(accepted, c.Name)
-				}
-				for _, c := range allRepo {
-					accepted = append(accepted, c.Name)
-				}
-				return nil, nil, errors.Errorf("unknown rule %q. accepts: %q", name, accepted)
+		case slices.ContainsFunc(allCriteria, func(c CriteriaRule) bool { return c.Name == name }):
+			i := slices.IndexFunc(allCriteria, func(c CriteriaRule) bool { return c.Name == name })
+			if !slices.ContainsFunc(criteriaRules, func(c CriteriaRule) bool { return c.Name == name }) {
+				criteriaRules = append(criteriaRules, allCriteria[i])
 			}
+		case slices.ContainsFunc(allRepo, func(c RepositoryRule) bool { return c.Name == name }):
+			i := slices.IndexFunc(allRepo, func(c RepositoryRule) bool { return c.Name == name })
 			if !slices.ContainsFunc(repoRules, func(c RepositoryRule) bool { return c.Name == name }) {
-				repoRules = append(repoRules, allRepo[j])
+				repoRules = append(repoRules, allRepo[i])
 			}
+		default:
+			accepted := make([]string, 0, len(allData)+len(allCriteria)+len(allRepo))
+			for _, c := range allData {
+				accepted = append(accepted, c.Name)
+			}
+			for _, c := range allCriteria {
+				accepted = append(accepted, c.Name)
+			}
+			for _, c := range allRepo {
+				accepted = append(accepted, c.Name)
+			}
+			return nil, nil, nil, errors.Errorf("unknown rule %q. accepts: %q", name, accepted)
 		}
 	}
-	return dataRules, repoRules, nil
+	return dataRules, criteriaRules, repoRules, nil
 }
 
-func validateFile(root, path string, dataRules []DataRule) ([]Finding, error) {
+func validateFile(root, path string, dataRules []DataRule, criteriaRules []CriteriaRule) ([]Finding, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read %s", path)
@@ -256,20 +263,26 @@ func validateFile(root, path string, dataRules []DataRule) ([]Finding, error) {
 		return nil, errors.Wrapf(err, "rel %s %s", root, path)
 	}
 
+	var vs []attributed
+	for _, c := range dataRules {
+		for _, v := range c.Inspect(data) {
+			vs = append(vs, attributed{rule: c.Name, Violation: v})
+		}
+	}
+	vs = append(vs, inspectCriteria(data, criteriaRules)...)
+
 	var (
 		findings []Finding
 		pointers []string
 	)
-	for _, c := range dataRules {
-		for _, v := range c.Inspect(data) {
-			findings = append(findings, Finding{
-				Path:    filepath.ToSlash(rel),
-				ID:      data.ID,
-				Rule:    c.Name,
-				Message: v.Message,
-			})
-			pointers = append(pointers, v.Pointer)
-		}
+	for _, v := range vs {
+		findings = append(findings, Finding{
+			Path:    filepath.ToSlash(rel),
+			ID:      data.ID,
+			Rule:    v.rule,
+			Message: v.Message,
+		})
+		pointers = append(pointers, v.Pointer)
 	}
 	if len(findings) == 0 {
 		return nil, nil
@@ -318,15 +331,4 @@ func resolveLines(bs []byte, pointers []string) map[string]int {
 		lines[ptr] = line
 	}
 	return lines
-}
-
-// walkCriteria visits every criterion in the criteria tree rooted at ca,
-// passing the JSON pointer of each criterion relative to the tree root ptr.
-func walkCriteria(ptr string, ca criteriaTypes.Criteria, fn func(ptr string, cn criterionTypes.Criterion)) {
-	for i, child := range ca.Criterias {
-		walkCriteria(fmt.Sprintf("%s/criterias/%d", ptr, i), child, fn)
-	}
-	for i, cn := range ca.Criterions {
-		fn(fmt.Sprintf("%s/criterions/%d", ptr, i), cn)
-	}
 }

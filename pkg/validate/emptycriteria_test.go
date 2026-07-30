@@ -121,8 +121,8 @@ func TestInspectEmptyCriteria(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, inspectEmptyCriteria(tt.data)); diff != "" {
-				t.Errorf("inspectEmptyCriteria() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, emptyCriteriaRule.inspect(tt.data)); diff != "" {
+				t.Errorf("emptyCriteriaRule.inspect() (-expected +got):\n%s", diff)
 			}
 		})
 	}

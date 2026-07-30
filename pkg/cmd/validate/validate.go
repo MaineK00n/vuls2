@@ -87,6 +87,9 @@ func NewCmd() *cobra.Command {
 		for _, c := range validate.DataRules() {
 			names = append(names, c.Name)
 		}
+		for _, c := range validate.CriteriaRules() {
+			names = append(names, c.Name)
+		}
 		return names
 	}(), ", ")))
 	cmd.Flags().StringVarP(&options.format, "format", "", options.format, "output format (default: text, accepts: [text, json])")

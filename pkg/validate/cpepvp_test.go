@@ -153,8 +153,8 @@ func TestInspectCPEPVP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, inspectCPEPVP(tt.data)); diff != "" {
-				t.Errorf("inspectCPEPVP() (-expected +got):\n%s", diff)
+			if diff := cmp.Diff(tt.want, cpePVPRule.inspect(tt.data)); diff != "" {
+				t.Errorf("cpePVPRule.inspect() (-expected +got):\n%s", diff)
 			}
 		})
 	}
