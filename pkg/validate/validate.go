@@ -145,7 +145,7 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 		case err == nil && info.IsDir():
 			if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "walk %s", path)
 				}
 				if !d.IsDir() && filepath.Ext(path) == ".json" {
 					paths = append(paths, path)
