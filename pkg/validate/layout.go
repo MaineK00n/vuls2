@@ -16,14 +16,16 @@ var contentDirs = []string{"attack", "capec", "cwe", "data", "eol", "microsoftkb
 
 var layoutRule = RepositoryRule{
 	Name:        "layout",
-	Description: "repository layout: datasource.json exists, only known top-level entries, at least one content directory",
+	Description: "repository layout: only known top-level entries, at least one content directory",
 	Inspect:     inspectLayout,
 }
 
-// inspectLayout reports structural problems of the repository root: a missing
-// datasource.json, top-level entries that neither db add nor the dotgit
-// tooling knows about, entries of the wrong kind (a content name that is not
-// a directory), and the absence of any known content directory.
+// inspectLayout reports structural problems of the repository root:
+// top-level entries that neither db add nor the dotgit tooling knows about,
+// entries of the wrong kind (a content name that is not a directory), and
+// the absence of any known content directory. datasource.json existence is
+// not this rule's concern — Validate requires it up front as the marker of
+// an extracted repository.
 func inspectLayout(root string) ([]Finding, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -35,10 +37,6 @@ func inspectLayout(root string) ([]Finding, error) {
 		findings = append(findings, Finding{Path: path, Rule: "layout", Message: message})
 	}
 
-	if !slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == "datasource.json" }) {
-		add("datasource.json", "datasource.json is missing")
-	}
-
 	contents := 0
 	for _, e := range entries {
 		switch name := e.Name(); {
@@ -48,8 +46,8 @@ func inspectLayout(root string) ([]Finding, error) {
 				continue
 			}
 			contents++
-		case name == ".git":
-		case name == "README.md", name == "datasource.json":
+		case name == ".git", name == "datasource.json":
+		case name == "README.md":
 			if e.IsDir() {
 				add(name, fmt.Sprintf("%s is not a regular file", name))
 			}

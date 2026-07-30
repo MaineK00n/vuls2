@@ -33,13 +33,6 @@ func TestInspectLayout(t *testing.T) {
 			},
 		},
 		{
-			name: "missing datasource.json",
-			dirs: []string{"data"},
-			want: []Finding{
-				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is missing"},
-			},
-		},
-		{
 			name:  "no content directory",
 			files: []string{"datasource.json", "README.md"},
 			want: []Finding{
@@ -52,13 +45,6 @@ func TestInspectLayout(t *testing.T) {
 			want: []Finding{
 				{Path: "data", Rule: "layout", Message: "data is not a directory"},
 				{Path: ".", Rule: "layout", Message: "no content directory (expected at least one of: attack, capec, cwe, data, eol, microsoftkb)"},
-			},
-		},
-		{
-			name: "datasource.json is not a regular file",
-			dirs: []string{"data", "datasource.json"},
-			want: []Finding{
-				{Path: "datasource.json", Rule: "layout", Message: "datasource.json is not a regular file"},
 			},
 		},
 		{
