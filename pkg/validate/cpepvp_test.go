@@ -14,26 +14,6 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 )
 
-func cpeData(criterions ...criterionTypes.Criterion) dataTypes.Data {
-	return dataTypes.Data{
-		ID: "CVE-2024-0001",
-		Detections: []detectionTypes.Detection{
-			{
-				Ecosystem: ecosystemTypes.EcosystemTypeCPE,
-				Conditions: []conditionTypes.Condition{
-					{
-						Criteria: criteriaTypes.Criteria{
-							Operator:   criteriaTypes.CriteriaOperatorTypeOR,
-							Criterions: criterions,
-						},
-						Tag: "vulnerable",
-					},
-				},
-			},
-		},
-	}
-}
-
 func TestInspectCPEPVP(t *testing.T) {
 	tests := []struct {
 		name string
@@ -42,25 +22,61 @@ func TestInspectCPEPVP(t *testing.T) {
 	}{
 		{
 			name: "match",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-					CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+												CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 		},
 		{
 			name: "product mismatch",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-					CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+												CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 			want: []Violation{
 				{
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
@@ -70,14 +86,32 @@ func TestInspectCPEPVP(t *testing.T) {
 		},
 		{
 			name: "part and vendor mismatch",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-					CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:o:other:product:1.0.0:*:*:*:*:*:*:*"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+												CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:o:other:product:1.0.0:*:*:*:*:*:*:*"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 			want: []Violation{
 				{
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
@@ -91,25 +125,61 @@ func TestInspectCPEPVP(t *testing.T) {
 		},
 		{
 			name: "wildcard vendor on criterion side is compatible",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:*:product:*:*:*:*:*:*:*:*",
-					CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:*:product:*:*:*:*:*:*:*:*",
+												CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 		},
 		{
 			name: "invalid criterion cpe",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "not-a-cpe",
-					CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "not-a-cpe",
+												CPEMatches: []cpecriterionTypes.CPE{"cpe:2.3:a:vendor:product:1.0.0:*:*:*:*:*:*:*"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 			want: []Violation{
 				{
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe",
@@ -119,14 +189,32 @@ func TestInspectCPEPVP(t *testing.T) {
 		},
 		{
 			name: "invalid cpe_match",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
-					CPEMatches: []cpecriterionTypes.CPE{"not-a-cpe"},
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+												CPEMatches: []cpecriterionTypes.CPE{"not-a-cpe"},
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 			want: []Violation{
 				{
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
@@ -136,19 +224,55 @@ func TestInspectCPEPVP(t *testing.T) {
 		},
 		{
 			name: "no cpe_matches",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeCPE,
-				CPE: &cpecriterionTypes.Criterion{
-					Vulnerable: true,
-					CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeCPE,
+											CPE: &cpecriterionTypes.Criterion{
+												Vulnerable: true,
+												CPE:        "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*",
+											},
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
 				},
-			}),
+			},
 		},
 		{
 			name: "non-cpe criterion is ignored",
-			data: cpeData(criterionTypes.Criterion{
-				Type: criterionTypes.CriterionTypeVersion,
-			}),
+			data: dataTypes.Data{
+				ID: "CVE-2024-0001",
+				Detections: []detectionTypes.Detection{
+					{
+						Ecosystem: ecosystemTypes.EcosystemTypeCPE,
+						Conditions: []conditionTypes.Condition{
+							{
+								Criteria: criteriaTypes.Criteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.Criterion{
+										{
+											Type: criterionTypes.CriterionTypeVersion,
+										},
+									},
+								},
+								Tag: "vulnerable",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
