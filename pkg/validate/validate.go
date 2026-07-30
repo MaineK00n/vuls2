@@ -60,23 +60,24 @@ func RepositoryRules() []RepositoryRule {
 // is the 1-based line number of the offending element (0 when it could not
 // be resolved).
 type Finding struct {
-	RootID  dataTypes.RootID `json:"root_id,omitempty"`
 	Path    string           `json:"path"`
 	Line    int              `json:"line,omitzero"`
+	RootID  dataTypes.RootID `json:"root_id,omitempty"`
 	Rule    string           `json:"rule"`
 	Message string           `json:"message"`
 }
 
-// Compare is the canonical total order over findings: by RootID, then
-// Path, Line, Rule, Message — line order within a file, like compiler
-// diagnostics, rather than grouped by rule. Validate returns findings
-// unordered; output layers sort with this.
+// Compare is the canonical total order over findings: by Rule first, then
+// Path, Line, RootID, Message. Rule leads because findings point at
+// generated data — the unit of fixing is an extractor bug class (= one
+// rule), so output reads as per-rule sections, each in path/line order.
+// Validate returns findings unordered; output layers sort with this.
 func (f Finding) Compare(other Finding) int {
 	return cmp.Or(
-		cmp.Compare(f.RootID, other.RootID),
+		cmp.Compare(f.Rule, other.Rule),
 		cmp.Compare(f.Path, other.Path),
 		cmp.Compare(f.Line, other.Line),
-		cmp.Compare(f.Rule, other.Rule),
+		cmp.Compare(f.RootID, other.RootID),
 		cmp.Compare(f.Message, other.Message),
 	)
 }
@@ -288,8 +289,8 @@ func validateFile(root, path string, dataRules []DataRule, criteriaRules []Crite
 	)
 	for _, v := range vs {
 		findings = append(findings, Finding{
-			RootID:  data.ID,
 			Path:    filepath.ToSlash(rel),
+			RootID:  data.ID,
 			Rule:    v.rule,
 			Message: v.Message,
 		})

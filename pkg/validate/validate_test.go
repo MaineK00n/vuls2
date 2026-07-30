@@ -28,17 +28,17 @@ func TestValidate(t *testing.T) {
 			want: []Finding{
 				{
 					Path:    "data/2024/CVE-2024-0002.json",
-					Line:    6,
-					RootID:  "CVE-2024-0002",
-					Rule:    "orphan-segment",
-					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
-				},
-				{
-					Path:    "data/2024/CVE-2024-0002.json",
 					Line:    22,
 					RootID:  "CVE-2024-0002",
 					Rule:    "cpe-pvp",
 					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*" disagree on product: "product" != "other"`,
+				},
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    6,
+					RootID:  "CVE-2024-0002",
+					Rule:    "orphan-segment",
+					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
 				},
 			},
 		},
