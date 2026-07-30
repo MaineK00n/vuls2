@@ -35,16 +35,11 @@ func CriteriaRules() []CriteriaRule {
 	return []CriteriaRule{cpePVPRule, criteriaOperatorRule, emptyCriteriaRule}
 }
 
-// attributed pairs a violation with the name of the rule that reported it.
-type attributed struct {
-	rule string
-	Violation
-}
-
-// inspectCriteria walks the detection criteria trees of data once and runs
-// every hook of every rule at each position.
-func inspectCriteria(data dataTypes.Data, rules []CriteriaRule) []attributed {
-	var vs []attributed
+// inspectCriteria walks the detection criteria trees of data once, runs
+// every hook of every rule at each position, and stamps each violation
+// with the name of the rule that reported it.
+func inspectCriteria(data dataTypes.Data, rules []CriteriaRule) []Violation {
+	var vs []Violation
 	for di, d := range data.Detections {
 		ctx := CriteriaContext{
 			Pointer:   fmt.Sprintf("/detections/%d", di),
@@ -56,7 +51,8 @@ func inspectCriteria(data dataTypes.Data, rules []CriteriaRule) []attributed {
 				continue
 			}
 			for _, v := range r.Detection(ctx, d) {
-				vs = append(vs, attributed{rule: r.Name, Violation: v})
+				v.Rule = r.Name
+				vs = append(vs, v)
 			}
 		}
 
@@ -72,13 +68,14 @@ func inspectCriteria(data dataTypes.Data, rules []CriteriaRule) []attributed {
 	return vs
 }
 
-func walkCriteriaNode(ctx CriteriaContext, ca criteriaTypes.Criteria, rules []CriteriaRule, vs *[]attributed) {
+func walkCriteriaNode(ctx CriteriaContext, ca criteriaTypes.Criteria, rules []CriteriaRule, vs *[]Violation) {
 	for _, r := range rules {
 		if r.Node == nil {
 			continue
 		}
 		for _, v := range r.Node(ctx, ca) {
-			*vs = append(*vs, attributed{rule: r.Name, Violation: v})
+			v.Rule = r.Name
+			*vs = append(*vs, v)
 		}
 	}
 
@@ -102,7 +99,8 @@ func walkCriteriaNode(ctx CriteriaContext, ca criteriaTypes.Criteria, rules []Cr
 				continue
 			}
 			for _, v := range r.Criterion(cctx, cn) {
-				*vs = append(*vs, attributed{rule: r.Name, Violation: v})
+				v.Rule = r.Name
+				*vs = append(*vs, v)
 			}
 		}
 	}
@@ -110,9 +108,5 @@ func walkCriteriaNode(ctx CriteriaContext, ca criteriaTypes.Criteria, rules []Cr
 
 // inspect runs the shared walk with only this rule; test helper.
 func (r CriteriaRule) inspect(data dataTypes.Data) []Violation {
-	var vs []Violation
-	for _, a := range inspectCriteria(data, []CriteriaRule{r}) {
-		vs = append(vs, a.Violation)
-	}
-	return vs
+	return inspectCriteria(data, []CriteriaRule{r})
 }

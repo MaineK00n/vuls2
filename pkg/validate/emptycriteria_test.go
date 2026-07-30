@@ -57,7 +57,7 @@ func TestInspectEmptyCriteria(t *testing.T) {
 				},
 			},
 			want: []Violation{
-				{Pointer: "/detections/0", Message: "detection cpe: no conditions"},
+				{Rule: "empty-criteria", Pointer: "/detections/0", Message: "detection cpe: no conditions"},
 			},
 		},
 		{
@@ -74,7 +74,7 @@ func TestInspectEmptyCriteria(t *testing.T) {
 				},
 			},
 			want: []Violation{
-				{Pointer: "/detections/0/conditions/0/criteria", Message: `detection cpe: condition "vulnerable": criteria: no criterias and no criterions`},
+				{Rule: "empty-criteria", Pointer: "/detections/0/conditions/0/criteria", Message: `detection cpe: condition "vulnerable": criteria: no criterias and no criterions`},
 			},
 		},
 		{
@@ -111,7 +111,7 @@ func TestInspectEmptyCriteria(t *testing.T) {
 				},
 			},
 			want: []Violation{
-				{Pointer: "/detections/0/conditions/0/criteria/criterias/1", Message: `detection cpe: condition "vulnerable": criteria: criterias[1]: no criterias and no criterions`},
+				{Rule: "empty-criteria", Pointer: "/detections/0/conditions/0/criteria/criterias/1", Message: `detection cpe: condition "vulnerable": criteria: criterias[1]: no criterias and no criterions`},
 			},
 		},
 		{

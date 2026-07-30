@@ -25,11 +25,14 @@ type DataRule struct {
 	Inspect     func(data dataTypes.Data) []Violation
 }
 
-// Violation is a single rule violation reported by a DataRule. Pointer
-// addresses the offending element within the file as an RFC 6901 JSON
-// pointer (e.g. /advisories/0/segments/2); Validate resolves it to
-// Finding.Line, and the pointer itself is not carried on Finding.
+// Violation is a single rule violation reported by a data or criteria
+// rule. Pointer addresses the offending element within the file as an RFC
+// 6901 JSON pointer (e.g. /advisories/0/segments/2); Validate resolves it
+// to Finding.Line, and the pointer itself is not carried on Finding. Rules
+// leave Rule empty; the framework stamps the reporting rule's name while
+// collecting, so rules never repeat their own name.
 type Violation struct {
+	Rule    string
 	Pointer string
 	Message string
 }
@@ -275,10 +278,11 @@ func validateFile(root, path string, dataRules []DataRule, criteriaRules []Crite
 		return nil, errors.Wrapf(err, "rel %s %s", root, path)
 	}
 
-	var vs []attributed
+	var vs []Violation
 	for _, c := range dataRules {
 		for _, v := range c.Inspect(data) {
-			vs = append(vs, attributed{rule: c.Name, Violation: v})
+			v.Rule = c.Name
+			vs = append(vs, v)
 		}
 	}
 	vs = append(vs, inspectCriteria(data, criteriaRules)...)
@@ -291,7 +295,7 @@ func validateFile(root, path string, dataRules []DataRule, criteriaRules []Crite
 		findings = append(findings, Finding{
 			Path:    filepath.ToSlash(rel),
 			RootID:  data.ID,
-			Rule:    v.rule,
+			Rule:    v.Rule,
 			Message: v.Message,
 		})
 		pointers = append(pointers, v.Pointer)

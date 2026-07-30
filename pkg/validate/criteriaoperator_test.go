@@ -75,7 +75,7 @@ func TestInspectCriteriaOperator(t *testing.T) {
 				},
 			},
 			want: []Violation{
-				{Pointer: "/detections/0/conditions/0/criteria", Message: `detection cpe: condition "vulnerable": criteria: no operator`},
+				{Rule: "criteria-operator", Pointer: "/detections/0/conditions/0/criteria", Message: `detection cpe: condition "vulnerable": criteria: no operator`},
 			},
 		},
 		{
@@ -110,7 +110,7 @@ func TestInspectCriteriaOperator(t *testing.T) {
 				},
 			},
 			want: []Violation{
-				{Pointer: "/detections/0/conditions/0/criteria/criterias/0", Message: `detection cpe: condition "vulnerable": criteria: criterias[0]: no operator`},
+				{Rule: "criteria-operator", Pointer: "/detections/0/conditions/0/criteria/criterias/0", Message: `detection cpe: condition "vulnerable": criteria: criterias[0]: no operator`},
 			},
 		},
 		{

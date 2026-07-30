@@ -79,6 +79,7 @@ func TestInspectCPEPVP(t *testing.T) {
 			},
 			want: []Violation{
 				{
+					Rule:    "cpe-pvp",
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
 					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*" disagree on product: "product" != "other"`,
 				},
@@ -114,10 +115,12 @@ func TestInspectCPEPVP(t *testing.T) {
 			},
 			want: []Violation{
 				{
+					Rule:    "cpe-pvp",
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
 					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:o:other:product:1.0.0:*:*:*:*:*:*:*" disagree on part: "a" != "o"`,
 				},
 				{
+					Rule:    "cpe-pvp",
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
 					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:o:other:product:1.0.0:*:*:*:*:*:*:*" disagree on vendor: "vendor" != "other"`,
 				},
@@ -182,6 +185,7 @@ func TestInspectCPEPVP(t *testing.T) {
 			},
 			want: []Violation{
 				{
+					Rule:    "cpe-pvp",
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe",
 					Message: `detection cpe: condition "vulnerable": unbind criterion cpe "not-a-cpe" to WFN: Error: Formatted String must start with "cpe:2.3". Given: not-a-cpe: Parse error`,
 				},
@@ -217,6 +221,7 @@ func TestInspectCPEPVP(t *testing.T) {
 			},
 			want: []Violation{
 				{
+					Rule:    "cpe-pvp",
 					Pointer: "/detections/0/conditions/0/criteria/criterions/0/cpe/cpe_matches/0",
 					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*": unbind cpe_match "not-a-cpe" to WFN: Error: Formatted String must start with "cpe:2.3". Given: not-a-cpe: Parse error`,
 				},
