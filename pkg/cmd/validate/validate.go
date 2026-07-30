@@ -75,10 +75,7 @@ func NewCmd() *cobra.Command {
 			}
 
 			if len(findings) > 0 {
-				// An expected outcome, not an execution failure: use a plain
-				// error so main's %+v does not print a stack trace after the
-				// findings.
-				return fmt.Errorf("validation failed. %d finding(s)", len(findings))
+				return errors.Errorf("validation failed. %d finding(s)", len(findings))
 			}
 			return nil
 		},
