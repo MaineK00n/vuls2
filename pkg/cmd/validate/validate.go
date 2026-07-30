@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/MakeNowJust/heredoc"
@@ -51,6 +52,7 @@ func NewCmd() *cobra.Command {
 				return errors.Wrap(err, "validate")
 			}
 
+			slices.SortFunc(findings, validate.Finding.Compare)
 			for _, f := range findings {
 				switch options.format {
 				case "text":

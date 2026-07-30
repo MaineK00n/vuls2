@@ -67,6 +67,19 @@ type Finding struct {
 	Message string           `json:"message"`
 }
 
+// Compare is the canonical total order over findings: by Path, then Line,
+// ID, Rule, Message — file order within a file, like compiler diagnostics.
+// Validate returns findings unordered; output layers sort with this.
+func (f Finding) Compare(other Finding) int {
+	return cmp.Or(
+		cmp.Compare(f.Path, other.Path),
+		cmp.Compare(f.Line, other.Line),
+		cmp.Compare(f.ID, other.ID),
+		cmp.Compare(f.Rule, other.Rule),
+		cmp.Compare(f.Message, other.Message),
+	)
+}
+
 type options struct {
 	rules       []string
 	concurrency int
@@ -102,8 +115,8 @@ func WithConcurrency(concurrency int) Option {
 // root: repository-level rules against its top-level layout, and per-file
 // semantic rules against every data/**/*.json file when the data content
 // directory is present. Content directories are auto-detected — callers
-// never say which kinds the repository carries. Findings are returned
-// sorted by (Path, Rule, Message, Line).
+// never say which kinds the repository carries. Findings are returned in
+// no guaranteed order; callers needing one sort with Finding.Compare.
 func Validate(root string, opts ...Option) ([]Finding, error) {
 	options := &options{
 		concurrency: runtime.NumCPU(),
@@ -197,15 +210,6 @@ func Validate(root string, opts ...Option) ([]Finding, error) {
 	for _, fileFindings := range results {
 		findings = append(findings, fileFindings...)
 	}
-
-	slices.SortFunc(findings, func(x, y Finding) int {
-		return cmp.Or(
-			cmp.Compare(x.Path, y.Path),
-			cmp.Compare(x.Rule, y.Rule),
-			cmp.Compare(x.Message, y.Message),
-			cmp.Compare(x.Line, y.Line),
-		)
-	})
 
 	return findings, nil
 }

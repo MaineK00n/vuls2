@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,17 +28,17 @@ func TestValidate(t *testing.T) {
 			want: []Finding{
 				{
 					Path:    "data/2024/CVE-2024-0002.json",
-					Line:    22,
-					ID:      "CVE-2024-0002",
-					Rule:    "cpe-pvp",
-					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*" disagree on product: "product" != "other"`,
-				},
-				{
-					Path:    "data/2024/CVE-2024-0002.json",
 					Line:    6,
 					ID:      "CVE-2024-0002",
 					Rule:    "orphan-segment",
 					Message: "advisory ADV-2024-0002: segment (ecosystem: cpe, tag: orphan) has no corresponding detection condition",
+				},
+				{
+					Path:    "data/2024/CVE-2024-0002.json",
+					Line:    22,
+					ID:      "CVE-2024-0002",
+					Rule:    "cpe-pvp",
+					Message: `detection cpe: condition "vulnerable": criterion cpe "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*" and cpe_match "cpe:2.3:a:vendor:other:1.0.0:*:*:*:*:*:*:*" disagree on product: "product" != "other"`,
 				},
 			},
 		},
@@ -111,6 +112,7 @@ func TestValidate(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			slices.SortFunc(got, Finding.Compare)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Validate() (-expected +got):\n%s", diff)
 			}
