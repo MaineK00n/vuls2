@@ -4,6 +4,7 @@ package validate
 var (
 	InspectLayout           = inspectLayout
 	InspectOrphanSegment    = inspectOrphanSegment
+	InspectAffectedRange    = inspectAffectedRange
 	InspectCPEPVP           = inspectCPEPVP
 	InspectCriteriaOperator = inspectCriteriaOperator
 	InspectNoConditions     = inspectNoConditions

@@ -32,7 +32,7 @@ type CriteriaContext struct {
 
 // CriteriaRules returns the registered criteria-walking rule table.
 func CriteriaRules() []CriteriaRule {
-	return []CriteriaRule{cpePVPRule, criteriaOperatorRule, emptyCriteriaRule}
+	return []CriteriaRule{affectedRangeRule, cpePVPRule, criteriaOperatorRule, emptyCriteriaRule}
 }
 
 // inspectCriteria walks the detection criteria trees of data once, runs
