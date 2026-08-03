@@ -5,8 +5,8 @@ github.com/MaineK00n/go-microsoft-version v0.0.0-20260325021654-1d9206bdeffc h1:
 github.com/MaineK00n/go-microsoft-version v0.0.0-20260325021654-1d9206bdeffc/go.mod h1:GNf+Vhnxk8/pW56jsxAeFCBP0VCgVQlLIJ812UnAj9c=
 github.com/MaineK00n/go-paloalto-version v0.0.0-20260324210858-f043171ba2bf h1:QDz92+GEPbIR4HTw2EGNgYqH+T9jxmO/OvFMfY715PE=
 github.com/MaineK00n/go-paloalto-version v0.0.0-20260324210858-f043171ba2bf/go.mod h1:ELOxzfAd4oAe4niMmoZlSiJwzf1DF+DjNdjsUcuqAR8=
-github.com/MaineK00n/vuls-data-update v0.0.0-20260723092544-ef4188f1e44a h1:vWPNgZNjUTHggnvnKvK5kJw+7bWKscPVEvQ7TZv/T1c=
-github.com/MaineK00n/vuls-data-update v0.0.0-20260723092544-ef4188f1e44a/go.mod h1:hGIQnLcmU7TAmmmcawGjjGsgbKk/CahooO5iyC1mclQ=
+github.com/MaineK00n/vuls-data-update v0.0.0-20260731094820-5b6752ad7cb8 h1:xrRzyYF9vPxxAMvIFyjXd3OONvOLEHjInTzrh/c0DDs=
+github.com/MaineK00n/vuls-data-update v0.0.0-20260731094820-5b6752ad7cb8/go.mod h1:hGIQnLcmU7TAmmmcawGjjGsgbKk/CahooO5iyC1mclQ=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/aquasecurity/go-gem-version v0.0.0-20201115065557-8eed6fe000ce h1:QgBRgJvtEOBtUXilDb1MLi1p1MWoyFDXAu5DEUl5nwM=
