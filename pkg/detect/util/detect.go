@@ -2,7 +2,7 @@ package util
 
 import (
 	"context"
-	"maps"
+	"iter"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -24,96 +24,137 @@ type Request struct {
 	Indexes []int
 }
 
+// RootDetection is one streamed element of DetectSeq: a single rootID's
+// detection with its full FilteredCriteria trees.
+type RootDetection struct {
+	RootID    dataTypes.RootID
+	Detection detectTypes.VulnerabilityDataDetection
+}
+
+// Detect accumulates DetectSeq into a map. Consumers that reduce each
+// rootID's trees (pruning, projection) should range over DetectSeq instead
+// and fold elements as they arrive, so peak memory holds the folded result
+// plus only the in-flight trees rather than every rootID's full tree.
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	m := make(map[dataTypes.RootID][]string)
-	for _, q := range queries {
-		rs, err := s.GetIndex(ecosystem, q)
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
+	for rd, err := range DetectSeq(s, ecosystem, queries, createRequestFn, concurrency) {
 		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundIndex) {
-				continue
-			}
-			return nil, errors.Wrap(err, "get index")
+			return nil, err
 		}
-		for _, r := range rs {
-			m[r] = append(m[r], q)
-		}
+		dm[rd.RootID] = rd.Detection
 	}
+	return dm, nil
+}
 
-	reqChan := make(chan Request, concurrency)
-	go func() {
-		defer close(reqChan)
-		for rootID, names := range m {
-			reqChan <- createRequestFn(rootID, names)
-		}
-	}()
-
-	resChan := make(chan map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, len(m))
-
-	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(concurrency)
-	for req := range reqChan {
-		g.Go(func() error {
-			m, err := s.GetDetection(ecosystem, req.RootID)
+// DetectSeq looks up the rootIDs matching queries through the index and
+// yields each rootID's detection as its worker finishes, in completion
+// order. Every condition passes through unconditionally with its full
+// criteria tree — the per-condition affected/unaffected gating is the
+// consumer's policy (top-level pkg/detect.Detect gates on Affected; other
+// consumers may prune or project per element while only the in-flight
+// trees are live).
+//
+// A yielded non-nil error (index lookup or worker failure) is terminal:
+// the sequence stops after it. Breaking out of the loop early cancels the
+// remaining workers.
+func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[RootDetection, error] {
+	return func(yield func(RootDetection, error) bool) {
+		m := make(map[dataTypes.RootID][]string)
+		for _, q := range queries {
+			rs, err := s.GetIndex(ecosystem, q)
 			if err != nil {
-				return errors.Wrap(err, "get detection")
+				if errors.Is(err, dbTypes.ErrNotFoundIndex) {
+					continue
+				}
+				yield(RootDetection{}, errors.Wrap(err, "get index"))
+				return
 			}
+			for _, r := range rs {
+				m[r] = append(m[r], q)
+			}
+		}
 
-			dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-			for sourceID, conds := range m {
-				for _, cond := range conds {
-					fcond, err := cond.Accept(req.Query)
-					if err != nil {
-						return errors.Wrap(err, "criteria accept")
-					}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-					// Pass every condition through unconditionally. The
-					// per-condition affected/unaffected gating is moved to the
-					// top-level pkg/detect.Detect, so that consumers calling
-					// this function directly (or via ospkg.Detect / cpe.Detect)
-					// can apply their own pruning / ecosystem-specific filter
-					// over the full FilteredCriteria tree.
-					fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
-					if err != nil {
-						return errors.Wrap(err, "replace indexes")
-					}
-
-					d, ok := dm[req.RootID]
-					if !ok {
-						d = detectTypes.VulnerabilityDataDetection{
-							Ecosystem: ecosystem,
-							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
-						}
-					}
-					d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
-					dm[req.RootID] = d
+		reqChan := make(chan Request, concurrency)
+		go func() {
+			defer close(reqChan)
+			for rootID, names := range m {
+				select {
+				case reqChan <- createRequestFn(rootID, names):
+				case <-ctx.Done():
+					return
 				}
 			}
+		}()
 
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				resChan <- dm
-				return nil
+		// Buffered to concurrency, not len(m): workers block on send when
+		// the consumer lags, bounding the number of full trees in flight.
+		// Sends select on ctx.Done so an early break unblocks them.
+		resChan := make(chan RootDetection, concurrency)
+
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(concurrency)
+
+		done := make(chan error, 1)
+		go func() {
+			for req := range reqChan {
+				g.Go(func() error {
+					m, err := s.GetDetection(ecosystem, req.RootID)
+					if err != nil {
+						return errors.Wrap(err, "get detection")
+					}
+
+					d := detectTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystem,
+						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+					}
+					for sourceID, conds := range m {
+						for _, cond := range conds {
+							fcond, err := cond.Accept(req.Query)
+							if err != nil {
+								return errors.Wrap(err, "criteria accept")
+							}
+
+							fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
+							if err != nil {
+								return errors.Wrap(err, "replace indexes")
+							}
+
+							d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
+						}
+					}
+
+					if len(d.Contents) == 0 {
+						return nil
+					}
+
+					select {
+					case resChan <- RootDetection{RootID: req.RootID, Detection: d}:
+						return nil
+					case <-gctx.Done():
+						return gctx.Err()
+					}
+				})
 			}
-		})
+			done <- g.Wait()
+			close(resChan)
+		}()
+
+		for rd := range resChan {
+			if !yield(rd, nil) {
+				// cancel (deferred) unblocks the producer and the workers'
+				// sends; the dispatch goroutine then drains and exits on
+				// its own.
+				return
+			}
+		}
+
+		if err := <-done; err != nil {
+			yield(RootDetection{}, errors.Wrap(err, "err in goroutine"))
+		}
 	}
-
-	go func() {
-		g.Wait() //nolint:errcheck
-		close(resChan)
-	}()
-
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for res := range resChan {
-		maps.Copy(dm, res)
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, errors.Wrap(err, "err in goroutine")
-	}
-
-	return dm, nil
 }
 
 func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {

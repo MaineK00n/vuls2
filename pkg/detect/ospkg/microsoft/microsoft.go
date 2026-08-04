@@ -2,6 +2,7 @@ package microsoft
 
 import (
 	"fmt"
+	"iter"
 	"maps"
 	"regexp"
 	"slices"
@@ -90,6 +91,42 @@ func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.S
 }
 
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
+	for rd, err := range DetectSeq(s, ecosystem, sr, concurrency) {
+		if err != nil {
+			return nil, err
+		}
+		dm[rd.RootID] = rd.Detection
+	}
+	return dm, nil
+}
+
+// DetectSeq is the streaming form of Detect: it yields each rootID's
+// detection as it is produced, letting the consumer fold or prune per
+// element instead of holding every rootID's full criteria tree at once.
+// A yielded non-nil error is terminal.
+func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
+	return func(yield func(util.RootDetection, error) bool) {
+		products, createRequestFn, err := planQueries(s, sr)
+		if err != nil {
+			yield(util.RootDetection{}, err)
+			return
+		}
+		for rd, err := range util.DetectSeq(s, ecosystem, products, createRequestFn, concurrency) {
+			if err != nil {
+				yield(util.RootDetection{}, errors.Wrap(err, "detect"))
+				return
+			}
+			if !yield(rd, nil) {
+				return
+			}
+		}
+	}
+}
+
+// planQueries builds the index query products and the per-rootID request
+// factory from the scan result (package versions plus expanded KB state).
+func planQueries(s session.Storage, sr scanTypes.ScanResult) ([]string, func(rootID dataTypes.RootID, queries []string) util.Request, error) {
 	// Collect product names as index keys from installed packages and KB data.
 	vcm := make(map[string][]int)
 
@@ -158,7 +195,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	}
 	forwardKBs, err := forwardSupersedersFromApplied(s, forwardSeeds)
 	if err != nil {
-		return nil, errors.Wrap(err, "forward superseders from applied")
+		return nil, nil, errors.Wrap(err, "forward superseders from applied")
 	}
 
 	// Deduplicate before iterating: applied / unapplied / forwardKBs may
@@ -182,7 +219,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 			if errors.Is(err, dbTypes.ErrNotFoundMicrosoftKB) {
 				continue
 			}
-			return nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
+			return nil, nil, errors.Wrapf(err, "get microsoft kb %s", kbid)
 		}
 		for _, kb := range m {
 			for _, p := range kb.Products {
@@ -198,7 +235,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 
 	exp, err := ExpandKBs(s, sr.MicrosoftKB.Applied, sr.MicrosoftKB.Unapplied, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "expand KBs")
+		return nil, nil, errors.Wrap(err, "expand KBs")
 	}
 
 	// Filter unapplied/covered KBs to only those whose products are relevant
@@ -214,7 +251,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 
 	vcmProducts := slices.Collect(maps.Keys(vcm))
 
-	dm, err := util.Detect(s, ecosystem, vcmProducts, func(rootID dataTypes.RootID, queries []string) util.Request {
+	return vcmProducts, func(rootID dataTypes.RootID, queries []string) util.Request {
 		var (
 			qs    []vcTypes.Query
 			idxes []int
@@ -242,11 +279,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 			Query:   query,
 			Indexes: idxes,
 		}
-	}, concurrency)
-	if err != nil {
-		return nil, errors.Wrap(err, "detect")
-	}
-	return dm, nil
+	}, nil
 }
 
 // ExpandKBs walks Microsoft KB supersession chains starting from the given

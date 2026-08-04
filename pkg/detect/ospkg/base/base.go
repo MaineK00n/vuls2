@@ -2,6 +2,7 @@ package base
 
 import (
 	"fmt"
+	"iter"
 	"maps"
 	"slices"
 	"strconv"
@@ -23,67 +24,89 @@ import (
 )
 
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	vcpkgs := make([]vcTypes.Query, 0, len(sr.OSPackages))
-	vcm := make(map[string][]int)
-	var necq necTypes.Query
-	for i, p := range sr.OSPackages {
-		converted, err := convertVCQueryPackage(sr.Family, p)
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
+	for rd, err := range DetectSeq(s, ecosystem, sr, concurrency) {
 		if err != nil {
-			return nil, errors.Wrap(err, "convert version criterion package")
+			return nil, err
 		}
-		vcpkgs = append(vcpkgs, converted)
-
-		if converted.Binary != nil && !slices.Contains(vcm[converted.Binary.Name], i) {
-			vcm[converted.Binary.Name] = append(vcm[converted.Binary.Name], i)
-		}
-		if converted.Source != nil && !slices.Contains(vcm[converted.Source.Name], i) {
-			vcm[converted.Source.Name] = append(vcm[converted.Source.Name], i)
-		}
-
-		if converted.Binary != nil && !slices.ContainsFunc(necq.Binaries, func(q necBinaryPackageTypes.Query) bool {
-			return q.Name == converted.Binary.Name && q.Arch == converted.Binary.Arch && slices.Equal(q.Repositories, converted.Binary.Repositories)
-		}) {
-			necq.Binaries = append(necq.Binaries, necBinaryPackageTypes.Query{
-				Name:         converted.Binary.Name,
-				Arch:         converted.Binary.Arch,
-				Repositories: converted.Binary.Repositories,
-			})
-		}
-		if converted.Source != nil && !slices.ContainsFunc(necq.Sources, func(q necSourcePackageTypes.Query) bool {
-			return q.Name == converted.Source.Name && slices.Equal(q.Repositories, converted.Source.Repositories)
-		}) {
-			necq.Sources = append(necq.Sources, necSourcePackageTypes.Query{
-				Name:         converted.Source.Name,
-				Repositories: converted.Source.Repositories,
-			})
-		}
-	}
-
-	dm, err := util.Detect(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
-		var (
-			qs    []vcTypes.Query
-			idxes []int
-		)
-		for _, q := range queries {
-			for _, idx := range vcm[q] {
-				qs = append(qs, vcpkgs[idx])
-			}
-			idxes = append(idxes, vcm[q]...)
-		}
-
-		return util.Request{
-			RootID: rootID,
-			Query: criterionTypes.Query{
-				Version:   qs,
-				NoneExist: &necq,
-			},
-			Indexes: idxes,
-		}
-	}, concurrency)
-	if err != nil {
-		return nil, errors.Wrap(err, "detect")
+		dm[rd.RootID] = rd.Detection
 	}
 	return dm, nil
+}
+
+// DetectSeq is the streaming form of Detect: it yields each rootID's
+// detection as it is produced, letting the consumer fold or prune per
+// element instead of holding every rootID's full criteria tree at once.
+// A yielded non-nil error is terminal.
+func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
+	return func(yield func(util.RootDetection, error) bool) {
+		vcpkgs := make([]vcTypes.Query, 0, len(sr.OSPackages))
+		vcm := make(map[string][]int)
+		var necq necTypes.Query
+		for i, p := range sr.OSPackages {
+			converted, err := convertVCQueryPackage(sr.Family, p)
+			if err != nil {
+				yield(util.RootDetection{}, errors.Wrap(err, "convert version criterion package"))
+				return
+			}
+			vcpkgs = append(vcpkgs, converted)
+
+			if converted.Binary != nil && !slices.Contains(vcm[converted.Binary.Name], i) {
+				vcm[converted.Binary.Name] = append(vcm[converted.Binary.Name], i)
+			}
+			if converted.Source != nil && !slices.Contains(vcm[converted.Source.Name], i) {
+				vcm[converted.Source.Name] = append(vcm[converted.Source.Name], i)
+			}
+
+			if converted.Binary != nil && !slices.ContainsFunc(necq.Binaries, func(q necBinaryPackageTypes.Query) bool {
+				return q.Name == converted.Binary.Name && q.Arch == converted.Binary.Arch && slices.Equal(q.Repositories, converted.Binary.Repositories)
+			}) {
+				necq.Binaries = append(necq.Binaries, necBinaryPackageTypes.Query{
+					Name:         converted.Binary.Name,
+					Arch:         converted.Binary.Arch,
+					Repositories: converted.Binary.Repositories,
+				})
+			}
+			if converted.Source != nil && !slices.ContainsFunc(necq.Sources, func(q necSourcePackageTypes.Query) bool {
+				return q.Name == converted.Source.Name && slices.Equal(q.Repositories, converted.Source.Repositories)
+			}) {
+				necq.Sources = append(necq.Sources, necSourcePackageTypes.Query{
+					Name:         converted.Source.Name,
+					Repositories: converted.Source.Repositories,
+				})
+			}
+		}
+
+		for rd, err := range util.DetectSeq(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+			var (
+				qs    []vcTypes.Query
+				idxes []int
+			)
+			for _, q := range queries {
+				for _, idx := range vcm[q] {
+					qs = append(qs, vcpkgs[idx])
+				}
+				idxes = append(idxes, vcm[q]...)
+			}
+
+			return util.Request{
+				RootID: rootID,
+				Query: criterionTypes.Query{
+					Version:   qs,
+					NoneExist: &necq,
+				},
+				Indexes: idxes,
+			}
+		}, concurrency) {
+			if err != nil {
+				yield(util.RootDetection{}, errors.Wrap(err, "detect"))
+				return
+			}
+			if !yield(rd, nil) {
+				return
+			}
+		}
+	}
 }
 
 func convertVCQueryPackage(family ecosystemTypes.Ecosystem, p scanTypes.OSPackage) (vcTypes.Query, error) {
