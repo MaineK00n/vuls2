@@ -55,8 +55,11 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 // trees are live).
 //
 // A yielded non-nil error (index lookup or worker failure) is terminal:
-// the sequence stops after it. Breaking out of the loop early cancels the
-// remaining workers.
+// the sequence stops after it. Breaking out of the loop early stops the
+// pipeline promptly, not instantly: no further requests are dispatched and
+// no further elements are yielded, but workers already mid-element finish
+// their current DB fetch / criteria evaluation and observe the
+// cancellation at their result-send boundary; their results are discarded.
 func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[RootDetection, error] {
 	return func(yield func(RootDetection, error) bool) {
 		m := make(map[dataTypes.RootID][]string)
