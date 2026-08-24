@@ -73,13 +73,20 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		// gctx is canceled both by cancel (early break, via the parent ctx)
+		// and by the first worker error, so every pipeline stage — the
+		// request producer included — watches gctx: a worker failure must
+		// stop request production too, not just scheduling.
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(concurrency)
+
 		reqChan := make(chan Request, concurrency)
 		go func() {
 			defer close(reqChan)
 			for rootID, names := range m {
 				select {
 				case reqChan <- createRequestFn(rootID, names):
-				case <-ctx.Done():
+				case <-gctx.Done():
 					return
 				}
 			}
@@ -87,11 +94,8 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 
 		// Buffered to concurrency, not len(m): workers block on send when
 		// the consumer lags, bounding the number of full trees in flight.
-		// Sends select on ctx.Done so an early break unblocks them.
+		// Sends select on gctx.Done so an early break unblocks them.
 		resChan := make(chan RootDetection, concurrency)
-
-		g, gctx := errgroup.WithContext(ctx)
-		g.SetLimit(concurrency)
 
 		done := make(chan error, 1)
 		go func() {
