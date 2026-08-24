@@ -103,6 +103,14 @@ func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []
 		done := make(chan error, 1)
 		go func() {
 			for req := range reqChan {
+				// Once the pipeline is canceled (early break or a worker
+				// error), keep draining reqChan so the producer can exit,
+				// but stop scheduling workers: requests already buffered
+				// must not trigger DB fetch / criteria work whose result
+				// would only be discarded.
+				if gctx.Err() != nil {
+					continue
+				}
 				g.Go(func() error {
 					m, err := s.GetDetection(ecosystem, req.RootID)
 					if err != nil {
