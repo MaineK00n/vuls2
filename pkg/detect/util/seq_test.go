@@ -60,7 +60,7 @@ func newAlmaSession(t *testing.T) *session.Session {
 	if err != nil {
 		t.Fatalf("new session. error = %v", err)
 	}
-	t.Cleanup(func() { s.Storage().Close() })
+	t.Cleanup(func() { _ = s.Storage().Close() })
 	if err := s.Storage().Open(); err != nil {
 		t.Fatalf("open storage. error = %v", err)
 	}
