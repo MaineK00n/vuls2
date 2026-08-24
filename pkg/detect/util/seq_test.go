@@ -101,7 +101,13 @@ func TestDetectSeq(t *testing.T) {
 		s := newAlmaSession(t)
 
 		n := 0
-		for range util.DetectSeq(s.Storage(), ecosystem, queries, almaRequestFn, 2) {
+		for rd, err := range util.DetectSeq(s.Storage(), ecosystem, queries, almaRequestFn, 2) {
+			if err != nil {
+				t.Fatalf("DetectSeq. error = %v", err)
+			}
+			if rd.RootID == "" {
+				t.Error("yielded element carries no rootID")
+			}
 			n++
 			break
 		}
