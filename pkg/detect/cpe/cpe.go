@@ -15,32 +15,16 @@ import (
 	ccTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/cpecriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
-	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
-func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	if len(sr.CPE) == 0 {
-		return nil, nil
-	}
-
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rd, err := range DetectSeq(s, sr, concurrency) {
-		if err != nil {
-			return nil, err
-		}
-		dm[rd.RootID] = rd.Detection
-	}
-	return dm, nil
-}
-
-// DetectSeq is the streaming form of Detect: it yields each rootID's
-// detection with its full criteria trees as it is produced. Consumers that
-// derive per-root projections (e.g. vuls0's verified-product suppression
-// inputs) can fold each element and drop the tree instead of holding every
-// candidate root's tree at once. A yielded non-nil error is terminal.
-func DetectSeq(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
+// Detect yields each rootID's detection with its full criteria trees as
+// it is produced. Consumers that derive per-root projections (e.g. vuls0's
+// verified-product suppression inputs) can fold each element and drop the
+// tree instead of holding every candidate root's tree at once. A yielded
+// non-nil error is terminal. An empty sr.CPE yields nothing.
+func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	return func(yield func(util.RootDetection, error) bool) {
 		if len(sr.CPE) == 0 {
 			return
@@ -57,7 +41,7 @@ func DetectSeq(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter
 			qm[key] = append(qm[key], i)
 		}
 
-		for rd, err := range util.DetectSeq(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+		for rd, err := range util.Detect(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
 			var (
 				qs    []ccTypes.Query
 				idxes []int

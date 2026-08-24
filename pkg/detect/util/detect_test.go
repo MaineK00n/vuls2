@@ -188,7 +188,7 @@ func TestDetect(t *testing.T) {
 			}
 			defer s.Storage().Close()
 
-			got, err := util.Detect(s.Storage(), tt.args.ecosystem, tt.args.queries, tt.args.createRequestFn, tt.args.concurrency)
+			got, err := test.CollectDetections(util.Detect(s.Storage(), tt.args.ecosystem, tt.args.queries, tt.args.createRequestFn, tt.args.concurrency))
 			switch {
 			case tt.wantErr == nil && err != nil:
 				t.Errorf("Detect() unexpected error: %v", err)

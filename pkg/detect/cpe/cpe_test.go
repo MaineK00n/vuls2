@@ -47,7 +47,9 @@ func TestDetect(t *testing.T) {
 				sr:          scanTypes.ScanResult{},
 				concurrency: 1,
 			},
-			want: nil,
+			// An empty CPE list yields nothing; collecting the empty
+			// stream produces an empty (non-nil) map.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
 		{
 			// Same vendor:product but part "a" instead of "o" must not match the
@@ -138,7 +140,7 @@ func TestDetect(t *testing.T) {
 			defer s.Storage().Close()
 			defer s.Cache().Close()
 
-			got, err := cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency)
+			got, err := test.CollectDetections(cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Detect() error = %v, wantErr %v", err, tt.wantErr)
 				return

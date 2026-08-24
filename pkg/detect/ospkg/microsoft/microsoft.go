@@ -18,7 +18,6 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
-	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
@@ -90,29 +89,17 @@ func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.S
 	return slices.Contains(datasources, id)
 }
 
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rd, err := range DetectSeq(s, ecosystem, sr, concurrency) {
-		if err != nil {
-			return nil, err
-		}
-		dm[rd.RootID] = rd.Detection
-	}
-	return dm, nil
-}
-
-// DetectSeq is the streaming form of Detect: it yields each rootID's
-// detection as it is produced, letting the consumer fold or prune per
-// element instead of holding every rootID's full criteria tree at once.
-// A yielded non-nil error is terminal.
-func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
+// Detect yields each rootID's detection as it is produced, letting the
+// consumer fold or prune per element instead of holding every rootID's
+// full criteria tree at once. A yielded non-nil error is terminal.
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	return func(yield func(util.RootDetection, error) bool) {
 		products, createRequestFn, err := planQueries(s, sr)
 		if err != nil {
 			yield(util.RootDetection{}, err)
 			return
 		}
-		for rd, err := range util.DetectSeq(s, ecosystem, products, createRequestFn, concurrency) {
+		for rd, err := range util.Detect(s, ecosystem, products, createRequestFn, concurrency) {
 			if err != nil {
 				yield(util.RootDetection{}, errors.Wrap(err, "detect"))
 				return

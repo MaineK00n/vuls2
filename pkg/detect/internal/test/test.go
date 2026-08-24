@@ -1,12 +1,16 @@
 package test
 
 import (
+	"iter"
 	"os"
 	"path/filepath"
 
 	"github.com/pkg/errors"
 
+	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
+	"github.com/MaineK00n/vuls2/pkg/detect/util"
 )
 
 // PopulateDB populates the database specified by c with test data from fixtureDir.
@@ -46,4 +50,18 @@ func PopulateDB(c session.Config, fixtureDir string) error {
 	}
 
 	return nil
+}
+
+// CollectDetections accumulates a detection stream into a map, stopping at
+// the first yielded error — the test-side counterpart of what a
+// whole-result consumer does with the streaming Detect APIs.
+func CollectDetections(seq iter.Seq2[util.RootDetection, error]) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
+	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
+	for rd, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		dm[rd.RootID] = rd.Detection
+	}
+	return dm, nil
 }

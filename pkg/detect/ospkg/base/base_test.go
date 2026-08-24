@@ -531,7 +531,7 @@ func TestDetect(t *testing.T) {
 			}
 			defer s.Storage().Close()
 
-			got, err := base.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency)
+			got, err := test.CollectDetections(base.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency))
 			switch {
 			case tt.wantErr == nil && err != nil:
 				t.Errorf("Detect() unexpected error: %v", err)

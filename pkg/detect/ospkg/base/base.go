@@ -18,27 +18,14 @@ import (
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
-	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rd, err := range DetectSeq(s, ecosystem, sr, concurrency) {
-		if err != nil {
-			return nil, err
-		}
-		dm[rd.RootID] = rd.Detection
-	}
-	return dm, nil
-}
-
-// DetectSeq is the streaming form of Detect: it yields each rootID's
-// detection as it is produced, letting the consumer fold or prune per
-// element instead of holding every rootID's full criteria tree at once.
-// A yielded non-nil error is terminal.
-func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
+// Detect yields each rootID's detection as it is produced, letting the
+// consumer fold or prune per element instead of holding every rootID's
+// full criteria tree at once. A yielded non-nil error is terminal.
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	return func(yield func(util.RootDetection, error) bool) {
 		vcpkgs := make([]vcTypes.Query, 0, len(sr.OSPackages))
 		vcm := make(map[string][]int)
@@ -77,7 +64,7 @@ func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTyp
 			}
 		}
 
-		for rd, err := range util.DetectSeq(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+		for rd, err := range util.Detect(s, ecosystem, slices.Collect(maps.Keys(vcm)), func(rootID dataTypes.RootID, queries []string) util.Request {
 			var (
 				qs    []vcTypes.Query
 				idxes []int

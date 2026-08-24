@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/internal/test"
-	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 )
 
@@ -67,43 +65,17 @@ func newAlmaSession(t *testing.T) *session.Session {
 	return s
 }
 
-func TestDetectSeq(t *testing.T) {
+func TestDetectStreaming(t *testing.T) {
 	ecosystem := ecosystemTypes.Ecosystem(fmt.Sprintf("%s:8", ecosystemTypes.EcosystemTypeAlma))
 	queries := []string{"mariadb-devel:10.3::Judy"}
-
-	t.Run("matches Detect", func(t *testing.T) {
-		s := newAlmaSession(t)
-
-		want, err := util.Detect(s.Storage(), ecosystem, queries, almaRequestFn, 2)
-		if err != nil {
-			t.Fatalf("Detect. error = %v", err)
-		}
-		if len(want) == 0 {
-			t.Fatal("Detect returned no detections; fixture assumption broken")
-		}
-
-		got := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-		for rd, err := range util.DetectSeq(s.Storage(), ecosystem, queries, almaRequestFn, 2) {
-			if err != nil {
-				t.Fatalf("DetectSeq. error = %v", err)
-			}
-			if _, ok := got[rd.RootID]; ok {
-				t.Errorf("rootID %s yielded twice", rd.RootID)
-			}
-			got[rd.RootID] = rd.Detection
-		}
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Errorf("DetectSeq (-Detect +DetectSeq):\n%s", diff)
-		}
-	})
 
 	t.Run("early break cancels cleanly", func(t *testing.T) {
 		s := newAlmaSession(t)
 
 		n := 0
-		for rd, err := range util.DetectSeq(s.Storage(), ecosystem, queries, almaRequestFn, 2) {
+		for rd, err := range util.Detect(s.Storage(), ecosystem, queries, almaRequestFn, 2) {
 			if err != nil {
-				t.Fatalf("DetectSeq. error = %v", err)
+				t.Fatalf("Detect. error = %v", err)
 			}
 			if rd.RootID == "" {
 				t.Error("yielded element carries no rootID")
@@ -117,7 +89,7 @@ func TestDetectSeq(t *testing.T) {
 		// Reaching here without deadlock means the producer side unwound;
 		// run another full pass on the same session to verify the storage
 		// is still usable after the cancelled one.
-		if _, err := util.Detect(s.Storage(), ecosystem, queries, almaRequestFn, 2); err != nil {
+		if _, err := test.CollectDetections(util.Detect(s.Storage(), ecosystem, queries, almaRequestFn, 2)); err != nil {
 			t.Errorf("Detect after early break. error = %v", err)
 		}
 	})
@@ -129,7 +101,7 @@ func TestDetectSeq(t *testing.T) {
 			items int
 			got   error
 		)
-		for rd, err := range util.DetectSeq(s.Storage(), ecosystem, queries, func(rootID dataTypes.RootID, _ []string) util.Request {
+		for rd, err := range util.Detect(s.Storage(), ecosystem, queries, func(rootID dataTypes.RootID, _ []string) util.Request {
 			return util.Request{RootID: dataTypes.RootID("ROOTID-NOT-EXIST")}
 		}, 2) {
 			if err != nil {
@@ -140,7 +112,7 @@ func TestDetectSeq(t *testing.T) {
 			items++
 		}
 		if got == nil {
-			t.Fatal("expected an error from DetectSeq, got none")
+			t.Fatal("expected an error from Detect, got none")
 		}
 		if !errors.Is(got, dbTypes.ErrNotFoundDetection) {
 			t.Errorf("unexpected error: %v", got)

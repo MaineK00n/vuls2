@@ -183,7 +183,7 @@ func TestDetect(t *testing.T) {
 			defer s.Storage().Close()
 			defer s.Cache().Close()
 
-			got, err := ospkg.Detect(s.Storage(), tt.args.sr, tt.args.concurrency)
+			got, err := test.CollectDetections(ospkg.Detect(s.Storage(), tt.args.sr, tt.args.concurrency))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Detect() error = %v, wantErr %v", err, tt.wantErr)
 				return

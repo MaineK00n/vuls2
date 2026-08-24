@@ -24,29 +24,14 @@ type Request struct {
 	Indexes []int
 }
 
-// RootDetection is one streamed element of DetectSeq: a single rootID's
+// RootDetection is one streamed element of Detect: a single rootID's
 // detection with its full FilteredCriteria trees.
 type RootDetection struct {
 	RootID    dataTypes.RootID
 	Detection detectTypes.VulnerabilityDataDetection
 }
 
-// Detect accumulates DetectSeq into a map. Consumers that reduce each
-// rootID's trees (pruning, projection) should range over DetectSeq instead
-// and fold elements as they arrive, so peak memory holds the folded result
-// plus only the in-flight trees rather than every rootID's full tree.
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for rd, err := range DetectSeq(s, ecosystem, queries, createRequestFn, concurrency) {
-		if err != nil {
-			return nil, err
-		}
-		dm[rd.RootID] = rd.Detection
-	}
-	return dm, nil
-}
-
-// DetectSeq looks up the rootIDs matching queries through the index and
+// Detect looks up the rootIDs matching queries through the index and
 // yields each rootID's detection as its worker finishes, in completion
 // order. Every condition passes through unconditionally with its full
 // criteria tree — the per-condition affected/unaffected gating is the
@@ -60,7 +45,13 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 // no further elements are yielded, but workers already mid-element finish
 // their current DB fetch / criteria evaluation and observe the
 // cancellation at their result-send boundary; their results are discarded.
-func DetectSeq(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[RootDetection, error] {
+//
+// Consumers that need the whole result at once accumulate the sequence
+// into a map; consumers that reduce each rootID's trees (pruning,
+// projection) fold elements as they arrive, so peak memory holds the
+// folded result plus only the in-flight trees rather than every rootID's
+// full tree.
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[RootDetection, error] {
 	return func(yield func(RootDetection, error) bool) {
 		m := make(map[dataTypes.RootID][]string)
 		for _, q := range queries {
