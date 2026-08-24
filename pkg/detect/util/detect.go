@@ -41,10 +41,12 @@ type RootDetection struct {
 //
 // A yielded non-nil error (index lookup or worker failure) is terminal:
 // the sequence stops after it. Breaking out of the loop early stops the
-// pipeline promptly, not instantly: no further requests are dispatched and
-// no further elements are yielded, but workers already mid-element finish
-// their current DB fetch / criteria evaluation and observe the
-// cancellation at their result-send boundary; their results are discarded.
+// pipeline promptly, not instantly: no further elements are yielded and no
+// new DB / criteria work is started (a request already waiting for a
+// worker slot may still be scheduled, but returns before doing any work),
+// while workers already mid-element finish their current DB fetch /
+// criteria evaluation and observe the cancellation at their result-send
+// boundary; their results are discarded.
 //
 // Consumers that need the whole result at once accumulate the sequence
 // into a map; consumers that reduce each rootID's trees (pruning,
@@ -103,6 +105,15 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 					continue
 				}
 				g.Go(func() error {
+					// The dispatcher's check above is not atomic with g.Go:
+					// with SetLimit, g.Go blocks while every slot is taken,
+					// and a cancellation arriving during that wait would
+					// otherwise let this request start once a slot opens.
+					// Re-check before doing any DB / criteria work.
+					if err := gctx.Err(); err != nil {
+						return err
+					}
+
 					m, err := s.GetDetection(ecosystem, req.RootID)
 					if err != nil {
 						return errors.Wrap(err, "get detection")
