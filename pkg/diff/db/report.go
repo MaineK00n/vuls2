@@ -34,7 +34,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			// A compared ecosystem with no per-source data still gets a
 			// placeholder row so the report stays explicit about what was
 			// compared instead of silently omitting it.
-			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceDiff: SourceDiff{SourceID: placeholderSourceID, Pass: d.Pass}})
+			rows = append(rows, reportRow{Ecosystem: d.Ecosystem, SourceID: placeholderSourceID, Pass: d.Pass})
 			continue
 		}
 		for _, s := range d.Sources {
