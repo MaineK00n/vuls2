@@ -46,7 +46,9 @@ type RootDetection struct {
 // worker slot may still be scheduled, but returns before doing any work),
 // while workers already mid-element finish their current DB fetch /
 // criteria evaluation and observe the cancellation at their result-send
-// boundary; their results are discarded.
+// boundary; their results are discarded. The early break blocks until the
+// pipeline has quiesced, so once the iterator returns — by any path — no
+// background goroutine touches s anymore.
 //
 // Consumers that need the whole result at once accumulate the sequence
 // into a map; consumers that reduce each rootID's trees (pruning,
@@ -161,9 +163,13 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 
 		for rd := range resChan {
 			if !yield(rd, nil) {
-				// cancel (deferred) unblocks the producer and the workers'
-				// sends; the dispatch goroutine then drains and exits on
-				// its own.
+				// The consumer stopped early: cancel the pipeline (unblocking
+				// the producer and the workers' sends) and wait for it to
+				// quiesce before returning, so that iterator completion also
+				// guarantees no background goroutine still touches s. The
+				// error, if any, is discarded — the consumer asked to stop.
+				cancel()
+				<-done
 				return
 			}
 		}

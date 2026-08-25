@@ -55,16 +55,19 @@ func TestDetectStreaming(t *testing.T) {
 			t.Fatalf("expected exactly one element before break, got %d", n)
 		}
 
-		// Let the pipeline quiesce (workers mid-element are allowed to
-		// finish), then require the fetch count to be far below the root
-		// count and stable: pre-break churn is bounded by the result
-		// buffer plus blocked sends plus in-flight workers, all O(concurrency).
-		calls := st.waitQuiesce(t)
+		// The early break blocks until the pipeline has quiesced, so the
+		// fetch count must already be final the moment the range exits — no
+		// background goroutine may touch the storage after the iterator
+		// returns.
+		calls := st.callCount()
+		if again := st.waitQuiesce(t); again != calls {
+			t.Errorf("fetches continued after the iterator returned: %d -> %d", calls, again)
+		}
+		// And it must be far below the root count: pre-break churn is
+		// bounded by the result buffer plus blocked sends plus in-flight
+		// workers, all O(concurrency).
 		if bound := 6 * concurrency; calls > bound {
 			t.Errorf("cancellation did not stop scheduling: %d of %d roots fetched (bound %d)", calls, nRoots, bound)
-		}
-		if again := st.waitQuiesce(t); again != calls {
-			t.Errorf("fetches continued after quiescence: %d -> %d", calls, again)
 		}
 
 		// The stub storage stays usable for a full pass afterwards.
