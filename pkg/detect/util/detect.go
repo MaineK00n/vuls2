@@ -131,7 +131,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 						for _, cond := range conds {
 							fcond, err := cond.Accept(req.Query)
 							if err != nil {
-								return errors.Wrap(err, "criteria accept")
+								return errors.Wrap(err, "condition accept")
 							}
 
 							fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
