@@ -24,47 +24,43 @@ import (
 // verified-product suppression inputs) can fold each element and drop the
 // tree instead of holding every candidate root's tree at once. A yielded
 // non-nil error is terminal. An empty sr.CPE yields nothing.
+//
+// The part:vendor:product index queries are built eagerly (pure CPE
+// parsing, no I/O) and util.Detect's sequence is returned as is — this
+// function adds no per-element transformation.
 func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
-	return func(yield func(util.RootDetection, error) bool) {
-		if len(sr.CPE) == 0 {
-			return
-		}
-
-		qm := make(map[string][]int)
-		for i, cpe := range sr.CPE {
-			wfn, err := naming.UnbindFS(cpe)
-			if err != nil {
-				yield(util.RootDetection{}, errors.Wrapf(err, "unbind %q to WFN", cpe))
-				return
-			}
-			key := fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))
-			qm[key] = append(qm[key], i)
-		}
-
-		for rd, err := range util.Detect(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
-			var (
-				qs    []ccTypes.Query
-				idxes []int
-			)
-			for _, q := range queries {
-				for _, idx := range qm[q] {
-					qs = append(qs, ccTypes.Query{CPE: sr.CPE[idx]})
-				}
-				idxes = append(idxes, qm[q]...)
-			}
-			return util.Request{
-				RootID:  rootID,
-				Query:   criterionTypes.Query{CPE: qs},
-				Indexes: idxes,
-			}
-		}, concurrency) {
-			if err != nil {
-				yield(util.RootDetection{}, errors.Wrap(err, "detect"))
-				return
-			}
-			if !yield(rd, nil) {
-				return
-			}
-		}
+	if len(sr.CPE) == 0 {
+		return func(func(util.RootDetection, error) bool) {}
 	}
+
+	qm := make(map[string][]int)
+	for i, cpe := range sr.CPE {
+		wfn, err := naming.UnbindFS(cpe)
+		if err != nil {
+			err := errors.Wrapf(err, "unbind %q to WFN", cpe)
+			return func(yield func(util.RootDetection, error) bool) {
+				yield(util.RootDetection{}, err)
+			}
+		}
+		key := fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))
+		qm[key] = append(qm[key], i)
+	}
+
+	return util.Detect(s, ecosystemTypes.EcosystemTypeCPE, slices.Collect(maps.Keys(qm)), func(rootID dataTypes.RootID, queries []string) util.Request {
+		var (
+			qs    []ccTypes.Query
+			idxes []int
+		)
+		for _, q := range queries {
+			for _, idx := range qm[q] {
+				qs = append(qs, ccTypes.Query{CPE: sr.CPE[idx]})
+			}
+			idxes = append(idxes, qm[q]...)
+		}
+		return util.Request{
+			RootID:  rootID,
+			Query:   criterionTypes.Query{CPE: qs},
+			Indexes: idxes,
+		}
+	}, concurrency)
 }

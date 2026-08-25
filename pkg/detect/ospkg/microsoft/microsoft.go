@@ -92,6 +92,11 @@ func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.S
 // Detect yields each rootID's detection as it is produced, letting the
 // consumer fold or prune per element instead of holding every rootID's
 // full criteria tree at once. A yielded non-nil error is terminal.
+//
+// Unlike base/cpe, the query plan is built lazily inside the sequence:
+// planQueries reads the database (Microsoft KB expansion), which should
+// not run just because the sequence was constructed. The inner loop
+// forwards util.Detect's elements unchanged.
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	return func(yield func(util.RootDetection, error) bool) {
 		products, createRequestFn, err := planQueries(s, sr)
@@ -100,11 +105,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 			return
 		}
 		for rd, err := range util.Detect(s, ecosystem, products, createRequestFn, concurrency) {
-			if err != nil {
-				yield(util.RootDetection{}, errors.Wrap(err, "detect"))
-				return
-			}
-			if !yield(rd, nil) {
+			if !yield(rd, err) {
 				return
 			}
 		}
