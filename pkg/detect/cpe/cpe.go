@@ -37,9 +37,8 @@ func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Se
 	for i, cpe := range sr.CPE {
 		wfn, err := naming.UnbindFS(cpe)
 		if err != nil {
-			err := errors.Wrapf(err, "unbind %q to WFN", cpe)
 			return func(yield func(util.RootDetection, error) bool) {
-				yield(util.RootDetection{}, err)
+				yield(util.RootDetection{}, errors.Wrapf(err, "unbind %q to WFN", cpe))
 			}
 		}
 		key := fmt.Sprintf("%s:%s:%s", wfn.GetString(common.AttributePart), wfn.GetString(common.AttributeVendor), wfn.GetString(common.AttributeProduct))

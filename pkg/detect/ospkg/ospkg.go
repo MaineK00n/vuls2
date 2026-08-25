@@ -24,9 +24,8 @@ import (
 func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
 	if err != nil {
-		err := errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release)
 		return func(yield func(util.RootDetection, error) bool) {
-			yield(util.RootDetection{}, err)
+			yield(util.RootDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release))
 		}
 	}
 

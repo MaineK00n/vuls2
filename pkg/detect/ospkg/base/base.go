@@ -36,9 +36,8 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	for i, p := range sr.OSPackages {
 		converted, err := convertVCQueryPackage(sr.Family, p)
 		if err != nil {
-			err := errors.Wrap(err, "convert version criterion package")
 			return func(yield func(util.RootDetection, error) bool) {
-				yield(util.RootDetection{}, err)
+				yield(util.RootDetection{}, errors.Wrap(err, "convert version criterion package"))
 			}
 		}
 		vcpkgs = append(vcpkgs, converted)
