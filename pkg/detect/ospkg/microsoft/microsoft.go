@@ -101,7 +101,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 	return func(yield func(util.RootDetection, error) bool) {
 		products, createRequestFn, err := planQueries(s, sr)
 		if err != nil {
-			yield(util.RootDetection{}, err)
+			yield(util.RootDetection{}, errors.Wrap(err, "plan queries"))
 			return
 		}
 		for rd, err := range util.Detect(s, ecosystem, products, createRequestFn, concurrency) {
