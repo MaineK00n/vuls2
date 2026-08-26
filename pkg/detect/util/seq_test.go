@@ -166,6 +166,36 @@ func TestDetectStreaming(t *testing.T) {
 		}
 	})
 
+	t.Run("a panic in the consumer's loop body still joins the pipeline", func(t *testing.T) {
+		// The join runs in a defer, so even a panic unwinding through yield
+		// must leave no background goroutine touching the storage: the
+		// fetch count is final the moment the panic escapes the range.
+		const (
+			nRoots      = 64
+			concurrency = 2
+		)
+		st := newStubStorage(nRoots)
+
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("expected the consumer panic to propagate")
+				}
+			}()
+			for range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
+				panic("consumer loop body")
+			}
+		}()
+
+		calls := st.callCount()
+		if again := st.waitQuiesce(t); again != calls {
+			t.Errorf("fetches continued after the panic escaped: %d -> %d", calls, again)
+		}
+		if bound := 6 * concurrency; calls > bound {
+			t.Errorf("cancellation did not stop scheduling: %d of %d roots fetched (bound %d)", calls, nRoots, bound)
+		}
+	})
+
 	t.Run("worker error is yielded, terminal, and stops production", func(t *testing.T) {
 		const (
 			nRoots      = 64

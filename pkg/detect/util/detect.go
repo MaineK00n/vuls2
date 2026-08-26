@@ -46,9 +46,10 @@ type RootDetection struct {
 // worker slot may still be scheduled, but returns before doing any work),
 // while workers already mid-element finish their current DB fetch /
 // criteria evaluation and observe the cancellation at their result-send
-// boundary; their results are discarded. The early break blocks until the
-// pipeline has quiesced, so once the iterator returns — by any path — no
-// background goroutine touches s anymore.
+// boundary; their results are discarded. Iterator completion — normal
+// exhaustion, early break, or a panic unwinding through the consumer's
+// loop body — blocks until the pipeline has quiesced, so once the
+// iterator returns, no background goroutine touches s anymore.
 //
 // Consumers that need the whole result at once accumulate the sequence
 // into a map; consumers that reduce each rootID's trees (pruning,
@@ -73,51 +74,31 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
 
 		// gctx is canceled both by cancel (early break, via the parent ctx)
-		// and by the first worker error, so every pipeline stage — the
-		// request producer included — watches gctx: a worker failure must
-		// stop request production too, not just scheduling.
+		// and by the first worker error, so both the dispatcher below and
+		// the workers watch it: a worker failure stops dispatching too.
 		g, gctx := errgroup.WithContext(ctx)
 		g.SetLimit(concurrency)
-
-		reqChan := make(chan Request, concurrency)
-		go func() {
-			defer close(reqChan)
-			for rootID, names := range m {
-				// Check before constructing: the send select alone does not
-				// guarantee a prompt exit — after cancellation the dispatcher
-				// keeps draining reqChan, so the send arm stays eligible and
-				// the select's random choice could keep building requests.
-				// This bounds post-cancellation production to one request.
-				if gctx.Err() != nil {
-					return
-				}
-				select {
-				case reqChan <- createRequestFn(rootID, names):
-				case <-gctx.Done():
-					return
-				}
-			}
-		}()
 
 		// Buffered to concurrency, not len(m): workers block on send when
 		// the consumer lags, bounding the number of full trees in flight.
 		// Sends select on gctx.Done so an early break unblocks them.
 		resChan := make(chan RootDetection, concurrency)
 
-		done := make(chan error, 1)
+		var werr error
+		dispatched := make(chan struct{})
 		go func() {
-			for req := range reqChan {
-				// Once the pipeline is canceled (early break or a worker
-				// error), keep draining reqChan so the producer can exit,
-				// but stop scheduling workers: requests already buffered
-				// must not trigger DB fetch / criteria work whose result
-				// would only be discarded.
+			defer close(dispatched)
+			for rootID, names := range m {
+				// Stop dispatching once the pipeline is canceled (early
+				// break or a worker error). This is not re-checked while
+				// g.Go blocks on a slot; the worker-start re-check below
+				// covers that race.
 				if gctx.Err() != nil {
-					continue
+					break
 				}
+				req := createRequestFn(rootID, names)
 				g.Go(func() error {
 					// The dispatcher's check above is not atomic with g.Go:
 					// with SetLimit, g.Go blocks while every slot is taken,
@@ -165,25 +146,32 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 					}
 				})
 			}
-			done <- g.Wait()
+			werr = g.Wait()
+			// close after werr is assigned: the consumer reads werr only
+			// after resChan closes, so the close is the happens-before edge
+			// for that read.
 			close(resChan)
+		}()
+
+		// Join the pipeline before returning by ANY path — normal
+		// exhaustion, early break, or a panic in the consumer's loop body
+		// unwinding through yield — so that iterator completion guarantees
+		// no background goroutine still touches s. On the non-normal paths
+		// the worker error, if any, is discarded: the consumer stopped
+		// asking.
+		defer func() {
+			cancel()
+			<-dispatched
 		}()
 
 		for rd := range resChan {
 			if !yield(rd, nil) {
-				// The consumer stopped early: cancel the pipeline (unblocking
-				// the producer and the workers' sends) and wait for it to
-				// quiesce before returning, so that iterator completion also
-				// guarantees no background goroutine still touches s. The
-				// error, if any, is discarded — the consumer asked to stop.
-				cancel()
-				<-done
 				return
 			}
 		}
 
-		if err := <-done; err != nil {
-			yield(RootDetection{}, errors.Wrap(err, "err in goroutine"))
+		if werr != nil {
+			yield(RootDetection{}, errors.Wrap(werr, "err in goroutine"))
 		}
 	}
 }
