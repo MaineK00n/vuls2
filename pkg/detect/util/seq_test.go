@@ -9,6 +9,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	gocmp "github.com/google/go-cmp/cmp"
+
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
 	criteriaTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria"
@@ -21,11 +23,58 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/internal/test"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 )
 
 func TestDetectStreaming(t *testing.T) {
 	ecosystem := ecosystemTypes.Ecosystem(fmt.Sprintf("%s:8", ecosystemTypes.EcosystemTypeAlma))
+
+	t.Run("full consumption yields every root's detection exactly once", func(t *testing.T) {
+		const (
+			nRoots      = 8
+			concurrency = 3
+		)
+		st := newStubStorage(nRoots)
+
+		got, err := test.CollectDetections(util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency))
+		if err != nil {
+			t.Fatalf("Detect. error = %v", err)
+		}
+
+		want := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, nRoots)
+		for i := range nRoots {
+			want[dataTypes.RootID(fmt.Sprintf("STUB-%04d", i))] = detectTypes.VulnerabilityDataDetection{
+				Ecosystem: ecosystem,
+				Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+					sourceTypes.SourceID("stub-source"): {{
+						Criteria: criteriaTypes.FilteredCriteria{
+							Operator: criteriaTypes.CriteriaOperatorTypeOR,
+							Criterions: []criterionTypes.FilteredCriterion{{
+								Criterion: criterionTypes.Criterion{
+									Type: criterionTypes.CriterionTypeVersion,
+									Version: &vcTypes.Criterion{
+										Vulnerable: true,
+										Package: vcPackageTypes.Package{
+											Type:   vcPackageTypes.PackageTypeBinary,
+											Binary: &vcBinaryPackageTypes.Package{Name: "stub-pkg"},
+										},
+									},
+								},
+								Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+							}},
+						},
+					}},
+				},
+			}
+		}
+		if diff := gocmp.Diff(want, got); diff != "" {
+			t.Errorf("collected detections (-expected +got):\n%s", diff)
+		}
+		if calls := st.callCount(); calls != nRoots {
+			t.Errorf("fetch count = %d, want %d (each root fetched exactly once)", calls, nRoots)
+		}
+	})
 
 	t.Run("early break cancels pending work", func(t *testing.T) {
 		// A fixture with a single matching root cannot tell an early break
