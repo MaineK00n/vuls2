@@ -86,6 +86,14 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 		go func() {
 			defer close(reqChan)
 			for rootID, names := range m {
+				// Check before constructing: the send select alone does not
+				// guarantee a prompt exit — after cancellation the dispatcher
+				// keeps draining reqChan, so the send arm stays eligible and
+				// the select's random choice could keep building requests.
+				// This bounds post-cancellation production to one request.
+				if gctx.Err() != nil {
+					return
+				}
 				select {
 				case reqChan <- createRequestFn(rootID, names):
 				case <-gctx.Done():
