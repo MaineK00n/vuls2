@@ -18,21 +18,23 @@ import (
 // instead of holding the whole result. A yielded non-nil error is
 // terminal.
 //
-// The ecosystem is resolved eagerly (it is a pure string mapping); the
-// matching per-ecosystem sequence is returned as is — this function adds
-// no per-element transformation, so there is nothing to forward.
+// The sequence is lazy — nothing runs until it is iterated, matching the
+// session-layer iterators (e.g. GetVulnerabilityDataByPackage). The
+// per-ecosystem sequence is invoked directly with the same yield: this
+// function adds no per-element transformation.
 func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
-	ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
-	if err != nil {
-		return func(yield func(util.RootDetection, error) bool) {
+	return func(yield func(util.RootDetection, error) bool) {
+		ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
+		if err != nil {
 			yield(util.RootDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release))
+			return
 		}
-	}
 
-	switch ecosystem {
-	case ecosystemTypes.EcosystemTypeMicrosoft:
-		return microsoft.Detect(s, ecosystem, sr, concurrency)
-	default:
-		return base.Detect(s, ecosystem, sr, concurrency)
+		switch ecosystem {
+		case ecosystemTypes.EcosystemTypeMicrosoft:
+			microsoft.Detect(s, ecosystem, sr, concurrency)(yield)
+		default:
+			base.Detect(s, ecosystem, sr, concurrency)(yield)
+		}
 	}
 }

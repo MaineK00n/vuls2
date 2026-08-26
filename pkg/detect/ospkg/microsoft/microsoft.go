@@ -93,10 +93,10 @@ func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.S
 // consumer fold or prune per element instead of holding every rootID's
 // full criteria tree at once. A yielded non-nil error is terminal.
 //
-// Unlike base/cpe, the query plan is built lazily inside the sequence:
-// planQueries reads the database (Microsoft KB expansion), which should
-// not run just because the sequence was constructed. The inner loop
-// forwards util.Detect's elements unchanged.
+// The sequence is lazy — nothing runs until it is iterated (planQueries
+// reads the database for the Microsoft KB expansion), matching the
+// session-layer iterators. util.Detect's sequence is invoked directly
+// with the same yield: this function adds no per-element transformation.
 func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
 	return func(yield func(util.RootDetection, error) bool) {
 		products, createRequestFn, err := planQueries(s, sr)
@@ -104,11 +104,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.
 			yield(util.RootDetection{}, errors.Wrap(err, "plan queries"))
 			return
 		}
-		for rd, err := range util.Detect(s, ecosystem, products, createRequestFn, concurrency) {
-			if !yield(rd, err) {
-				return
-			}
-		}
+		util.Detect(s, ecosystem, products, createRequestFn, concurrency)(yield)
 	}
 }
 
