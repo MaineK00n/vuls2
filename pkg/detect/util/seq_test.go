@@ -80,6 +80,43 @@ func TestDetectStreaming(t *testing.T) {
 		}
 	})
 
+	t.Run("workers blocked on a full result buffer escape on early break", func(t *testing.T) {
+		// Deterministically construct the deadlock-candidate state: consume
+		// one element, then park inside the loop body until the fetch count
+		// quiesces. With the consumer not receiving, the pipeline wedges at
+		// exactly 2*concurrency+1 fetches — concurrency+1 results delivered
+		// (buffer cap + the consumed element) plus concurrency workers
+		// blocked on their resChan send. Breaking then joins the pipeline
+		// (<-done), so this subtest completing at all proves the blocked
+		// senders escaped via gctx.Done — with that select arm removed, it
+		// deadlocks.
+		const (
+			nRoots      = 64
+			concurrency = 2
+		)
+		st := newStubStorage(nRoots)
+
+		n := 0
+		var wedged int
+		for _, err := range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
+			if err != nil {
+				t.Fatalf("Detect. error = %v", err)
+			}
+			n++
+			wedged = st.waitQuiesce(t)
+			break
+		}
+		if n != 1 {
+			t.Fatalf("expected exactly one element before break, got %d", n)
+		}
+		if want := 2*concurrency + 1; wedged != want {
+			t.Errorf("wedged fetch count = %d, want %d (buffer+consumed+blocked senders)", wedged, want)
+		}
+		if again := st.waitQuiesce(t); again != wedged {
+			t.Errorf("fetches continued after the iterator returned: %d -> %d", wedged, again)
+		}
+	})
+
 	t.Run("worker error is yielded, terminal, and stops production", func(t *testing.T) {
 		const (
 			nRoots      = 64
