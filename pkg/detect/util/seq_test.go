@@ -178,8 +178,8 @@ func TestDetectStreaming(t *testing.T) {
 
 		func() {
 			defer func() {
-				if recover() == nil {
-					t.Fatal("expected the consumer panic to propagate")
+				if r := recover(); r != "consumer loop body" {
+					t.Fatalf("expected the consumer panic to propagate, recovered %v", r)
 				}
 			}()
 			for range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
