@@ -114,7 +114,30 @@ func Scan(root string, opts ...Option) error {
 					base.NewVersion = p.NewVersion
 					base.NewRelease = p.NewRelease
 					base.Arch = p.Arch
-					base.Repository = p.Repository
+					// Repository is where the INSTALLED build came from, which
+					// is what a repository-gated criterion matches against.
+					// Carry it only for the ecosystems whose data actually
+					// gates on it: redhat (centos resolves to the redhat
+					// ecosystem too), amazon and alpine.
+					//
+					// Everywhere else the value is at best unused and at worst
+					// wrong. vuls overwrites it with the CANDIDATE version's
+					// repository whenever an update is pending
+					// (models.Packages.MergeNewVersion), and for the Debian
+					// family that is an apt suite -- noble-updates/main -- which
+					// can never equal a repository an Ubuntu data source
+					// claims. Gating on it would drop the criteria for exactly
+					// the packages whose fix is already published, silently.
+					//
+					// An allowlist rather than a denylist so that a family
+					// added later, or a scanner that starts reporting something
+					// new, defaults to not gating: that only ever loses
+					// filtering, never a detection.
+					switch old.Family {
+					case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosystemTypeCentOS,
+						ecosystemTypes.EcosystemTypeAmazon, ecosystemTypes.EcosystemTypeAlpine:
+						base.Repository = p.Repository
+					}
 					base.ModularityLabel = p.ModularityLabel
 					pkgs[p.Name] = base
 				}
