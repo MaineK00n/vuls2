@@ -34,3 +34,12 @@ type VulnerabilityDataDetection struct {
 	Ecosystem ecosystemTypes.Ecosystem                                    `json:"ecosystem,omitempty"`
 	Contents  map[sourceTypes.SourceID][]conditionTypes.FilteredCondition `json:"contents,omitempty"`
 }
+
+// RootDetection is one streamed element of the Detect APIs: a single
+// rootID's detection with its full FilteredCriteria trees. It is a
+// stream element, not part of the serialized result model, and is never
+// marshaled.
+type RootDetection struct {
+	RootID    dataTypes.RootID
+	Detection VulnerabilityDataDetection
+}

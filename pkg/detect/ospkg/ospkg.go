@@ -9,7 +9,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg/base"
 	"github.com/MaineK00n/vuls2/pkg/detect/ospkg/microsoft"
-	"github.com/MaineK00n/vuls2/pkg/detect/util"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
 
@@ -22,11 +22,11 @@ import (
 // session-layer iterators (e.g. GetVulnerabilityDataByPackage). The
 // per-ecosystem sequence is invoked directly with the same yield: this
 // function adds no per-element transformation.
-func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
-	return func(yield func(util.RootDetection, error) bool) {
+func Detect(s session.Storage, sr scanTypes.ScanResult, concurrency int) iter.Seq2[detectTypes.RootDetection, error] {
+	return func(yield func(detectTypes.RootDetection, error) bool) {
 		ecosystem, err := ecosystemTypes.GetEcosystem(string(sr.Family), sr.Release)
 		if err != nil {
-			yield(util.RootDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release))
+			yield(detectTypes.RootDetection{}, errors.Wrapf(err, "get ecosystem. family: %s, release: %s", sr.Family, sr.Release))
 			return
 		}
 

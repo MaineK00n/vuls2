@@ -24,13 +24,6 @@ type Request struct {
 	Indexes []int
 }
 
-// RootDetection is one streamed element of Detect: a single rootID's
-// detection with its full FilteredCriteria trees.
-type RootDetection struct {
-	RootID    dataTypes.RootID
-	Detection detectTypes.VulnerabilityDataDetection
-}
-
 // Detect looks up the rootIDs matching queries through the index and
 // yields each rootID's detection as its worker finishes, in completion
 // order. Every condition passes through unconditionally with its full
@@ -56,8 +49,8 @@ type RootDetection struct {
 // projection) fold elements as they arrive, so peak memory holds the
 // folded result plus only the in-flight trees rather than every rootID's
 // full tree.
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[RootDetection, error] {
-	return func(yield func(RootDetection, error) bool) {
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[detectTypes.RootDetection, error] {
+	return func(yield func(detectTypes.RootDetection, error) bool) {
 		m := make(map[dataTypes.RootID][]string)
 		for _, q := range queries {
 			rs, err := s.GetIndex(ecosystem, q)
@@ -65,7 +58,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 				if errors.Is(err, dbTypes.ErrNotFoundIndex) {
 					continue
 				}
-				yield(RootDetection{}, errors.Wrap(err, "get index"))
+				yield(detectTypes.RootDetection{}, errors.Wrap(err, "get index"))
 				return
 			}
 			for _, r := range rs {
@@ -84,7 +77,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 		// Buffered to concurrency, not len(m): workers block on send when
 		// the consumer lags, bounding the number of full trees in flight.
 		// Sends select on gctx.Done so an early break unblocks them.
-		resChan := make(chan RootDetection, concurrency)
+		resChan := make(chan detectTypes.RootDetection, concurrency)
 
 		var werr error
 		dispatched := make(chan struct{})
@@ -139,7 +132,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 					}
 
 					select {
-					case resChan <- RootDetection{RootID: req.RootID, Detection: d}:
+					case resChan <- detectTypes.RootDetection{RootID: req.RootID, Detection: d}:
 						return nil
 					case <-gctx.Done():
 						return gctx.Err()
@@ -171,7 +164,7 @@ func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []str
 		}
 
 		if werr != nil {
-			yield(RootDetection{}, errors.Wrap(werr, "err in goroutine"))
+			yield(detectTypes.RootDetection{}, errors.Wrap(werr, "err in goroutine"))
 		}
 	}
 }

@@ -18,6 +18,7 @@ import (
 	vcTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition/criteria/criterion/versioncriterion"
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
@@ -28,15 +29,15 @@ import (
 //
 // The sequence is lazy — nothing runs until it is iterated, matching the
 // session-layer iterators (e.g. GetVulnerabilityDataByPackage).
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
-	return func(yield func(util.RootDetection, error) bool) {
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[detectTypes.RootDetection, error] {
+	return func(yield func(detectTypes.RootDetection, error) bool) {
 		vcpkgs := make([]vcTypes.Query, 0, len(sr.OSPackages))
 		vcm := make(map[string][]int)
 		var necq necTypes.Query
 		for i, p := range sr.OSPackages {
 			converted, err := convertVCQueryPackage(sr.Family, p)
 			if err != nil {
-				yield(util.RootDetection{}, errors.Wrap(err, "convert version criterion package"))
+				yield(detectTypes.RootDetection{}, errors.Wrap(err, "convert version criterion package"))
 				return
 			}
 			vcpkgs = append(vcpkgs, converted)

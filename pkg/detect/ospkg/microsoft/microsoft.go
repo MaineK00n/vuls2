@@ -18,6 +18,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
+	detectTypes "github.com/MaineK00n/vuls2/pkg/detect/types"
 	"github.com/MaineK00n/vuls2/pkg/detect/util"
 	scanTypes "github.com/MaineK00n/vuls2/pkg/scan/types"
 )
@@ -97,11 +98,11 @@ func allowMicrosoftKBSource(datasources []sourceTypes.SourceID, id sourceTypes.S
 // reads the database for the Microsoft KB expansion), matching the
 // session-layer iterators. util.Detect's sequence is invoked directly
 // with the same yield: this function adds no per-element transformation.
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[util.RootDetection, error] {
-	return func(yield func(util.RootDetection, error) bool) {
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, sr scanTypes.ScanResult, concurrency int) iter.Seq2[detectTypes.RootDetection, error] {
+	return func(yield func(detectTypes.RootDetection, error) bool) {
 		products, createRequestFn, err := planQueries(s, sr)
 		if err != nil {
-			yield(util.RootDetection{}, errors.Wrap(err, "plan queries"))
+			yield(detectTypes.RootDetection{}, errors.Wrap(err, "plan queries"))
 			return
 		}
 		util.Detect(s, ecosystem, products, createRequestFn, concurrency)(yield)
