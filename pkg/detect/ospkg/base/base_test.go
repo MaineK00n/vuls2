@@ -2,6 +2,8 @@ package base_test
 
 import (
 	"fmt"
+
+	"github.com/pkg/errors"
 	"path/filepath"
 	"testing"
 
@@ -44,6 +46,26 @@ func TestDetect(t *testing.T) {
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
 		wantErr error
 	}{
+		{
+			// An OS package convertVCQueryPackage cannot convert is yielded
+			// as a terminal error from the lazy body.
+			name:    "unconvertible package yields an error",
+			fixture: "testdata/fixtures/alma-small",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.Ecosystem(fmt.Sprintf("%s:8", ecosystemTypes.EcosystemTypeAlma)),
+				sr: scanTypes.ScanResult{
+					Family:     ecosystemTypes.EcosystemTypeAlma,
+					OSPackages: []scanTypes.OSPackage{{Name: "", Version: "1.0.0"}},
+				},
+				concurrency: 1,
+			},
+			wantErr: errors.New("convert version criterion package: form binary package: form binary package name: name is empty"),
+		},
 		{
 			name:    "happy",
 			fixture: "testdata/fixtures/alma-small",

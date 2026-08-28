@@ -52,6 +52,22 @@ func TestDetect(t *testing.T) {
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
 		{
+			// A malformed scanned CPE fails UnbindFS inside the lazy body and
+			// is yielded as a terminal error.
+			name:    "malformed cpe yields an error",
+			fixture: "testdata/fixtures/nvd-cpe",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				sr:          scanTypes.ScanResult{CPE: []string{"not-a-cpe"}},
+				concurrency: 1,
+			},
+			wantErr: true,
+		},
+		{
 			// Same vendor:product but part "a" instead of "o" must not match the
 			// indexed key "o:google:android" — guards the part:vendor:product key.
 			name:    "miss: part differs",

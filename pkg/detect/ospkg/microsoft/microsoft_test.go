@@ -1,6 +1,7 @@
 package microsoft_test
 
 import (
+	"github.com/pkg/errors"
 	"path/filepath"
 	"testing"
 
@@ -42,6 +43,9 @@ func TestDetect(t *testing.T) {
 		args    args
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
 		wantErr error
+		// closeStorage closes the storage before Detect runs, forcing the
+		// lazy body's first DB read (planQueries) to fail.
+		closeStorage bool
 	}{
 		{
 			name:    "no input returns nil",
@@ -57,6 +61,30 @@ func TestDetect(t *testing.T) {
 				concurrency: 1,
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+		},
+		{
+			// planQueries is the lazy body's first storage access; a closed
+			// storage makes it fail, and the error is yielded as terminal.
+			name:    "storage failure in planQueries yields an error",
+			fixture: "testdata/fixtures/microsoft-supersession",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
+					Release: "Windows 10 Version 2004 for x64-based Systems",
+					MicrosoftKB: scanTypes.MicrosoftKB{
+						Applied: []string{"5000802"},
+					},
+				},
+				concurrency: 1,
+			},
+			closeStorage: true,
+			wantErr:      errors.New("plan queries: forward superseders from applied: get microsoft kb 5000802: database not open"),
 		},
 		{
 			name:    "detect CVE-2021-1640 and CVE-2021-26413 by unapplied KB with supersession",
@@ -854,6 +882,12 @@ func TestDetect(t *testing.T) {
 				t.Fatalf("open db connection. error = %v", err)
 			}
 			defer s.Storage().Close()
+
+			if tt.closeStorage {
+				if err := s.Storage().Close(); err != nil {
+					t.Fatalf("close db connection. error = %v", err)
+				}
+			}
 
 			got, err := test.CollectDetections(microsoft.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency))
 			switch {
