@@ -168,13 +168,17 @@ func TestDetectStreaming(t *testing.T) {
 
 	t.Run("a panic in the consumer's loop body still joins the pipeline", func(t *testing.T) {
 		// The join runs in a defer, so even a panic unwinding through yield
-		// must leave no background goroutine touching the storage: the
-		// fetch count is final the moment the panic escapes the range.
+		// must leave no worker inside the storage by the time the panic
+		// escapes the range. The call count cannot pin this (a worker still
+		// inside GetDetection has already been counted), so the stub keeps
+		// an in-flight gauge and a fetch delay wide enough that, without
+		// the join, the panic escapes while workers are still mid-fetch.
 		const (
 			nRoots      = 64
 			concurrency = 2
 		)
 		st := newStubStorage(nRoots)
+		st.fetchDelay = 100 * time.Millisecond
 
 		func() {
 			defer func() {
@@ -183,10 +187,18 @@ func TestDetectStreaming(t *testing.T) {
 				}
 			}()
 			for range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
+				// Make sure at least one worker is provably mid-fetch when
+				// the panic fires.
+				for st.inFlight.Load() == 0 {
+					time.Sleep(time.Millisecond)
+				}
 				panic("consumer loop body")
 			}
 		}()
 
+		if n := st.inFlight.Load(); n != 0 {
+			t.Errorf("%d workers still inside GetDetection after the panic escaped the range", n)
+		}
 		calls := st.callCount()
 		if again := st.waitQuiesce(t); again != calls {
 			t.Errorf("fetches continued after the panic escaped: %d -> %d", calls, again)
@@ -249,8 +261,10 @@ type stubStorage struct {
 	roots  []dataTypes.RootID
 	detErr error
 
-	mu    sync.Mutex
-	calls int
+	mu         sync.Mutex
+	calls      int
+	inFlight   atomic.Int32
+	fetchDelay time.Duration
 }
 
 func newStubStorage(n int) *stubStorage {
@@ -266,9 +280,16 @@ func (st *stubStorage) GetIndex(ecosystemTypes.Ecosystem, string) ([]dataTypes.R
 }
 
 func (st *stubStorage) GetDetection(_ ecosystemTypes.Ecosystem, rootID dataTypes.RootID) (map[sourceTypes.SourceID][]conditionTypes.Condition, error) {
+	st.inFlight.Add(1)
+	defer st.inFlight.Add(-1)
 	st.mu.Lock()
 	st.calls++
 	st.mu.Unlock()
+	// An opt-in delay keeps workers measurably inside the fetch, so tests
+	// can observe whether the iterator joined them before returning.
+	if st.fetchDelay > 0 {
+		time.Sleep(st.fetchDelay)
+	}
 	if st.detErr != nil {
 		return nil, st.detErr
 	}
