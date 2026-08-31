@@ -2,12 +2,11 @@ package base_test
 
 import (
 	"fmt"
-
-	"github.com/pkg/errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
