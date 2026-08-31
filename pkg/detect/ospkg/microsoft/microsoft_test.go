@@ -43,9 +43,6 @@ func TestDetect(t *testing.T) {
 		args    args
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
 		wantErr error
-		// closeStorage closes the storage before Detect runs, forcing the
-		// lazy body's first DB read (planQueries) to fail.
-		closeStorage bool
 	}{
 		{
 			name:    "no input returns nil",
@@ -63,10 +60,13 @@ func TestDetect(t *testing.T) {
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
 		},
 		{
-			// planQueries is the lazy body's first storage access; a closed
-			// storage makes it fail, and the error is yielded as terminal.
-			name:    "storage failure in planQueries yields an error",
-			fixture: "testdata/fixtures/microsoft-supersession",
+			// planQueries is the lazy body's first storage access. The DB
+			// here is populated from a fixture carrying no microsoft source
+			// — the ecosystem-filtered / partial-DB state — so the applied
+			// KB's first GetMicrosoftKB read fails on the missing microsoft
+			// bucket, and the error is yielded as terminal.
+			name:    "no microsoft data in DB yields an error for reported KBs",
+			fixture: "testdata/fixtures/no-microsoft-source",
 			config: session.Config{
 				Type:    "boltdb",
 				Path:    filepath.Join(t.TempDir(), "vuls.db"),
@@ -83,8 +83,7 @@ func TestDetect(t *testing.T) {
 				},
 				concurrency: 1,
 			},
-			closeStorage: true,
-			wantErr:      errors.New("plan queries: forward superseders from applied: get microsoft kb 5000802: database not open"),
+			wantErr: errors.New(`plan queries: forward superseders from applied: get microsoft kb 5000802: "microsoft" not found: ecosystem not found`),
 		},
 		{
 			name:    "detect CVE-2021-1640 and CVE-2021-26413 by unapplied KB with supersession",
@@ -882,12 +881,6 @@ func TestDetect(t *testing.T) {
 				t.Fatalf("open db connection. error = %v", err)
 			}
 			defer s.Storage().Close()
-
-			if tt.closeStorage {
-				if err := s.Storage().Close(); err != nil {
-					t.Fatalf("close db connection. error = %v", err)
-				}
-			}
 
 			got, err := test.CollectDetections(microsoft.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency))
 			switch {
