@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	gocmp "github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
 	conditionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/condition"
