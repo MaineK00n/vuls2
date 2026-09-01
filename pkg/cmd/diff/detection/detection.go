@@ -15,10 +15,12 @@ func NewCmd() *cobra.Command {
 	options := struct {
 		changeRateThreshold          float64
 		changeRateThresholdOverrides []string
+		changeRateThresholdZ         float64
 		debug                        bool
 	}{
-		changeRateThreshold: 0,
-		debug:               false,
+		changeRateThreshold:  0,
+		changeRateThresholdZ: 0,
+		debug:                false,
 	}
 
 	cmd := &cobra.Command{
@@ -56,6 +58,17 @@ func NewCmd() *cobra.Command {
 		    ./target.db ./vuls0 \
 		    --change-rate-threshold 5 \
 		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/jvn-feed-rss=25'
+
+		# judge each (file, source) against the threshold widened by 2
+		# standard deviations of the change count expected at it (small
+		# baselines get absolute slack of a few CVEs; large ones converge
+		# to the bare threshold)
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0 \
+		    --change-rate-threshold 5 \
+		    --change-rate-threshold-z 2
 		`),
 		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -69,6 +82,9 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
+			if options.changeRateThresholdZ < 0 {
+				return errors.Errorf("change-rate-threshold-z must be non-negative, got %g", options.changeRateThresholdZ)
+			}
 			overrides, err := override.Parse(options.changeRateThresholdOverrides)
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")
@@ -77,12 +93,15 @@ func NewCmd() *cobra.Command {
 				args[0], args[1], args[2], args[3], args[4],
 				diffdetection.WithChangeRateThreshold(options.changeRateThreshold),
 				diffdetection.WithChangeRateThresholdOverrides(overrides),
+				diffdetection.WithChangeRateThresholdZ(options.changeRateThresholdZ),
 				diffdetection.WithDebug(options.debug),
 			)
 		},
 	}
 
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
+	cmd.Flags().Float64Var(&options.changeRateThresholdZ, "change-rate-threshold-z", options.changeRateThresholdZ,
+		"statistical slack multiplier z: judge each pair against threshold + z*10*sqrt(threshold/baseline CVEs), i.e. z standard deviations of the change count expected at the threshold; 0 disables")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")

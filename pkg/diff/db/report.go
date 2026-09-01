@@ -189,14 +189,21 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	return pass, nil
 }
 
-// thresholdCell renders the Threshold column; a placeholder row has no
-// (ecosystem, source) for a threshold to apply to, so it renders "-" rather
-// than a misleading 0.0%.
+// thresholdCell renders the Threshold column with the effective (slack-
+// widened) thresholds — the values the rates were actually judged against;
+// with z=0 both equal the configured threshold and render as the single
+// value they always were. When the per-bucket baselines pull the two apart,
+// both are shown as "<detection> / <kb>", mirroring the rate columns' order.
+// A placeholder row has no (ecosystem, source) for a threshold to apply to,
+// so it renders "-" rather than a misleading 0.0%.
 func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	return fmt.Sprintf("%.1f%%", sd.Threshold)
+	if sd.DetectionEffectiveThreshold == sd.KBEffectiveThreshold {
+		return fmt.Sprintf("%.1f%%", sd.DetectionEffectiveThreshold)
+	}
+	return fmt.Sprintf("%.1f%% / %.1f%%", sd.DetectionEffectiveThreshold, sd.KBEffectiveThreshold)
 }
 
 func resultLabel(pass bool) string {

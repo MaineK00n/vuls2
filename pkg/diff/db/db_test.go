@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,6 +99,7 @@ func TestDiffEcosystem(t *testing.T) {
 		targetFixture   string
 		ecosystem       ecosystemTypes.Ecosystem
 		overrides       map[string]float64 // resolved against a default threshold of 0
+		z               float64
 	}
 	tests := []struct {
 		name string
@@ -304,24 +306,28 @@ func TestDiffEcosystem(t *testing.T) {
 						Pass:               true,
 					},
 					{
-						SourceID:            "test-source-2",
-						BaselineKeys:        1,
-						TargetKeys:          1,
-						Changed:             []string{"ROOT-0001"},
-						BaselineCriterions:  1,
-						TargetCriterions:    1,
-						DetectionChangeRate: 200,
-						Threshold:           250,
-						Pass:                true,
+						SourceID:                    "test-source-2",
+						BaselineKeys:                1,
+						TargetKeys:                  1,
+						Changed:                     []string{"ROOT-0001"},
+						BaselineCriterions:          1,
+						TargetCriterions:            1,
+						DetectionChangeRate:         200,
+						Threshold:                   250,
+						DetectionEffectiveThreshold: 250,
+						KBEffectiveThreshold:        250,
+						Pass:                        true,
 					},
 					{
-						SourceID:            "test-source-3",
-						TargetKeys:          1,
-						Added:               []string{"ROOT-0001"},
-						TargetCriterions:    1,
-						DetectionChangeRate: 100,
-						Threshold:           150,
-						Pass:                true,
+						SourceID:                    "test-source-3",
+						TargetKeys:                  1,
+						Added:                       []string{"ROOT-0001"},
+						TargetCriterions:            1,
+						DetectionChangeRate:         100,
+						Threshold:                   150,
+						DetectionEffectiveThreshold: 150,
+						KBEffectiveThreshold:        150,
+						Pass:                        true,
 					},
 				},
 				Pass: true,
@@ -436,6 +442,69 @@ func TestDiffEcosystem(t *testing.T) {
 				},
 			},
 		},
+		{
+			// z widens each bucket's effective threshold from its own
+			// baseline size: 18% of 2 KB keys is well under one unit, so
+			// eff = 18 + 2·10·√(18/2) = 78 and the 50% one-key addition that
+			// trips the bare threshold passes. The detection bucket is absent
+			// on both sides, so its effective threshold stays at 18.
+			name: "kb z slack absorbs small-baseline churn",
+			args: args{
+				baselineFixture: "testdata/fixtures/kb-baseline",
+				targetFixture:   "testdata/fixtures/kb-target-added",
+				ecosystem:       "microsoft",
+				overrides:       map[string]float64{"microsoft": 18},
+				z:               2,
+			},
+			want: db.EcosystemDiff{
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:                    "microsoft-cvrf",
+						BaselineKBKeys:              2,
+						TargetKBKeys:                3,
+						AddedKBs:                    []string{"KB5001222"},
+						MatchedKBs:                  2,
+						KBChangeRate:                50,
+						Threshold:                   18,
+						DetectionEffectiveThreshold: 18,
+						KBEffectiveThreshold:        78,
+						Pass:                        true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// A tiny baseline can push the effective threshold past 100%
+			// (98 + 2·10·√(98/2) = 238), which would excuse the total
+			// disappearance of the bucket — the wipe-out guard fails it
+			// anyway.
+			name: "kb z slack does not excuse a wipe-out",
+			args: args{
+				baselineFixture: "testdata/fixtures/kb-baseline",
+				targetFixture:   "", // empty; set to t.TempDir() in run loop
+				ecosystem:       "microsoft",
+				overrides:       map[string]float64{"microsoft": 98},
+				z:               2,
+			},
+			want: db.EcosystemDiff{
+				Ecosystem: "microsoft",
+				Sources: []db.SourceDiff{
+					{
+						SourceID:                    "microsoft-cvrf",
+						BaselineKBKeys:              2,
+						RemovedKBs:                  []string{"KB5001000", "KB5001111"},
+						KBChangeRate:                100,
+						Threshold:                   98,
+						DetectionEffectiveThreshold: 98,
+						KBEffectiveThreshold:        238,
+						Pass:                        false,
+					},
+				},
+				Pass: false,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -468,7 +537,7 @@ func TestDiffEcosystem(t *testing.T) {
 			}
 			defer tdb.Close()
 
-			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, tt.args.overrides, 0)
+			got, err := db.DiffEcosystem(bdb, tdb, tt.args.ecosystem, tt.args.overrides, 0, tt.args.z)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -488,6 +557,7 @@ func TestDiffBoltDB(t *testing.T) {
 		targetFixtures               []string
 		changeRateThreshold          float64
 		changeRateThresholdOverrides map[string]float64
+		changeRateThresholdZ         float64
 	}
 	tests := []struct {
 		name    string
@@ -619,6 +689,54 @@ func TestDiffBoltDB(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// target-changed churns 2 of alma:8/alma-errata's 6 baseline
+			// criterions (33.3%): above the bare 30% threshold, but within
+			// the z=2 effective threshold 30 + 2·10·√(30/6) ≈ 74.7%.
+			name: "z slack lifts small-baseline churn above threshold",
+			args: args{
+				baselineFixtures:     []string{"testdata/fixtures/baseline"},
+				targetFixtures:       []string{"testdata/fixtures/target-changed"},
+				changeRateThreshold:  30,
+				changeRateThresholdZ: 2,
+			},
+			wantErr: false,
+		},
+		{
+			// Same threshold without z fails: the slack, not the threshold,
+			// is what lifts the previous case.
+			name: "same churn without z still fails",
+			args: args{
+				baselineFixtures:    []string{"testdata/fixtures/baseline"},
+				targetFixtures:      []string{"testdata/fixtures/target-changed"},
+				changeRateThreshold: 30,
+			},
+			wantErr: true,
+		},
+		{
+			// alma:8 disappears entirely in a target holding only other
+			// ecosystems; the 150% threshold would pass the resulting 100%
+			// rate, but with z > 0 the wipe-out guard fails it regardless.
+			name: "z wipe-out guard fails a disappeared ecosystem",
+			args: args{
+				baselineFixtures:     []string{"testdata/fixtures/baseline"},
+				targetFixtures:       []string{"testdata/fixtures/change-baseline"},
+				changeRateThreshold:  150,
+				changeRateThresholdZ: 2,
+			},
+			wantErr: true,
+		},
+		{
+			// The same disappearance at z=0 keeps today's bare comparison:
+			// 100% ≤ 150% passes.
+			name: "disappeared ecosystem passes bare comparison without z",
+			args: args{
+				baselineFixtures:    []string{"testdata/fixtures/baseline"},
+				targetFixtures:      []string{"testdata/fixtures/change-baseline"},
+				changeRateThreshold: 150,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -635,11 +753,46 @@ func TestDiffBoltDB(t *testing.T) {
 				baselinePath, targetPath,
 				db.WithChangeRateThreshold(tt.args.changeRateThreshold),
 				db.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
+				db.WithChangeRateThresholdZ(tt.args.changeRateThresholdZ),
 				db.WithWriter(&bytes.Buffer{}),
 			)
 
 			if (gotErr != nil) != tt.wantErr {
 				t.Fatalf("DiffBoltDB() error = %v, wantErr %v", gotErr, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestEffectiveThreshold(t *testing.T) {
+	type args struct {
+		threshold float64
+		baseline  int
+		z         float64
+	}
+	tests := []struct {
+		name string
+		args args
+		want float64
+	}{
+		{name: "z=0 keeps the bare threshold", args: args{threshold: 10, baseline: 25, z: 0}, want: 10},
+		{name: "empty baseline keeps the bare threshold", args: args{threshold: 10, baseline: 0, z: 2}, want: 10},
+		{name: "zero threshold stays zero", args: args{threshold: 0, baseline: 25, z: 2}, want: 0},
+		// 10 + 2·10·√(10/25): a 10% threshold on 25 units (2.5 expected) is
+		// widened by ≈12.6 points — absolute slack of a few units.
+		{name: "small baseline earns absolute slack", args: args{threshold: 10, baseline: 25, z: 2}, want: 22.649110640673518},
+		// 10 + 2·10·√(10/10000): on 10k units the same setting adds ≈0.63
+		// points — converging to the bare threshold.
+		{name: "large baseline converges to the bare threshold", args: args{threshold: 10, baseline: 10000, z: 2}, want: 10.632455532033676},
+		// Larger z widens further: 3σ on the small-baseline case.
+		{name: "larger z widens further", args: args{threshold: 10, baseline: 25, z: 3}, want: 28.973665961010276},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := db.EffectiveThreshold(tt.args.threshold, tt.args.baseline, tt.args.z)
+			if math.Abs(got-tt.want) > 1e-9 {
+				t.Errorf("EffectiveThreshold(%g, %d, %g) = %g, want %g", tt.args.threshold, tt.args.baseline, tt.args.z, got, tt.want)
 			}
 		})
 	}
@@ -1250,15 +1403,17 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "redhat:9",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "redhat-ovalv2",
-								BaselineKeys:        100,
-								TargetKeys:          100,
-								BaselineCriterions:  500,
-								TargetCriterions:    500,
-								MatchedCriterions:   500,
-								DetectionChangeRate: 0,
-								Threshold:           10,
-								Pass:                true,
+								SourceID:                    "redhat-ovalv2",
+								BaselineKeys:                100,
+								TargetKeys:                  100,
+								BaselineCriterions:          500,
+								TargetCriterions:            500,
+								MatchedCriterions:           500,
+								DetectionChangeRate:         0,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1267,17 +1422,19 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "ubuntu:22.04",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "ubuntu-oval",
-								BaselineKeys:        800,
-								TargetKeys:          200,
-								BaselineCriterions:  4000,
-								TargetCriterions:    2000,
-								MatchedCriterions:   1000,
-								Removed:             []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
-								Changed:             []string{"CVE-2024-0004"},
-								DetectionChangeRate: 75.0,
-								Threshold:           10,
-								Pass:                false,
+								SourceID:                    "ubuntu-oval",
+								BaselineKeys:                800,
+								TargetKeys:                  200,
+								BaselineCriterions:          4000,
+								TargetCriterions:            2000,
+								MatchedCriterions:           1000,
+								Removed:                     []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
+								Changed:                     []string{"CVE-2024-0004"},
+								DetectionChangeRate:         75.0,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        false,
 							},
 						},
 						Pass: false,
@@ -1329,27 +1486,31 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "cpe",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "cisco-json",
-								BaselineKeys:        50,
-								TargetKeys:          50,
-								BaselineCriterions:  100,
-								TargetCriterions:    100,
-								MatchedCriterions:   70,
-								Changed:             []string{"CVE-2024-1000"},
-								DetectionChangeRate: 60.0,
-								Threshold:           10,
-								Pass:                false,
+								SourceID:                    "cisco-json",
+								BaselineKeys:                50,
+								TargetKeys:                  50,
+								BaselineCriterions:          100,
+								TargetCriterions:            100,
+								MatchedCriterions:           70,
+								Changed:                     []string{"CVE-2024-1000"},
+								DetectionChangeRate:         60.0,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        false,
 							},
 							{
-								SourceID:            "nvd-feed-cve-v2",
-								BaselineKeys:        300000,
-								TargetKeys:          300000,
-								BaselineCriterions:  300000,
-								TargetCriterions:    300000,
-								MatchedCriterions:   299700,
-								DetectionChangeRate: 0.2,
-								Threshold:           10,
-								Pass:                true,
+								SourceID:                    "nvd-feed-cve-v2",
+								BaselineKeys:                300000,
+								TargetKeys:                  300000,
+								BaselineCriterions:          300000,
+								TargetCriterions:            300000,
+								MatchedCriterions:           299700,
+								DetectionChangeRate:         0.2,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: false,
@@ -1386,6 +1547,52 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
+			// With z slack the per-bucket effective thresholds can differ
+			// (each is widened from its own baseline size); the Threshold
+			// column then shows both as "<detection> / <kb>".
+			name: "threshold column shows differing effective thresholds",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem: "microsoft",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:                    "microsoft-cvrf",
+								BaselineKBKeys:              2,
+								TargetKBKeys:                3,
+								AddedKBs:                    []string{"KB5001222"},
+								MatchedKBs:                  2,
+								KBChangeRate:                50,
+								Threshold:                   18,
+								DetectionEffectiveThreshold: 18,
+								KBEffectiveThreshold:        78,
+								Pass:                        true,
+							},
+						},
+						Pass: true,
+					},
+				},
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: PASS
+
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| microsoft | microsoft-cvrf | 0.0% | 50.0% | 18.0% / 78.0% | PASS |
+
+## KB
+
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| microsoft | microsoft-cvrf | 2 | 3 | 1 | 0 | 0 | 2 |
+
+`,
+		},
+		{
 			name: "pass all ecosystems",
 			args: args{
 				diffs: []db.EcosystemDiff{
@@ -1393,16 +1600,18 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "alma:8",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "alma-errata",
-								BaselineKeys:        50,
-								TargetKeys:          52,
-								Added:               []string{"ALSA-2025-0001", "ALSA-2025-0002"},
-								BaselineCriterions:  200,
-								TargetCriterions:    210,
-								MatchedCriterions:   200,
-								DetectionChangeRate: 4.8,
-								Threshold:           10,
-								Pass:                true,
+								SourceID:                    "alma-errata",
+								BaselineKeys:                50,
+								TargetKeys:                  52,
+								Added:                       []string{"ALSA-2025-0001", "ALSA-2025-0002"},
+								BaselineCriterions:          200,
+								TargetCriterions:            210,
+								MatchedCriterions:           200,
+								DetectionChangeRate:         4.8,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1436,16 +1645,18 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "microsoft",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:       "microsoft-cvrf",
-								BaselineKBKeys: 10,
-								TargetKBKeys:   10,
-								MatchedKBs:     3,
-								ChangedKBs:     []string{"KB5001", "KB5002"},
-								AddedKBs:       []string{"KB5003"},
-								RemovedKBs:     []string{"KB4000"},
-								KBChangeRate:   140.0,
-								Threshold:      10,
-								Pass:           false,
+								SourceID:                    "microsoft-cvrf",
+								BaselineKBKeys:              10,
+								TargetKBKeys:                10,
+								MatchedKBs:                  3,
+								ChangedKBs:                  []string{"KB5001", "KB5002"},
+								AddedKBs:                    []string{"KB5003"},
+								RemovedKBs:                  []string{"KB4000"},
+								KBChangeRate:                140.0,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        false,
 							},
 						},
 						Pass: false,
@@ -1496,14 +1707,16 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "alma:8",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:           "alma-errata",
-								BaselineKeys:       10,
-								TargetKeys:         10,
-								BaselineCriterions: 50,
-								TargetCriterions:   50,
-								MatchedCriterions:  50,
-								Threshold:          10,
-								Pass:               true,
+								SourceID:                    "alma-errata",
+								BaselineKeys:                10,
+								TargetKeys:                  10,
+								BaselineCriterions:          50,
+								TargetCriterions:            50,
+								MatchedCriterions:           50,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1512,12 +1725,14 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "microsoft",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:       "microsoft-cvrf",
-								BaselineKBKeys: 5,
-								TargetKBKeys:   5,
-								MatchedKBs:     5,
-								Threshold:      10,
-								Pass:           true,
+								SourceID:                    "microsoft-cvrf",
+								BaselineKBKeys:              5,
+								TargetKBKeys:                5,
+								MatchedKBs:                  5,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1562,20 +1777,22 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "mixed:1",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "mixed-source",
-								BaselineKeys:        100,
-								TargetKeys:          100,
-								BaselineCriterions:  10000,
-								TargetCriterions:    10050,
-								MatchedCriterions:   9950,
-								BaselineKBKeys:      5,
-								TargetKBKeys:        5,
-								MatchedKBs:          3,
-								ChangedKBs:          []string{"KB1", "KB2"},
-								DetectionChangeRate: 1.5,
-								KBChangeRate:        80.0,
-								Threshold:           10,
-								Pass:                false,
+								SourceID:                    "mixed-source",
+								BaselineKeys:                100,
+								TargetKeys:                  100,
+								BaselineCriterions:          10000,
+								TargetCriterions:            10050,
+								MatchedCriterions:           9950,
+								BaselineKBKeys:              5,
+								TargetKBKeys:                5,
+								MatchedKBs:                  3,
+								ChangedKBs:                  []string{"KB1", "KB2"},
+								DetectionChangeRate:         1.5,
+								KBChangeRate:                80.0,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        false,
 							},
 						},
 						Pass: false,
@@ -1624,16 +1841,18 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "ubuntu:26.04",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "ubuntu-oval",
-								BaselineKeys:        100,
-								TargetKeys:          100,
-								BaselineCriterions:  500,
-								TargetCriterions:    500,
-								MatchedCriterions:   400,
-								Changed:             []string{"CVE-2026-9999"},
-								DetectionChangeRate: 40.0,
-								Threshold:           50,
-								Pass:                true,
+								SourceID:                    "ubuntu-oval",
+								BaselineKeys:                100,
+								TargetKeys:                  100,
+								BaselineCriterions:          500,
+								TargetCriterions:            500,
+								MatchedCriterions:           400,
+								Changed:                     []string{"CVE-2026-9999"},
+								DetectionChangeRate:         40.0,
+								Threshold:                   50,
+								DetectionEffectiveThreshold: 50,
+								KBEffectiveThreshold:        50,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1642,14 +1861,16 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "redhat:9",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:           "redhat-ovalv2",
-								BaselineKeys:       50,
-								TargetKeys:         50,
-								BaselineCriterions: 200,
-								TargetCriterions:   200,
-								MatchedCriterions:  200,
-								Threshold:          10,
-								Pass:               true,
+								SourceID:                    "redhat-ovalv2",
+								BaselineKeys:                50,
+								TargetKeys:                  50,
+								BaselineCriterions:          200,
+								TargetCriterions:            200,
+								MatchedCriterions:           200,
+								Threshold:                   10,
+								DetectionEffectiveThreshold: 10,
+								KBEffectiveThreshold:        10,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1688,16 +1909,18 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "alpha:1",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "src-alpha",
-								BaselineKeys:        100,
-								TargetKeys:          100,
-								BaselineCriterions:  500,
-								TargetCriterions:    500,
-								MatchedCriterions:   200,
-								Changed:             []string{"CVE-2026-AAAA"},
-								DetectionChangeRate: 120,
-								Threshold:           150,
-								Pass:                true,
+								SourceID:                    "src-alpha",
+								BaselineKeys:                100,
+								TargetKeys:                  100,
+								BaselineCriterions:          500,
+								TargetCriterions:            500,
+								MatchedCriterions:           200,
+								Changed:                     []string{"CVE-2026-AAAA"},
+								DetectionChangeRate:         120,
+								Threshold:                   150,
+								DetectionEffectiveThreshold: 150,
+								KBEffectiveThreshold:        150,
+								Pass:                        true,
 							},
 						},
 						Pass: true,
@@ -1706,16 +1929,18 @@ func TestGenerateReport(t *testing.T) {
 						Ecosystem: "beta:2",
 						Sources: []db.SourceDiff{
 							{
-								SourceID:            "src-beta",
-								BaselineKeys:        50,
-								TargetKeys:          50,
-								BaselineCriterions:  200,
-								TargetCriterions:    200,
-								MatchedCriterions:   195,
-								Changed:             []string{"CVE-2026-BBBB"},
-								DetectionChangeRate: 5,
-								Threshold:           0,
-								Pass:                false,
+								SourceID:                    "src-beta",
+								BaselineKeys:                50,
+								TargetKeys:                  50,
+								BaselineCriterions:          200,
+								TargetCriterions:            200,
+								MatchedCriterions:           195,
+								Changed:                     []string{"CVE-2026-BBBB"},
+								DetectionChangeRate:         5,
+								Threshold:                   0,
+								DetectionEffectiveThreshold: 0,
+								KBEffectiveThreshold:        0,
+								Pass:                        false,
 							},
 						},
 						Pass: false,

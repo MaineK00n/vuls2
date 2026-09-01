@@ -2,6 +2,7 @@ package detection_test
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -241,6 +242,7 @@ func TestDiffDetection(t *testing.T) {
 		ids       detection.CVEIDs
 		threshold float64
 		overrides map[string]float64
+		z         float64
 	}
 	tests := []struct {
 		name string
@@ -261,12 +263,13 @@ func TestDiffDetection(t *testing.T) {
 				Name: "redhat_9",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:    "redhat-csaf",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						SourceID:           "redhat-csaf",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:         0,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               true,
 					},
 				},
 				Pass: true,
@@ -293,11 +296,12 @@ func TestDiffDetection(t *testing.T) {
 							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
 						TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
-						Added:      []string{"CVE-2026-0011"},
-						Removed:    []string{"CVE-2026-0010"},
-						ChangeRate: 20,
-						Threshold:  25,
-						Pass:       true,
+						Added:              []string{"CVE-2026-0011"},
+						Removed:            []string{"CVE-2026-0010"},
+						ChangeRate:         20,
+						Threshold:          25,
+						EffectiveThreshold: 25,
+						Pass:               true,
 					},
 				},
 				Pass: true,
@@ -317,13 +321,14 @@ func TestDiffDetection(t *testing.T) {
 				Name: "ubuntu_22.04",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:    "ubuntu-oval",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001"},
-						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						ChangeRate:  75,
-						Threshold:   10,
-						Pass:        false,
+						SourceID:           "ubuntu-oval",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:          []string{"CVE-2026-0001"},
+						Removed:            []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:         75,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               false,
 					},
 				},
 				Pass: false,
@@ -352,20 +357,22 @@ func TestDiffDetection(t *testing.T) {
 				Name: "cpe_cisco",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:    "cisco-json",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  100,
-						Threshold:   10,
-						Pass:        false,
+						SourceID:           "cisco-json",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Removed:            []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:         100,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               false,
 					},
 					{
-						SourceID:    "nvd-feed-cve-v2",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						SourceID:           "nvd-feed-cve-v2",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:         0,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               true,
 					},
 				},
 				Pass: false,
@@ -394,22 +401,24 @@ func TestDiffDetection(t *testing.T) {
 				Name: "cpe_jvn",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:    "jvn-feed-rss",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0003"},
-						Added:       []string{"CVE-2026-0003"},
-						Removed:     []string{"CVE-2026-0002"},
-						ChangeRate:  100,
-						Threshold:   150,
-						Pass:        true,
+						SourceID:           "jvn-feed-rss",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0003"},
+						Added:              []string{"CVE-2026-0003"},
+						Removed:            []string{"CVE-2026-0002"},
+						ChangeRate:         100,
+						Threshold:          150,
+						EffectiveThreshold: 150,
+						Pass:               true,
 					},
 					{
-						SourceID:    "nvd-feed-cve-v2",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  0,
-						Threshold:   10,
-						Pass:        true,
+						SourceID:           "nvd-feed-cve-v2",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:         0,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               true,
 					},
 				},
 				Pass: true,
@@ -429,12 +438,13 @@ func TestDiffDetection(t *testing.T) {
 				Name: "redhat_9",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:   "redhat-csaf",
-						TargetIDs:  []string{"CVE-2026-0001", "CVE-2026-0002"},
-						Added:      []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate: 100,
-						Threshold:  10,
-						Pass:       false,
+						SourceID:           "redhat-csaf",
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Added:              []string{"CVE-2026-0001", "CVE-2026-0002"},
+						ChangeRate:         100,
+						Threshold:          10,
+						EffectiveThreshold: 10,
+						Pass:               false,
 					},
 				},
 				Pass: false,
@@ -469,27 +479,156 @@ func TestDiffDetection(t *testing.T) {
 				Name: "debian_13",
 				Sources: []detection.SourceDiff{
 					{
-						SourceID:    "debian-security-tracker-api",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-						Added:       []string{"CVE-2026-0003"},
-						ChangeRate:  50,
-						Threshold:   80,
-						Pass:        true,
+						SourceID:           "debian-security-tracker-api",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						Added:              []string{"CVE-2026-0003"},
+						ChangeRate:         50,
+						Threshold:          80,
+						EffectiveThreshold: 80,
+						Pass:               true,
 					},
 				},
 				Pass: true,
+			},
+		},
+		{
+			// z widens the effective threshold by z standard deviations of the
+			// change count expected at the threshold: 25% of baseline 4 is one
+			// CVE, so eff = 25 + 2·10·√(25/4) = 75, and a 2-CVE churn (50%)
+			// that trips the bare threshold passes.
+			name: "z slack absorbs small-baseline churn",
+			args: args{
+				name: "cpe_fortinet",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					Target:   map[sourceTypes.SourceID][]string{"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"}},
+				},
+				threshold: 25,
+				z:         2,
+			},
+			want: detection.FileDiff{
+				Name: "cpe_fortinet",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:           "vulncheck-nist-nvd2",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"},
+						Added:              []string{"CVE-2026-0005"},
+						Removed:            []string{"CVE-2026-0004"},
+						ChangeRate:         50,
+						Threshold:          25,
+						EffectiveThreshold: 75,
+						Pass:               true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// The slack is a widened threshold, not a free pass: a churn above
+			// the effective threshold still fails.
+			name: "z slack exceeded still fails",
+			args: args{
+				name: "cpe_fortinet",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					Target:   map[sourceTypes.SourceID][]string{"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0005", "CVE-2026-0006"}},
+				},
+				threshold: 25,
+				z:         2,
+			},
+			want: detection.FileDiff{
+				Name: "cpe_fortinet",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:           "vulncheck-nist-nvd2",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0005", "CVE-2026-0006"},
+						Added:              []string{"CVE-2026-0005", "CVE-2026-0006"},
+						Removed:            []string{"CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:         100,
+						Threshold:          25,
+						EffectiveThreshold: 75,
+						Pass:               false,
+					},
+				},
+				Pass: false,
+			},
+		},
+		{
+			// A tiny baseline can push the effective threshold past 100%
+			// (49 + 2·10·√(49/4) = 119), which would excuse the total
+			// disappearance of the source — the wipe-out guard fails it anyway.
+			name: "z slack does not excuse a wipe-out",
+			args: args{
+				name: "cpe_fortinet",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					Target:   map[sourceTypes.SourceID][]string{},
+				},
+				threshold: 49,
+				z:         2,
+			},
+			want: detection.FileDiff{
+				Name: "cpe_fortinet",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:           "vulncheck-nist-nvd2",
+						BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						Removed:            []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						ChangeRate:         100,
+						Threshold:          49,
+						EffectiveThreshold: 119,
+						Pass:               false,
+					},
+				},
+				Pass: false,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.overrides, tt.args.threshold)
+			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.overrides, tt.args.threshold, tt.args.z)
 			// Sources carries no order guarantee (the report sorts for
 			// presentation), so compare it order-insensitively.
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
 				t.Errorf("DiffDetection() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestEffectiveThreshold(t *testing.T) {
+	type args struct {
+		threshold float64
+		baseline  int
+		z         float64
+	}
+	tests := []struct {
+		name string
+		args args
+		want float64
+	}{
+		{name: "z=0 keeps the bare threshold", args: args{threshold: 5, baseline: 25, z: 0}, want: 5},
+		{name: "empty baseline keeps the bare threshold", args: args{threshold: 5, baseline: 0, z: 2}, want: 5},
+		{name: "zero threshold stays zero", args: args{threshold: 0, baseline: 25, z: 2}, want: 0},
+		// 5 + 2·10·√(5/25): a 5% threshold on 25 entries (1.25 expected) is
+		// widened by ≈8.9 points — absolute slack of a few entries.
+		{name: "small baseline earns absolute slack", args: args{threshold: 5, baseline: 25, z: 2}, want: 13.94427190999916},
+		// 5 + 2·10·√(5/10000): on 10k entries the same setting adds ≈0.45
+		// points — converging to the bare threshold.
+		{name: "large baseline converges to the bare threshold", args: args{threshold: 5, baseline: 10000, z: 2}, want: 5.447213595499958},
+		// Larger z widens further: 3σ on the small-baseline case.
+		{name: "larger z widens further", args: args{threshold: 5, baseline: 25, z: 3}, want: 18.41640786499874},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detection.EffectiveThreshold(tt.args.threshold, tt.args.baseline, tt.args.z)
+			if math.Abs(got-tt.want) > 1e-9 {
+				t.Errorf("EffectiveThreshold(%g, %d, %g) = %g, want %g", tt.args.threshold, tt.args.baseline, tt.args.z, got, tt.want)
 			}
 		})
 	}
@@ -513,12 +652,13 @@ func TestGenerateReport(t *testing.T) {
 						Name: "redhat_9",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "redhat-csaf",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  0,
-								Threshold:   10,
-								Pass:        true,
+								SourceID:           "redhat-csaf",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:         0,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               true,
 							},
 						},
 						Pass: true,
@@ -527,13 +667,14 @@ func TestGenerateReport(t *testing.T) {
 						Name: "ubuntu_22.04",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "ubuntu-oval",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								TargetIDs:   []string{"CVE-2026-0001"},
-								Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								ChangeRate:  75.0,
-								Threshold:   10,
-								Pass:        false,
+								SourceID:           "ubuntu-oval",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								TargetIDs:          []string{"CVE-2026-0001"},
+								Removed:            []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								ChangeRate:         75.0,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               false,
 							},
 						},
 						Pass: false,
@@ -574,20 +715,22 @@ func TestGenerateReport(t *testing.T) {
 						Name: "cpe_cisco",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "cisco-json",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  100,
-								Threshold:   10,
-								Pass:        false,
+								SourceID:           "cisco-json",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+								Removed:            []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:         100,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               false,
 							},
 							{
-								SourceID:    "nvd-feed-cve-v2",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								ChangeRate:  0,
-								Threshold:   10,
-								Pass:        true,
+								SourceID:           "nvd-feed-cve-v2",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								ChangeRate:         0,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               true,
 							},
 						},
 						Pass: false,
@@ -625,12 +768,13 @@ func TestGenerateReport(t *testing.T) {
 						Name: "redhat_9",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "redhat-csaf",
-								BaselineIDs: []string{"CVE-2026-0001"},
-								TargetIDs:   []string{"CVE-2026-0001"},
-								ChangeRate:  0,
-								Threshold:   10,
-								Pass:        true,
+								SourceID:           "redhat-csaf",
+								BaselineIDs:        []string{"CVE-2026-0001"},
+								TargetIDs:          []string{"CVE-2026-0001"},
+								ChangeRate:         0,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               true,
 							},
 						},
 						Pass: true,
@@ -651,6 +795,44 @@ func TestGenerateReport(t *testing.T) {
 `,
 		},
 		{
+			// With z slack the Threshold column shows the effective
+			// threshold the rate was judged against, not the configured one.
+			name: "threshold column shows the effective threshold",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"cpe_fortinet": {
+						Name: "cpe_fortinet",
+						Sources: []detection.SourceDiff{
+							{
+								SourceID:           "vulncheck-nist-nvd2",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"},
+								Added:              []string{"CVE-2026-0005"},
+								Removed:            []string{"CVE-2026-0004"},
+								ChangeRate:         50,
+								Threshold:          25,
+								EffectiveThreshold: 75,
+								Pass:               true,
+							},
+						},
+						Pass: true,
+					},
+				},
+			},
+			wantPass: true,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: PASS
+
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| cpe_fortinet | vulncheck-nist-nvd2 | 4 | 4 | 1 | 1 | 50.0% | 75.0% | PASS |
+
+`,
+		},
+		{
 			name: "override applied",
 			args: args{
 				diffs: map[string]detection.FileDiff{
@@ -658,13 +840,14 @@ func TestGenerateReport(t *testing.T) {
 						Name: "debian_13",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "debian-security-tracker-api",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
-								Added:       []string{"CVE-2026-0003"},
-								ChangeRate:  50,
-								Threshold:   80,
-								Pass:        true,
+								SourceID:           "debian-security-tracker-api",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:          []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+								Added:              []string{"CVE-2026-0003"},
+								ChangeRate:         50,
+								Threshold:          80,
+								EffectiveThreshold: 80,
+								Pass:               true,
 							},
 						},
 						Pass: true,
@@ -673,12 +856,13 @@ func TestGenerateReport(t *testing.T) {
 						Name: "redhat_9",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "redhat-csaf",
-								BaselineIDs: []string{"CVE-2026-0001"},
-								TargetIDs:   []string{"CVE-2026-0001"},
-								ChangeRate:  0,
-								Threshold:   10,
-								Pass:        true,
+								SourceID:           "redhat-csaf",
+								BaselineIDs:        []string{"CVE-2026-0001"},
+								TargetIDs:          []string{"CVE-2026-0001"},
+								ChangeRate:         0,
+								Threshold:          10,
+								EffectiveThreshold: 10,
+								Pass:               true,
 							},
 						},
 						Pass: true,
@@ -710,14 +894,15 @@ func TestGenerateReport(t *testing.T) {
 						Name: "alpha",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "alma-errata",
-								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-								TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
-								Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
-								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  250,
-								Threshold:   300,
-								Pass:        true,
+								SourceID:           "alma-errata",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002"},
+								TargetIDs:          []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+								Added:              []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+								Removed:            []string{"CVE-2026-0001", "CVE-2026-0002"},
+								ChangeRate:         250,
+								Threshold:          300,
+								EffectiveThreshold: 300,
+								Pass:               true,
 							},
 						},
 						Pass: true,
@@ -726,14 +911,15 @@ func TestGenerateReport(t *testing.T) {
 						Name: "beta",
 						Sources: []detection.SourceDiff{
 							{
-								SourceID:    "alma-errata",
-								BaselineIDs: []string{"CVE-2026-1001", "CVE-2026-1002"},
-								TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
-								Added:       []string{"CVE-2026-1003"},
-								Removed:     []string{"CVE-2026-1002"},
-								ChangeRate:  100,
-								Threshold:   0,
-								Pass:        false,
+								SourceID:           "alma-errata",
+								BaselineIDs:        []string{"CVE-2026-1001", "CVE-2026-1002"},
+								TargetIDs:          []string{"CVE-2026-1001", "CVE-2026-1003"},
+								Added:              []string{"CVE-2026-1003"},
+								Removed:            []string{"CVE-2026-1002"},
+								ChangeRate:         100,
+								Threshold:          0,
+								EffectiveThreshold: 0,
+								Pass:               false,
 							},
 						},
 						Pass: false,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
+	changeRateThresholdZ         float64
 	debug                        bool
 	writer                       io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
@@ -60,6 +62,23 @@ func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
 
+type changeRateThresholdZOption float64
+
+func (o changeRateThresholdZOption) apply(opts *options) {
+	opts.changeRateThresholdZ = float64(o)
+}
+
+// WithChangeRateThresholdZ supplies the statistical slack multiplier z for
+// threshold judgement. With z > 0 each (file, source) pair is judged against
+// an effective threshold widened by z standard deviations of the change count
+// expected at its resolved threshold (see effectiveThreshold), so that small
+// baselines — where one CVE is worth more than the threshold percentage —
+// get absolute slack of a few entries instead of tripping on unit-sized
+// churn. 0 (the default) keeps the bare threshold comparison.
+func WithChangeRateThresholdZ(z float64) Option {
+	return changeRateThresholdZOption(z)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -96,6 +115,12 @@ type SourceDiff struct {
 	// Threshold actually applied to this (file, source) pair (post override
 	// resolution: "<file>/<source>" > "<file>" > default).
 	Threshold float64
+
+	// EffectiveThreshold is Threshold widened by the configured statistical
+	// slack (see effectiveThreshold); it is what ChangeRate is judged
+	// against, and what the report's Threshold column shows. Equal to
+	// Threshold when z is 0.
+	EffectiveThreshold float64
 
 	Pass bool
 }
@@ -154,7 +179,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 	diffm := make(map[string]FileDiff, len(idm))
 	for name, ids := range idm {
-		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold)
+		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold, o.changeRateThresholdZ)
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -431,7 +456,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
-func diffDetection(name string, ids cveIDs, overrides map[string]float64, threshold float64) FileDiff {
+func diffDetection(name string, ids cveIDs, overrides map[string]float64, threshold, z float64) FileDiff {
 	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
 	for s := range ids.Baseline {
 		sources[s] = struct{}{}
@@ -454,11 +479,39 @@ func diffDetection(name string, ids cveIDs, overrides map[string]float64, thresh
 		sd.Removed = subtract(sd.BaselineIDs, sd.TargetIDs)
 		sd.ChangeRate = changeRate(len(sd.BaselineIDs), len(sd.Added), len(sd.Removed))
 		sd.Threshold = resolveThreshold(overrides, threshold, name, sid)
-		sd.Pass = sd.ChangeRate <= sd.Threshold
+		sd.EffectiveThreshold = effectiveThreshold(sd.Threshold, len(sd.BaselineIDs), z)
+		// The slack never excuses a wipe-out: a source whose detections all
+		// disappear must fail even where a tiny baseline pushes the effective
+		// threshold past 100%. Guarded on z to keep z=0 exactly the bare
+		// threshold comparison.
+		wipedOut := z > 0 && len(sd.BaselineIDs) > 0 && len(sd.TargetIDs) == 0
+		sd.Pass = !wipedOut && sd.ChangeRate <= sd.EffectiveThreshold
 		d.Sources = append(d.Sources, sd)
 	}
 	d.Pass = !slices.ContainsFunc(d.Sources, func(sd SourceDiff) bool { return !sd.Pass })
 	return d
+}
+
+// effectiveThreshold widens threshold (a percentage) by z standard deviations
+// of the change count expected at that threshold, treating the count as
+// Poisson-distributed with mean baseline × threshold — the control-limit
+// construction of funnel plots and p-charts. In counts, the judgement
+//
+//	added + removed > baseline·p + z·√(baseline·p)   (p = threshold/100)
+//
+// divided by baseline and scaled to percent becomes
+//
+//	rate > threshold + z·10·√(threshold/baseline)
+//
+// so a small baseline — where a percentage threshold is finer than one unit
+// of change — earns absolute slack of a few entries, while a large baseline
+// converges to the bare threshold. z = 0, an empty baseline, and a
+// non-positive threshold all leave the threshold unchanged.
+func effectiveThreshold(threshold float64, baseline int, z float64) float64 {
+	if z <= 0 || baseline <= 0 || threshold <= 0 {
+		return threshold
+	}
+	return threshold + z*10*math.Sqrt(threshold/float64(baseline))
 }
 
 // changeRate computes a per-source change rate as a percentage:

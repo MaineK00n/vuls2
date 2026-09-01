@@ -124,14 +124,16 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	return pass, nil
 }
 
-// thresholdCell renders the Threshold column; a placeholder row has no
-// (file, source) for a threshold to apply to, so it renders "-" rather than
-// a misleading 0.0%.
+// thresholdCell renders the Threshold column with the effective (slack-
+// widened) threshold — the value the change rate was actually judged
+// against; with z=0 it equals the configured threshold. A placeholder row
+// has no (file, source) for a threshold to apply to, so it renders "-"
+// rather than a misleading 0.0%.
 func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	return fmt.Sprintf("%.1f%%", sd.Threshold)
+	return fmt.Sprintf("%.1f%%", sd.EffectiveThreshold)
 }
 
 func resultLabel(pass bool) string {
