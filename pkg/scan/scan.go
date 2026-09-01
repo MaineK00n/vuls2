@@ -138,7 +138,26 @@ func Scan(root string, opts ...Option) error {
 						ecosystemTypes.EcosystemTypeAmazon, ecosystemTypes.EcosystemTypeAlpine:
 						base.Repository = p.Repository
 					}
-					base.ModularityLabel = p.ModularityLabel
+					// ModularityLabel names an RPM module stream. It is not
+					// matched on its own: base.formQuery() folds it into the
+					// package name -- mysql:8.0::community-mysql -- and only
+					// the ecosystems whose data emits that form can match it:
+					// redhat (centos resolves to the redhat ecosystem too),
+					// alma, rocky, oracle and fedora.
+					//
+					// The fold runs for the binary name of EVERY family, so a
+					// value that leaks in elsewhere rewrites the name into
+					// something no criterion carries, and one that is not
+					// NAME:STREAM(:VERSION:CONTEXT:ARCH) shaped fails the whole
+					// query with an error.
+					//
+					// An allowlist for the same reason as Repository above.
+					switch old.Family {
+					case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosystemTypeCentOS,
+						ecosystemTypes.EcosystemTypeAlma, ecosystemTypes.EcosystemTypeRocky,
+						ecosystemTypes.EcosystemTypeOracle, ecosystemTypes.EcosystemTypeFedora:
+						base.ModularityLabel = p.ModularityLabel
+					}
 					pkgs[p.Name] = base
 				}
 
