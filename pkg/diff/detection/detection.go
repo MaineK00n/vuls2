@@ -123,6 +123,13 @@ type SourceDiff struct {
 	// Threshold when z is 0.
 	EffectiveThreshold float64
 
+	// WipedOut records that the wipe-out guard fired: z > 0 and every
+	// baseline detection of this source disappeared from the target. Pass
+	// is then false regardless of the effective threshold, and the report
+	// annotates the Result cell so the row does not look internally
+	// inconsistent when the effective threshold exceeds 100%.
+	WipedOut bool
+
 	Pass bool
 }
 
@@ -485,8 +492,8 @@ func diffDetection(name string, ids cveIDs, overrides map[string]float64, thresh
 		// disappear must fail even where a tiny baseline pushes the effective
 		// threshold past 100%. Guarded on z to keep z=0 exactly the bare
 		// threshold comparison.
-		wipedOut := z > 0 && len(sd.BaselineIDs) > 0 && len(sd.TargetIDs) == 0
-		sd.Pass = !wipedOut && sd.ChangeRate <= sd.EffectiveThreshold
+		sd.WipedOut = z > 0 && len(sd.BaselineIDs) > 0 && len(sd.TargetIDs) == 0
+		sd.Pass = !sd.WipedOut && sd.ChangeRate <= sd.EffectiveThreshold
 		d.Sources = append(d.Sources, sd)
 	}
 	d.Pass = !slices.ContainsFunc(d.Sources, func(sd SourceDiff) bool { return !sd.Pass })

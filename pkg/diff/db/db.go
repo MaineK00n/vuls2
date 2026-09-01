@@ -157,6 +157,14 @@ type SourceDiff struct {
 	DetectionEffectiveThreshold float64
 	KBEffectiveThreshold        float64
 
+	// WipedOut records that the wipe-out guard fired: z > 0 and every
+	// baseline unit of at least one of this source's buckets disappeared
+	// from the target. Pass is then false regardless of the effective
+	// thresholds, and the report annotates the Result cell so the row does
+	// not look internally inconsistent when an effective threshold exceeds
+	// 100%.
+	WipedOut bool
+
 	Pass bool
 }
 
@@ -399,9 +407,9 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		// all disappear must fail even where a tiny baseline pushes its
 		// effective threshold past 100%. Guarded on z to keep z=0 exactly
 		// the bare threshold comparison.
-		wipedOut := z > 0 && ((sd.BaselineCriterions > 0 && sd.TargetCriterions == 0) ||
+		sd.WipedOut = z > 0 && ((sd.BaselineCriterions > 0 && sd.TargetCriterions == 0) ||
 			(sd.BaselineKBKeys > 0 && sd.TargetKBKeys == 0))
-		sd.Pass = !wipedOut &&
+		sd.Pass = !sd.WipedOut &&
 			sd.DetectionChangeRate <= sd.DetectionEffectiveThreshold &&
 			sd.KBChangeRate <= sd.KBEffectiveThreshold
 		diff.Sources = append(diff.Sources, sd)

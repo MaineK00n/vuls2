@@ -580,6 +580,7 @@ func TestDiffDetection(t *testing.T) {
 						ChangeRate:         100,
 						Threshold:          49,
 						EffectiveThreshold: 119,
+						WipedOut:           true,
 						Pass:               false,
 					},
 				},
@@ -829,6 +830,55 @@ func TestGenerateReport(t *testing.T) {
 | Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
 |------|--------|----------|--------|-------|---------|-------------|-----------|--------|
 | cpe_fortinet | vulncheck-nist-nvd2 | 4 | 4 | 1 | 1 | 50.0% | 75.0% | PASS |
+
+`,
+		},
+		{
+			// A wipe-out-forced failure is annotated in the Result cell:
+			// without it the row would look internally inconsistent (100.0%
+			// ≤ 119.0% yet FAIL).
+			name: "wipe-out failure annotated in result cell",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"cpe_fortinet": {
+						Name: "cpe_fortinet",
+						Sources: []detection.SourceDiff{
+							{
+								SourceID:           "vulncheck-nist-nvd2",
+								BaselineIDs:        []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								Removed:            []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+								ChangeRate:         100,
+								Threshold:          49,
+								EffectiveThreshold: 119,
+								WipedOut:           true,
+								Pass:               false,
+							},
+						},
+						Pass: false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: **FAIL**
+
+| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
+|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| cpe_fortinet | vulncheck-nist-nvd2 | 4 | 0 | 0 | 4 | 100.0% | 119.0% | **FAIL (wipe-out)** |
+
+## Details (FAIL sources)
+
+### cpe_fortinet / vulncheck-nist-nvd2 (100.0%)
+
+#### Removed IDs (4)
+
+- CVE-2026-0001
+- CVE-2026-0002
+- CVE-2026-0003
+- CVE-2026-0004
 
 `,
 		},

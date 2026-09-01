@@ -84,7 +84,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			r.DetectionChangeRate,
 			r.KBChangeRate,
 			thresholdCell(r.SourceDiff),
-			resultLabel(r.Pass),
+			resultCell(r.SourceDiff),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
@@ -216,6 +216,17 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// resultCell renders the Result column; a failure forced by the wipe-out
+// guard is annotated, because its change rates may sit at or under their
+// effective thresholds (which can exceed 100% on a tiny baseline) and the
+// row would otherwise look internally inconsistent.
+func resultCell(sd SourceDiff) string {
+	if !sd.Pass && sd.WipedOut {
+		return "**FAIL (wipe-out)**"
+	}
+	return resultLabel(sd.Pass)
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.

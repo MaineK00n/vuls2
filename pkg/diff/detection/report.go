@@ -77,7 +77,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 	for _, r := range rows {
 		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
 			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed), r.ChangeRate,
-			thresholdCell(r.SourceDiff), resultLabel(r.Pass)); err != nil {
+			thresholdCell(r.SourceDiff), resultCell(r.SourceDiff)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
 	}
@@ -141,6 +141,17 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// resultCell renders the Result column; a failure forced by the wipe-out
+// guard is annotated, because its change rate may sit at or under the
+// effective threshold (which can exceed 100% on a tiny baseline) and the
+// row would otherwise look internally inconsistent.
+func resultCell(sd SourceDiff) string {
+	if !sd.Pass && sd.WipedOut {
+		return "**FAIL (wipe-out)**"
+	}
+	return resultLabel(sd.Pass)
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.

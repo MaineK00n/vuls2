@@ -499,6 +499,7 @@ func TestDiffEcosystem(t *testing.T) {
 						Threshold:                   98,
 						DetectionEffectiveThreshold: 98,
 						KBEffectiveThreshold:        238,
+						WipedOut:                    true,
 						Pass:                        false,
 					},
 				},
@@ -1589,6 +1590,60 @@ func TestGenerateReport(t *testing.T) {
 | Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
 |-----------|--------|------------------|----------------|-------|---------|---------|-------------|
 | microsoft | microsoft-cvrf | 2 | 3 | 1 | 0 | 0 | 2 |
+
+`,
+		},
+		{
+			// A wipe-out-forced failure is annotated in the Result cell:
+			// without it the row would look internally inconsistent (100.0%
+			// ≤ 238.0% yet FAIL).
+			name: "wipe-out failure annotated in result cell",
+			args: args{
+				diffs: []db.EcosystemDiff{
+					{
+						Ecosystem: "microsoft",
+						Sources: []db.SourceDiff{
+							{
+								SourceID:                    "microsoft-cvrf",
+								BaselineKBKeys:              2,
+								RemovedKBs:                  []string{"KB5001000", "KB5001111"},
+								KBChangeRate:                100,
+								Threshold:                   98,
+								DetectionEffectiveThreshold: 98,
+								KBEffectiveThreshold:        238,
+								WipedOut:                    true,
+								Pass:                        false,
+							},
+						},
+						Pass: false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: DB
+
+## Summary
+
+**Result**: **FAIL**
+
+| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
+|-----------|--------|-----------------------|----------------|-----------|--------|
+| microsoft | microsoft-cvrf | 0.0% | 100.0% | 98.0% / 238.0% | **FAIL (wipe-out)** |
+
+## KB
+
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
+|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| microsoft | microsoft-cvrf | 2 | 0 | 0 | 2 | 0 | 0 |
+
+## Details (FAIL sources)
+
+### microsoft / microsoft-cvrf (100.0%)
+
+#### Removed KB IDs (2)
+
+- KB5001000
+- KB5001111
 
 `,
 		},
