@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -57,6 +58,32 @@ func TestDetect(t *testing.T) {
 				concurrency: 1,
 			},
 			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+		},
+		{
+			// planQueries is the lazy body's first storage access. The DB
+			// here is populated from a fixture carrying no microsoft source
+			// — the ecosystem-filtered / partial-DB state — so the applied
+			// KB's first GetMicrosoftKB read fails on the missing microsoft
+			// bucket, and the error is yielded as terminal.
+			name:    "no microsoft data in DB yields an error for reported KBs",
+			fixture: "testdata/fixtures/no-microsoft-source",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family:  ecosystemTypes.EcosystemTypeMicrosoft,
+					Release: "Windows 10 Version 2004 for x64-based Systems",
+					MicrosoftKB: scanTypes.MicrosoftKB{
+						Applied: []string{"5000802"},
+					},
+				},
+				concurrency: 1,
+			},
+			wantErr: errors.New(`plan queries: forward superseders from applied: get microsoft kb 5000802: "microsoft" not found: ecosystem not found`),
 		},
 		{
 			name:    "detect CVE-2021-1640 and CVE-2021-26413 by unapplied KB with supersession",
@@ -855,7 +882,7 @@ func TestDetect(t *testing.T) {
 			}
 			defer s.Storage().Close()
 
-			got, err := microsoft.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency)
+			got, err := test.CollectDetections(microsoft.Detect(s.Storage(), tt.args.ecosystem, tt.args.sr, tt.args.concurrency))
 			switch {
 			case tt.wantErr == nil && err != nil:
 				t.Errorf("Detect() unexpected error: %v", err)

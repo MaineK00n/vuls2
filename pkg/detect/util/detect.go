@@ -2,7 +2,7 @@ package util
 
 import (
 	"context"
-	"maps"
+	"iter"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -24,96 +24,149 @@ type Request struct {
 	Indexes []int
 }
 
-func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) (map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, error) {
-	m := make(map[dataTypes.RootID][]string)
-	for _, q := range queries {
-		rs, err := s.GetIndex(ecosystem, q)
-		if err != nil {
-			if errors.Is(err, dbTypes.ErrNotFoundIndex) {
-				continue
-			}
-			return nil, errors.Wrap(err, "get index")
-		}
-		for _, r := range rs {
-			m[r] = append(m[r], q)
-		}
-	}
-
-	reqChan := make(chan Request, concurrency)
-	go func() {
-		defer close(reqChan)
-		for rootID, names := range m {
-			reqChan <- createRequestFn(rootID, names)
-		}
-	}()
-
-	resChan := make(chan map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection, len(m))
-
-	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(concurrency)
-	for req := range reqChan {
-		g.Go(func() error {
-			m, err := s.GetDetection(ecosystem, req.RootID)
+// Detect looks up the rootIDs matching queries through the index and
+// yields each rootID's detection as its worker finishes, in completion
+// order. Every condition passes through unconditionally with its full
+// criteria tree — the per-condition affected/unaffected gating is the
+// consumer's policy (top-level pkg/detect.Detect gates on Affected; other
+// consumers may prune or project per element while only the in-flight
+// trees are live).
+//
+// A yielded non-nil error (index lookup or worker failure) is terminal:
+// the sequence stops after it. Breaking out of the loop early stops the
+// pipeline promptly, not instantly: no further elements are yielded and no
+// new DB / criteria work is started (a request already waiting for a
+// worker slot may still be scheduled, but returns before doing any work),
+// while workers already mid-element finish their current DB fetch /
+// criteria evaluation and observe the cancellation at their result-send
+// boundary; their results are discarded. Iterator completion — normal
+// exhaustion, early break, or a panic unwinding through the consumer's
+// loop body — blocks until the pipeline has quiesced, so once the
+// iterator returns, no background goroutine touches s anymore.
+//
+// Consumers that need the whole result at once accumulate the sequence
+// into a map; consumers that reduce each rootID's trees (pruning,
+// projection) fold elements as they arrive, so peak memory holds the
+// folded result plus only the in-flight trees rather than every rootID's
+// full tree.
+func Detect(s session.Storage, ecosystem ecosystemTypes.Ecosystem, queries []string, createRequestFn func(rootID dataTypes.RootID, queries []string) Request, concurrency int) iter.Seq2[detectTypes.RootDetection, error] {
+	return func(yield func(detectTypes.RootDetection, error) bool) {
+		m := make(map[dataTypes.RootID][]string)
+		for _, q := range queries {
+			rs, err := s.GetIndex(ecosystem, q)
 			if err != nil {
-				return errors.Wrap(err, "get detection")
+				if errors.Is(err, dbTypes.ErrNotFoundIndex) {
+					continue
+				}
+				yield(detectTypes.RootDetection{}, errors.Wrap(err, "get index"))
+				return
 			}
+			for _, r := range rs {
+				m[r] = append(m[r], q)
+			}
+		}
 
-			dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-			for sourceID, conds := range m {
-				for _, cond := range conds {
-					fcond, err := cond.Accept(req.Query)
-					if err != nil {
-						return errors.Wrap(err, "criteria accept")
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// gctx is canceled both by cancel (early break, via the parent ctx)
+		// and by the first worker error, so both the dispatcher below and
+		// the workers watch it: a worker failure stops dispatching too.
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(concurrency)
+
+		// Buffered to concurrency, not len(m): workers block on send when
+		// the consumer lags, bounding the number of full trees in flight.
+		// Sends select on gctx.Done so an early break unblocks them.
+		resChan := make(chan detectTypes.RootDetection, concurrency)
+
+		var werr error
+		dispatched := make(chan struct{})
+		go func() {
+			defer close(dispatched)
+			for rootID, names := range m {
+				// Stop dispatching once the pipeline is canceled (early
+				// break or a worker error). This is not re-checked while
+				// g.Go blocks on a slot; the worker-start re-check below
+				// covers that race.
+				if gctx.Err() != nil {
+					break
+				}
+				req := createRequestFn(rootID, names)
+				g.Go(func() error {
+					// The dispatcher's check above is not atomic with g.Go:
+					// with SetLimit, g.Go blocks while every slot is taken,
+					// and a cancellation arriving during that wait would
+					// otherwise let this request start once a slot opens.
+					// Re-check before doing any DB / criteria work.
+					if err := gctx.Err(); err != nil {
+						return err
 					}
 
-					// Pass every condition through unconditionally. The
-					// per-condition affected/unaffected gating is moved to the
-					// top-level pkg/detect.Detect, so that consumers calling
-					// this function directly (or via ospkg.Detect / cpe.Detect)
-					// can apply their own pruning / ecosystem-specific filter
-					// over the full FilteredCriteria tree.
-					fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
+					m, err := s.GetDetection(ecosystem, req.RootID)
 					if err != nil {
-						return errors.Wrap(err, "replace indexes")
+						return errors.Wrap(err, "get detection")
 					}
 
-					d, ok := dm[req.RootID]
-					if !ok {
-						d = detectTypes.VulnerabilityDataDetection{
-							Ecosystem: ecosystem,
-							Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+					d := detectTypes.VulnerabilityDataDetection{
+						Ecosystem: ecosystem,
+						Contents:  make(map[sourceTypes.SourceID][]conditionTypes.FilteredCondition),
+					}
+					for sourceID, conds := range m {
+						for _, cond := range conds {
+							fcond, err := cond.Accept(req.Query)
+							if err != nil {
+								return errors.Wrap(err, "condition accept")
+							}
+
+							fcond.Criteria, err = replaceIndexes(fcond.Criteria, req.Indexes)
+							if err != nil {
+								return errors.Wrap(err, "replace indexes")
+							}
+
+							d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
 						}
 					}
-					d.Contents[sourceID] = append(d.Contents[sourceID], fcond)
-					dm[req.RootID] = d
-				}
+
+					if len(d.Contents) == 0 {
+						return nil
+					}
+
+					select {
+					case resChan <- detectTypes.RootDetection{RootID: req.RootID, Detection: d}:
+						return nil
+					case <-gctx.Done():
+						return gctx.Err()
+					}
+				})
 			}
+			werr = g.Wait()
+			// close after werr is assigned: the consumer reads werr only
+			// after resChan closes, so the close is the happens-before edge
+			// for that read.
+			close(resChan)
+		}()
 
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				resChan <- dm
-				return nil
+		// Join the pipeline before returning by ANY path — normal
+		// exhaustion, early break, or a panic in the consumer's loop body
+		// unwinding through yield — so that iterator completion guarantees
+		// no background goroutine still touches s. On the non-normal paths
+		// the worker error, if any, is discarded: the consumer stopped
+		// asking.
+		defer func() {
+			cancel()
+			<-dispatched
+		}()
+
+		for rd := range resChan {
+			if !yield(rd, nil) {
+				return
 			}
-		})
+		}
+
+		if werr != nil {
+			yield(detectTypes.RootDetection{}, errors.Wrap(werr, "err in goroutine"))
+		}
 	}
-
-	go func() {
-		g.Wait() //nolint:errcheck
-		close(resChan)
-	}()
-
-	dm := make(map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection)
-	for res := range resChan {
-		maps.Copy(dm, res)
-	}
-
-	if err := g.Wait(); err != nil {
-		return nil, errors.Wrap(err, "err in goroutine")
-	}
-
-	return dm, nil
 }
 
 func replaceIndexes(fca criteriaTypes.FilteredCriteria, indexes []int) (criteriaTypes.FilteredCriteria, error) {

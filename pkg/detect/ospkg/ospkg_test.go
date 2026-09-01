@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -33,10 +34,14 @@ func TestDetect(t *testing.T) {
 		config  session.Config
 		args    args
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
-		wantErr bool
+		wantErr error
 	}{
 		{
-			name:    "unknown family returns error",
+			// GetEcosystem failing must be wrapped and yielded terminally. The
+			// input drives the stable unparsable-release branch rather than the
+			// unknown-family one: the latter's message embeds upstream's full
+			// ecosystem list, which would break on every vuls-data-update bump.
+			name:    "unparsable release returns error",
 			fixture: "testdata/fixtures/alma-small",
 			config: session.Config{
 				Type:    "boltdb",
@@ -45,12 +50,12 @@ func TestDetect(t *testing.T) {
 			},
 			args: args{
 				sr: scanTypes.ScanResult{
-					Family:  "unknown-os",
-					Release: "1.0",
+					Family:  ecosystemTypes.EcosystemTypeAlpine,
+					Release: "3",
 				},
 				concurrency: 1,
 			},
-			wantErr: true,
+			wantErr: errors.New(`get ecosystem. family: alpine, release: 3: unexpected release format. expected: "<major>.<minor>(.<patch>)", actual: "3"`),
 		},
 		{
 			name:    "routes Microsoft to microsoft.Detect",
@@ -183,17 +188,20 @@ func TestDetect(t *testing.T) {
 			defer s.Storage().Close()
 			defer s.Cache().Close()
 
-			got, err := ospkg.Detect(s.Storage(), tt.args.sr, tt.args.concurrency)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Detect() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr {
-				return
-			}
-
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Detect() mismatch (-want +got):\n%s", diff)
+			got, err := test.CollectDetections(ospkg.Detect(s.Storage(), tt.args.sr, tt.args.concurrency))
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Detect() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Detect() expected error has not occurred")
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Detect() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("Detect() mismatch (-want +got):\n%s", diff)
+				}
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -33,7 +34,7 @@ func TestDetect(t *testing.T) {
 		config  session.Config
 		args    args
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name:    "no cpe in scan result",
@@ -47,7 +48,25 @@ func TestDetect(t *testing.T) {
 				sr:          scanTypes.ScanResult{},
 				concurrency: 1,
 			},
-			want: nil,
+			// An empty CPE list yields nothing; collecting the empty
+			// stream produces an empty (non-nil) map.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{},
+		},
+		{
+			// A malformed scanned CPE fails UnbindFS inside the lazy body and
+			// is yielded as a terminal error.
+			name:    "malformed cpe yields an error",
+			fixture: "testdata/fixtures/nvd-cpe",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				sr:          scanTypes.ScanResult{CPE: []string{"not-a-cpe"}},
+				concurrency: 1,
+			},
+			wantErr: errors.New(`unbind "not-a-cpe" to WFN: Error: Formatted String must start with "cpe:2.3". Given: not-a-cpe: Parse error`),
 		},
 		{
 			// Same vendor:product but part "a" instead of "o" must not match the
@@ -138,13 +157,20 @@ func TestDetect(t *testing.T) {
 			defer s.Storage().Close()
 			defer s.Cache().Close()
 
-			got, err := cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Detect() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Detect() (-expected +got):\n%s", diff)
+			got, err := test.CollectDetections(cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency))
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Detect() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Detect() expected error has not occurred")
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Detect() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("Detect() (-expected +got):\n%s", diff)
+				}
 			}
 		})
 	}

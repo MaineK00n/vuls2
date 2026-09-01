@@ -217,37 +217,38 @@ func Detect(targets []string, opts ...Option) error {
 func detect(s *session.Session, sr scanTypes.ScanResult, concurrency int) (detectTypes.DetectResult, error) {
 	detected := make(map[dataTypes.RootID]detectTypes.VulnerabilityData)
 
-	m, err := ospkg.Detect(s.Storage(), sr, concurrency)
-	if err != nil {
-		return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
-	}
-	for rootID, d := range m {
-		base, ok := detected[rootID]
-		if !ok {
-			base = detectTypes.VulnerabilityData{ID: rootID}
+	// This CLI path wants the whole result at once (detect.json carries
+	// every detection), so it simply accumulates the streams; consumers
+	// with a per-rootID retention policy fold the elements instead.
+	for rd, err := range ospkg.Detect(s.Storage(), sr, concurrency) {
+		if err != nil {
+			return detectTypes.DetectResult{}, errors.Wrap(err, "detect os packages")
 		}
-		base.Detections = append(base.Detections, d)
-		detected[rootID] = base
+		base, ok := detected[rd.RootID]
+		if !ok {
+			base = detectTypes.VulnerabilityData{ID: rd.RootID}
+		}
+		base.Detections = append(base.Detections, rd.Detection)
+		detected[rd.RootID] = base
 	}
 
-	m, err = cpe.Detect(s.Storage(), sr, concurrency)
-	if err != nil {
-		return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
-	}
-	for rootID, d := range m {
-		base, ok := detected[rootID]
-		if !ok {
-			base = detectTypes.VulnerabilityData{ID: rootID}
+	for rd, err := range cpe.Detect(s.Storage(), sr, concurrency) {
+		if err != nil {
+			return detectTypes.DetectResult{}, errors.Wrap(err, "detect cpe")
 		}
-		base.Detections = append(base.Detections, d)
-		detected[rootID] = base
+		base, ok := detected[rd.RootID]
+		if !ok {
+			base = detectTypes.VulnerabilityData{ID: rd.RootID}
+		}
+		base.Detections = append(base.Detections, rd.Detection)
+		detected[rd.RootID] = base
 	}
 
 	// util.Detect now passes every condition through unconditionally, so
 	// apply the per-condition Affected gate here for the default consumer
 	// path. Conditions whose FilteredCriteria evaluates as not-affected are
 	// dropped; Detections / VulnerabilityData that end up empty are pruned.
-	detected, err = filterAffected(detected)
+	detected, err := filterAffected(detected)
 	if err != nil {
 		return detectTypes.DetectResult{}, errors.Wrap(err, "filter affected")
 	}
