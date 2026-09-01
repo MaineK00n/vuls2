@@ -74,7 +74,8 @@ func (o changeRateThresholdZOption) apply(opts *options) {
 // expected at its resolved threshold (see effectiveThreshold), so that small
 // baselines — where one CVE is worth more than the threshold percentage —
 // get absolute slack of a few entries instead of tripping on unit-sized
-// churn. 0 (the default) keeps the bare threshold comparison.
+// churn. Any non-positive z (0 is the default) keeps the bare threshold
+// comparison.
 func WithChangeRateThresholdZ(z float64) Option {
 	return changeRateThresholdZOption(z)
 }
@@ -506,8 +507,8 @@ func diffDetection(name string, ids cveIDs, overrides map[string]float64, thresh
 //
 // so a small baseline — where a percentage threshold is finer than one unit
 // of change — earns absolute slack of a few entries, while a large baseline
-// converges to the bare threshold. z = 0, an empty baseline, and a
-// non-positive threshold all leave the threshold unchanged.
+// converges to the bare threshold. A non-positive z, an empty baseline, and
+// a non-positive threshold all leave the threshold unchanged.
 func effectiveThreshold(threshold float64, baseline int, z float64) float64 {
 	if z <= 0 || baseline <= 0 || threshold <= 0 {
 		return threshold

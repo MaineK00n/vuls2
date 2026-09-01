@@ -79,7 +79,8 @@ func (o changeRateThresholdZOption) apply(opts *options) {
 // effectiveThreshold, computed per bucket from its own baseline size), so
 // that small baselines — where one unit is worth more than the threshold
 // percentage — get absolute slack of a few units instead of tripping on
-// unit-sized churn. 0 (the default) keeps the bare threshold comparison.
+// unit-sized churn. Any non-positive z (0 is the default) keeps the bare
+// threshold comparison.
 func WithChangeRateThresholdZ(z float64) Option {
 	return changeRateThresholdZOption(z)
 }
@@ -294,8 +295,8 @@ func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTy
 //
 // so a small baseline — where a percentage threshold is finer than one unit
 // of change — earns absolute slack of a few units, while a large baseline
-// converges to the bare threshold. z = 0, an empty baseline, and a
-// non-positive threshold all leave the threshold unchanged.
+// converges to the bare threshold. A non-positive z, an empty baseline, and
+// a non-positive threshold all leave the threshold unchanged.
 func effectiveThreshold(threshold float64, baseline int, z float64) float64 {
 	if z <= 0 || baseline <= 0 || threshold <= 0 {
 		return threshold
