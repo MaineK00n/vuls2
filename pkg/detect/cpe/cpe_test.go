@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 
 	dataTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data"
@@ -33,7 +34,7 @@ func TestDetect(t *testing.T) {
 		config  session.Config
 		args    args
 		want    map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name:    "no cpe in scan result",
@@ -65,7 +66,7 @@ func TestDetect(t *testing.T) {
 				sr:          scanTypes.ScanResult{CPE: []string{"not-a-cpe"}},
 				concurrency: 1,
 			},
-			wantErr: true,
+			wantErr: errors.New(`unbind "not-a-cpe" to WFN: Error: Formatted String must start with "cpe:2.3". Given: not-a-cpe: Parse error`),
 		},
 		{
 			// Same vendor:product but part "a" instead of "o" must not match the
@@ -157,12 +158,19 @@ func TestDetect(t *testing.T) {
 			defer s.Cache().Close()
 
 			got, err := test.CollectDetections(cpe.Detect(s.Storage(), tt.args.sr, tt.args.concurrency))
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Detect() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Detect() (-expected +got):\n%s", diff)
+			switch {
+			case tt.wantErr == nil && err != nil:
+				t.Errorf("Detect() unexpected error: %v", err)
+			case tt.wantErr != nil && err == nil:
+				t.Errorf("Detect() expected error has not occurred")
+			case tt.wantErr != nil && err != nil:
+				if tt.wantErr.Error() != err.Error() {
+					t.Errorf("Detect() error mismatch: want %v, got %v", tt.wantErr, err)
+				}
+			default:
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("Detect() (-expected +got):\n%s", diff)
+				}
 			}
 		})
 	}
