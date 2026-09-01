@@ -494,8 +494,9 @@ func diffDetection(name string, ids cveIDs, overrides map[string]float64, thresh
 
 // effectiveThreshold widens threshold (a percentage) by z standard deviations
 // of the change count expected at that threshold, treating the count as
-// Poisson-distributed with mean baseline × threshold — the control-limit
-// construction of funnel plots and p-charts. In counts, the judgement
+// Poisson-distributed with mean baseline·p where p = threshold/100 — the
+// control-limit construction of funnel plots and p-charts. In counts, the
+// judgement
 //
 //	added + removed > baseline·p + z·√(baseline·p)   (p = threshold/100)
 //

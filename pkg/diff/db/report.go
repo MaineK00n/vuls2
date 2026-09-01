@@ -194,16 +194,21 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 // with z=0 both equal the configured threshold and render as the single
 // value they always were. When the per-bucket baselines pull the two apart,
 // both are shown as "<detection> / <kb>", mirroring the rate columns' order.
-// A placeholder row has no (ecosystem, source) for a threshold to apply to,
-// so it renders "-" rather than a misleading 0.0%.
+// The single-value collapse compares the formatted strings, not the raw
+// floats, so two thresholds that differ only below display precision never
+// render as a puzzling "18.0% / 18.0%". A placeholder row has no
+// (ecosystem, source) for a threshold to apply to, so it renders "-" rather
+// than a misleading 0.0%.
 func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	if sd.DetectionEffectiveThreshold == sd.KBEffectiveThreshold {
-		return fmt.Sprintf("%.1f%%", sd.DetectionEffectiveThreshold)
+	det := fmt.Sprintf("%.1f%%", sd.DetectionEffectiveThreshold)
+	kb := fmt.Sprintf("%.1f%%", sd.KBEffectiveThreshold)
+	if det == kb {
+		return det
 	}
-	return fmt.Sprintf("%.1f%% / %.1f%%", sd.DetectionEffectiveThreshold, sd.KBEffectiveThreshold)
+	return det + " / " + kb
 }
 
 func resultLabel(pass bool) string {
