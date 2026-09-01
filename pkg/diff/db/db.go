@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"math"
 	"os"
 	"runtime"
 	"slices"
@@ -28,6 +29,7 @@ import (
 type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
+	changeRateThresholdZ         float64
 	writer                       io.Writer
 	debug                        bool
 }
@@ -62,6 +64,25 @@ func (o changeRateThresholdOverridesOption) apply(opts *options) {
 // (ecosystem, source) on that default.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
+}
+
+type changeRateThresholdZOption float64
+
+func (o changeRateThresholdZOption) apply(opts *options) {
+	opts.changeRateThresholdZ = float64(o)
+}
+
+// WithChangeRateThresholdZ supplies the statistical slack multiplier z for
+// threshold judgement. With z > 0 each rate of an (ecosystem, source) pair is
+// judged against an effective threshold widened by z standard deviations of
+// the change count expected at its resolved threshold (see
+// effectiveThreshold, computed per bucket from its own baseline size), so
+// that small baselines — where one unit is worth more than the threshold
+// percentage — get absolute slack of a few units instead of tripping on
+// unit-sized churn. Any non-positive z (0 is the default) keeps the bare
+// threshold comparison.
+func WithChangeRateThresholdZ(z float64) Option {
+	return changeRateThresholdZOption(z)
 }
 
 type writerOption struct{ w io.Writer }
@@ -128,6 +149,22 @@ type SourceDiff struct {
 	// "<ecosystem>/<source>" > "<ecosystem>" > default).
 	Threshold float64
 
+	// Per-bucket effective thresholds: Threshold widened by the configured
+	// statistical slack from each bucket's own baseline size (see
+	// effectiveThreshold); they are what the rates are judged against, and
+	// what the report's Threshold column shows. Both equal Threshold when z
+	// is 0.
+	DetectionEffectiveThreshold float64
+	KBEffectiveThreshold        float64
+
+	// WipedOut records that the wipe-out guard fired: z > 0 and every
+	// baseline unit of at least one of this source's buckets disappeared
+	// from the target. Pass is then false regardless of the effective
+	// thresholds, and the report annotates the Result cell so the row does
+	// not look internally inconsistent when an effective threshold exceeds
+	// 100%.
+	WipedOut bool
+
 	Pass bool
 }
 
@@ -173,7 +210,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 	defer targetDB.Close()
 
-	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold, o.changeRateThresholdOverrides, o.changeRateThresholdZ)
 	if err != nil {
 		return errors.Wrap(err, "compute diffs")
 	}
@@ -192,7 +229,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	return nil
 }
 
-func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64) ([]EcosystemDiff, error) {
+func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64, z float64) ([]EcosystemDiff, error) {
 	baselineEcos, err := getEcosystems(baselineDB)
 	if err != nil {
 		return nil, errors.Wrap(err, "get baseline ecosystems")
@@ -216,7 +253,7 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, overrides, changeRateThreshold)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, overrides, changeRateThreshold, z)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -250,6 +287,29 @@ func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTy
 		return v
 	}
 	return def
+}
+
+// effectiveThreshold widens threshold (a percentage) by z standard deviations
+// of the change count expected at that threshold, treating the count as
+// Poisson-distributed with mean baseline·p where p = threshold/100 — the
+// control-limit construction of funnel plots and p-charts. In counts, the
+// judgement
+//
+//	changed units > baseline·p + z·√(baseline·p)   (p = threshold/100)
+//
+// divided by baseline and scaled to percent becomes
+//
+//	rate > threshold + z·10·√(threshold/baseline)
+//
+// so a small baseline — where a percentage threshold is finer than one unit
+// of change — earns absolute slack of a few units, while a large baseline
+// converges to the bare threshold. A non-positive z, an empty baseline, and
+// a non-positive threshold all leave the threshold unchanged.
+func effectiveThreshold(threshold float64, baseline int, z float64) float64 {
+	if z <= 0 || baseline <= 0 || threshold <= 0 {
+		return threshold
+	}
+	return threshold + z*10*math.Sqrt(threshold/float64(baseline))
 }
 
 // changeRate computes a per-bucket change rate as a percentage:
@@ -291,7 +351,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Per-source thresholds are
 // resolved from overrides via resolveThreshold, falling back to threshold.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold, z float64) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
 	skipped := make(map[sourceTypes.SourceID]int)
@@ -341,7 +401,17 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
 		sd.KBChangeRate = changeRate(sd.BaselineKBKeys, sd.TargetKBKeys, sd.MatchedKBs)
 		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
-		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
+		sd.DetectionEffectiveThreshold = effectiveThreshold(sd.Threshold, sd.BaselineCriterions, z)
+		sd.KBEffectiveThreshold = effectiveThreshold(sd.Threshold, sd.BaselineKBKeys, z)
+		// The slack never excuses a wipe-out: a bucket whose baseline units
+		// all disappear must fail even where a tiny baseline pushes its
+		// effective threshold past 100%. Guarded on z to keep z=0 exactly
+		// the bare threshold comparison.
+		sd.WipedOut = z > 0 && ((sd.BaselineCriterions > 0 && sd.TargetCriterions == 0) ||
+			(sd.BaselineKBKeys > 0 && sd.TargetKBKeys == 0))
+		sd.Pass = !sd.WipedOut &&
+			sd.DetectionChangeRate <= sd.DetectionEffectiveThreshold &&
+			sd.KBChangeRate <= sd.KBEffectiveThreshold
 		diff.Sources = append(diff.Sources, sd)
 	}
 	diff.Pass = !slices.ContainsFunc(diff.Sources, func(s SourceDiff) bool { return !s.Pass })
