@@ -1,6 +1,6 @@
 module github.com/MaineK00n/vuls2
 
-go 1.26
+go 1.27
 
 require (
 	github.com/MaineK00n/vuls-data-update v0.0.0-20260818092828-4b1dbcf513ff
@@ -8,7 +8,6 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.21.9
-	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.19.2
 	github.com/knqyf263/go-cpe v0.0.0-20230627041855-cb0794d06872
 	github.com/opencontainers/go-digest v1.0.0
@@ -37,6 +36,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect

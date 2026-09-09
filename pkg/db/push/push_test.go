@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,25 +178,21 @@ func TestPush(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewTLSServer(containerregistry.New())
-			defer ts.Close()
+			// The in-memory network routes every host, ghcr.io
+			// included, to the test server, so the fixtures keep
+			// their production image references.
+			ts := httptest.NewTestServer(t, containerregistry.New())
 
 			originalTransport := http.DefaultTransport
 			http.DefaultTransport = ts.Client().Transport
-			defer func() {
+			t.Cleanup(func() {
 				http.DefaultTransport = originalTransport
-			}()
-
-			u, err := url.Parse(ts.URL)
-			if err != nil {
-				t.Fatalf("parse url: %v", err)
-			}
+			})
 
 			ref, err := remote.NewRepository(tt.args.image)
 			if err != nil {
 				t.Fatalf("parse repository %q: %v", tt.args.image, err)
 			}
-			ref.Reference.Registry = u.Host
 
 			repo := &remote.Repository{
 				Reference: registry.Reference{

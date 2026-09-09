@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      GOEXPERIMENT: jsonv2
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v7

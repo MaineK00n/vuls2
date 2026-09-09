@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      GOEXPERIMENT: jsonv2
     steps:
       - name: Set Tag
         run: |
