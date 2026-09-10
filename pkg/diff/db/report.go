@@ -84,7 +84,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			r.DetectionChangeRate,
 			r.KBChangeRate,
 			thresholdCell(r.SourceDiff),
-			resultLabel(r.Pass),
+			resultCell(r.SourceDiff),
 		); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
@@ -189,14 +189,26 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	return pass, nil
 }
 
-// thresholdCell renders the Threshold column; a placeholder row has no
+// thresholdCell renders the Threshold column with the effective (slack-
+// widened) thresholds — the values the rates were actually judged against;
+// with z=0 both equal the configured threshold and render as the single
+// value they always were. When the per-bucket baselines pull the two apart,
+// both are shown as "<detection> / <kb>", mirroring the rate columns' order.
+// The single-value collapse compares the formatted strings, not the raw
+// floats, so two thresholds that differ only below display precision never
+// render as a puzzling "18.0% / 18.0%". A placeholder row has no
 // (ecosystem, source) for a threshold to apply to, so it renders "-" rather
 // than a misleading 0.0%.
 func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	return fmt.Sprintf("%.1f%%", sd.Threshold)
+	det := fmt.Sprintf("%.1f%%", sd.DetectionEffectiveThreshold)
+	kb := fmt.Sprintf("%.1f%%", sd.KBEffectiveThreshold)
+	if det == kb {
+		return det
+	}
+	return det + " / " + kb
 }
 
 func resultLabel(pass bool) string {
@@ -204,6 +216,17 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// resultCell renders the Result column; a failure forced by the wipe-out
+// guard is annotated, because its change rates may sit at or under their
+// effective thresholds (which can exceed 100% on a tiny baseline) and the
+// row would otherwise look internally inconsistent.
+func resultCell(sd SourceDiff) string {
+	if !sd.Pass && sd.WipedOut {
+		return "**FAIL (wipe-out)**"
+	}
+	return resultLabel(sd.Pass)
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
