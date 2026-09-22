@@ -114,8 +114,50 @@ func Scan(root string, opts ...Option) error {
 					base.NewVersion = p.NewVersion
 					base.NewRelease = p.NewRelease
 					base.Arch = p.Arch
-					base.Repository = p.Repository
-					base.ModularityLabel = p.ModularityLabel
+					// Repository is where the INSTALLED build came from, which
+					// is what a repository-gated criterion matches against.
+					// Carry it only for the ecosystems whose data actually
+					// gates on it: redhat (centos resolves to the redhat
+					// ecosystem too), amazon and alpine.
+					//
+					// Everywhere else the value is at best unused and at worst
+					// wrong. vuls overwrites it with the CANDIDATE version's
+					// repository whenever an update is pending
+					// (models.Packages.MergeNewVersion), and for the Debian
+					// family that is an apt suite -- noble-updates/main -- which
+					// can never equal a repository an Ubuntu data source
+					// claims. Gating on it would drop the criteria for exactly
+					// the packages whose fix is already published, silently.
+					//
+					// An allowlist rather than a denylist so that a family
+					// added later, or a scanner that starts reporting something
+					// new, defaults to not gating: that only ever loses
+					// filtering, never a detection.
+					switch old.Family {
+					case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosystemTypeCentOS,
+						ecosystemTypes.EcosystemTypeAmazon, ecosystemTypes.EcosystemTypeAlpine:
+						base.Repository = p.Repository
+					}
+					// ModularityLabel names an RPM module stream. It is not
+					// matched on its own: base.formQuery() folds it into the
+					// package name -- mysql:8.0::community-mysql -- and only
+					// the ecosystems whose data emits that form can match it:
+					// redhat (centos resolves to the redhat ecosystem too),
+					// alma, rocky, oracle and fedora.
+					//
+					// The fold runs for the binary name of EVERY family, so a
+					// value that leaks in elsewhere rewrites the name into
+					// something no criterion carries, and one that is not
+					// NAME:STREAM(:VERSION:CONTEXT:ARCH) shaped fails the whole
+					// query with an error.
+					//
+					// An allowlist for the same reason as Repository above.
+					switch old.Family {
+					case ecosystemTypes.EcosystemTypeRedHat, ecosystemTypes.EcosystemTypeCentOS,
+						ecosystemTypes.EcosystemTypeAlma, ecosystemTypes.EcosystemTypeRocky,
+						ecosystemTypes.EcosystemTypeOracle, ecosystemTypes.EcosystemTypeFedora:
+						base.ModularityLabel = p.ModularityLabel
+					}
 					pkgs[p.Name] = base
 				}
 
