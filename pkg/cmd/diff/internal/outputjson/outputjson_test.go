@@ -87,6 +87,23 @@ func TestClear(t *testing.T) {
 			t.Fatalf("Clear() error = %v", err)
 		}
 	})
+	t.Run("symlink is refused and kept", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target.json")
+		if err := os.WriteFile(target, []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link.json")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if err := outputjson.Clear(link); err == nil {
+			t.Fatal("Clear() error = nil, want refusal for a symlink")
+		}
+		if _, err := os.Lstat(link); err != nil {
+			t.Fatalf("Clear() removed the symlink: %v", err)
+		}
+	})
 	t.Run("directory is refused and kept", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "out")
 		if err := os.Mkdir(dir, 0o755); err != nil {
@@ -151,6 +168,8 @@ func TestValidate(t *testing.T) {
 		{name: "new file inside input directory", path: filepath.Join(scanDir, "diff.json"), inputs: []string{scanDir}, wantErr: true},
 		{name: "new file inside symlinked input directory", path: filepath.Join(dirLink, "diff.json"), inputs: []string{scanDir}, wantErr: true},
 		{name: "sibling with the directory name as prefix", path: filepath.Join(dir, "scan-results.json"), inputs: []string{scanDir}},
+		{name: "input directory is the filesystem root", path: filepath.Join(string(filepath.Separator), "vuls-diff-output-json-test.json"), inputs: []string{string(filepath.Separator)}, wantErr: true},
+		{name: "output equals the input directory itself", path: scanDir, inputs: []string{scanDir}, wantErr: true},
 		{name: "nonexistent input is ignored", path: filepath.Join(dir, "diff.json"), inputs: []string{filepath.Join(dir, "missing.db")}},
 	}
 	for _, tt := range tests {

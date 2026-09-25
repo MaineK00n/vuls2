@@ -80,11 +80,13 @@ func Clear(path string) error {
 		}
 		return errors.Wrapf(err, "stat %s", path)
 	}
-	// Only a stale summary is ours to remove. os.Remove would also delete
-	// an empty directory, so an --output-json pointing at a directory by
-	// mistake must fail here instead of destroying it.
-	if fi.IsDir() {
-		return errors.Errorf("--output-json %s is a directory", path)
+	// Only a stale summary, a regular file, is ours to remove. os.Remove
+	// would also delete an empty directory, a symlink, a FIFO, a device or
+	// a socket, so an --output-json pointing at any of those by mistake
+	// must fail here instead of destroying it. Lstat (not Stat) so a
+	// symlink is seen as such rather than as its target.
+	if !fi.Mode().IsRegular() {
+		return errors.Errorf("--output-json %s exists and is not a regular file (%s)", path, fi.Mode().Type())
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return errors.Wrapf(err, "remove stale %s", path)
@@ -150,8 +152,13 @@ func samePath(a, b string) bool {
 
 // insideDir reports whether path lies strictly inside dir (both resolved).
 func insideDir(path, dir string) bool {
-	prefix := dir + string(filepath.Separator)
-	if len(path) < len(prefix) {
+	// A root ("/" or `C:\`) already ends with the separator; appending
+	// another would never match and let "/diff.json" escape an input of "/".
+	prefix := dir
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	if len(path) <= len(prefix) {
 		return false
 	}
 	return samePath(path[:len(prefix)], prefix)
