@@ -80,12 +80,16 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Drop a previous run's summary before anything in this command
-			// can fail, so a malformed override or an unreadable input never
+			// Refuse an output path that names an input (Clear would delete
+			// it), then drop a previous run's summary before anything in
+			// this command can fail, so a malformed override or an unreadable input never
 			// leaves stale rows at --output-json for CI to consume. Usage
 			// errors (unparseable flag values, wrong argument count) are
 			// rejected by Cobra before RunE and leave the path untouched;
 			// see outputjson.Clear.
+			if err := outputjson.Validate(options.outputJSON, args[0], args[1], args[2], args[3], args[4]); err != nil {
+				return err
+			}
 			if err := outputjson.Clear(options.outputJSON); err != nil {
 				return err
 			}

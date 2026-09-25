@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -75,4 +76,60 @@ func Clear(path string) error {
 		return errors.Wrapf(err, "remove stale %s", path)
 	}
 	return nil
+}
+
+// Validate rejects an output path that names one of the command's inputs,
+// or lies inside an input directory (the scan-results directory), so that
+// Clear and Write can never delete or overwrite a DB, a vuls0 binary or a
+// scan result. Paths are compared after making them absolute and resolving
+// symlinks, so an alias of an input is rejected too. Callers run it before
+// Clear. An empty path is a no-op.
+func Validate(path string, inputs ...string) error {
+	if path == "" {
+		return nil
+	}
+	out, err := resolve(path)
+	if err != nil {
+		return errors.Wrapf(err, "resolve %s", path)
+	}
+	for _, in := range inputs {
+		if in == "" {
+			continue
+		}
+		r, err := resolve(in)
+		if err != nil {
+			return errors.Wrapf(err, "resolve %s", in)
+		}
+		if out == r {
+			return errors.Errorf("--output-json %s is an input of the diff", path)
+		}
+		if fi, err := os.Stat(r); err == nil && fi.IsDir() && strings.HasPrefix(out, r+string(filepath.Separator)) {
+			return errors.Errorf("--output-json %s lies inside the input directory %s", path, in)
+		}
+	}
+	return nil
+}
+
+// resolve returns path as an absolute, symlink-free, cleaned path. A path
+// that does not exist yet (the usual case for the output) is resolved
+// through its nearest existing ancestor so that a symlinked directory still
+// compares equal to its target.
+func resolve(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		return r, nil
+	}
+	dir, base := filepath.Split(filepath.Clean(abs))
+	dir = filepath.Clean(dir)
+	if dir == abs { // filesystem root
+		return abs, nil
+	}
+	r, err := resolve(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(r, base), nil
 }
