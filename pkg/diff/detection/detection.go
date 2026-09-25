@@ -24,6 +24,7 @@ type options struct {
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
 	writer                       io.Writer
+	summaryWriter                io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
@@ -78,6 +79,19 @@ func (o writerOption) apply(opts *options) {
 
 func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
+}
+
+type summaryWriterOption struct{ w io.Writer }
+
+func (o summaryWriterOption) apply(opts *options) {
+	opts.summaryWriter = o.w
+}
+
+// WithSummaryWriter additionally writes the machine-readable summary
+// (package summary, the --output-json contract) to w. It is written whether
+// the diff passes or fails; nil disables it.
+func WithSummaryWriter(w io.Writer) Option {
+	return summaryWriterOption{w: w}
 }
 
 // SourceDiff holds the comparison result for a single data source within a
@@ -161,6 +175,13 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
+
+	if o.summaryWriter != nil {
+		if err := summarize(diffm, pass).Write(o.summaryWriter); err != nil {
+			return errors.Wrap(err, "write summary")
+		}
+	}
+
 	if !pass {
 		// Resolved per-(file, source) threshold is rendered per row in the
 		// report's Threshold column, so the exit error stays threshold-free to

@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	db "github.com/MaineK00n/vuls2/pkg/diff/db"
+	"github.com/MaineK00n/vuls2/pkg/diff/summary"
 )
 
 // populateDB creates a BoltDB at dbPath populated from fixture directories.
@@ -1792,5 +1794,90 @@ func TestGenerateReport(t *testing.T) {
 				t.Errorf("GenerateReport() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	tests := []struct {
+		name  string
+		diffs []db.EcosystemDiff
+		pass  bool
+		want  summary.Summary
+	}{
+		{
+			// One row per (ecosystem, source), change_rate is the larger of
+			// the two bucket rates (same rule as the report), rows come out
+			// sorted, and an ecosystem without per-source data (the report's
+			// "(none)" placeholder) contributes no row.
+			name: "per-source rows, max of detection and kb, placeholder skipped",
+			diffs: []db.EcosystemDiff{
+				{Ecosystem: "redhat:10", Sources: []db.SourceDiff{
+					{SourceID: "redhat-vex", DetectionChangeRate: 6.5, KBChangeRate: 0, Threshold: 5, Pass: false},
+				}, Pass: false},
+				{Ecosystem: "microsoft", Sources: []db.SourceDiff{
+					{SourceID: "microsoft-msuc", DetectionChangeRate: 0, KBChangeRate: 40, Threshold: 35, Pass: false},
+					{SourceID: "microsoft-cvrf", DetectionChangeRate: 1, KBChangeRate: 0, Threshold: 10, Pass: true},
+				}, Pass: false},
+				{Ecosystem: "empty:1", Pass: true},
+			},
+			pass: false,
+			want: summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{
+				{Name: "microsoft", Source: "microsoft-cvrf", ChangeRate: 1, Threshold: 10, Pass: true},
+				{Name: "microsoft", Source: "microsoft-msuc", ChangeRate: 40, Threshold: 35, Pass: false},
+				{Name: "redhat:10", Source: "redhat-vex", ChangeRate: 6.5, Threshold: 5, Pass: false},
+			}},
+		},
+		{
+			// The overall verdict is taken from the report, so a failing
+			// placeholder row still yields pass=false even though it emits
+			// no row a consumer could act on.
+			name:  "placeholder-only failure keeps pass false with no rows",
+			diffs: []db.EcosystemDiff{{Ecosystem: "empty:1", Pass: false}},
+			pass:  false,
+			want:  summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.want, db.Summarize(tt.diffs, tt.pass)); diff != "" {
+				t.Errorf("summarize() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestDiffBoltDBSummary locks the end-to-end --output-json path: the summary
+// is written even when the diff fails, and it round-trips through the JSON
+// encoding as the contract type.
+func TestDiffBoltDBSummary(t *testing.T) {
+	baselinePath := filepath.Join(t.TempDir(), "vuls.db")
+	if err := populateDB(baselinePath, "testdata/fixtures/baseline"); err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(t.TempDir(), "vuls.db")
+	if err := populateDB(targetPath, "testdata/fixtures/target-replaced"); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	err := db.DiffBoltDB(
+		baselinePath, targetPath,
+		db.WithChangeRateThreshold(10),
+		db.WithWriter(&bytes.Buffer{}),
+		db.WithSummaryWriter(&out),
+	)
+	if err == nil {
+		t.Fatal("DiffBoltDB() error = nil, want failure on 200% change rate")
+	}
+
+	var got summary.Summary
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal summary: %v\n%s", err, out.String())
+	}
+	want := summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{
+		{Name: "alma:8", Source: "alma-errata", ChangeRate: 200, Threshold: 10, Pass: false},
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("summary mismatch (-want +got):\n%s", diff)
 	}
 }

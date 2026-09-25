@@ -1,10 +1,13 @@
 package db
 
 import (
+	"bytes"
+
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/outputjson"
 	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
 	diffdb "github.com/MaineK00n/vuls2/pkg/diff/db"
 )
@@ -13,6 +16,7 @@ func NewCmd() *cobra.Command {
 	options := struct {
 		changeRateThreshold          float64
 		changeRateThresholdOverrides []string
+		outputJSON                   string
 		debug                        bool
 	}{
 		changeRateThreshold: 0,
@@ -42,6 +46,11 @@ func NewCmd() *cobra.Command {
 		$ vuls diff db ./baseline.db ./target.db \
 		    --change-rate-threshold 10 \
 		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
+
+		# also write the Summary table as JSON for CI to consume
+		$ vuls diff db ./baseline.db ./target.db \
+		    --change-rate-threshold 10 \
+		    --output-json ./diff-db.json
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -49,18 +58,29 @@ func NewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")
 			}
-			return diffdb.DiffBoltDB(
-				args[0], args[1],
+
+			opts := []diffdb.Option{
 				diffdb.WithChangeRateThreshold(options.changeRateThreshold),
 				diffdb.WithChangeRateThresholdOverrides(overrides),
 				diffdb.WithDebug(options.debug),
-			)
+			}
+			var summary bytes.Buffer
+			if options.outputJSON != "" {
+				opts = append(opts, diffdb.WithSummaryWriter(&summary))
+			}
+
+			err = diffdb.DiffBoltDB(args[0], args[1], opts...)
+			if werr := outputjson.Write(options.outputJSON, summary.Bytes()); werr != nil {
+				return werr
+			}
+			return err
 		},
 	}
 
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (ecosystem, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <ecosystem>=<rate> (all sources in the ecosystem) or <ecosystem>/<source>=<rate> (single source, wins over the ecosystem key) (repeatable; comma-separated entries also accepted)")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
