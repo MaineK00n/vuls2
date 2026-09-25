@@ -56,10 +56,17 @@ func Write(path string, summary []byte) error {
 }
 
 // Clear removes any file a previous run left at path; a missing file is not
-// an error. Callers run it before doing anything that can fail ahead of the
-// diff (flag parsing, opening inputs), so that no failure path, however
-// early, can leave a stale summary for CI to consume. An empty path is a
-// no-op.
+// an error. Callers run it first thing in the command's RunE, before anything
+// that can fail ahead of the diff (override parsing, opening inputs), so
+// that no failure once the command runs can leave a stale summary for CI to
+// consume. An empty path is a no-op.
+//
+// Usage errors are the one exception: an unparseable flag value or a wrong
+// number of positional arguments is rejected by Cobra before RunE runs, so
+// the path is left untouched. Those are deterministic mistakes in the
+// caller's command line, not runtime failures, and CI should remove the
+// file before invoking the command (and gate on the exit status) rather
+// than rely on this cleanup alone.
 func Clear(path string) error {
 	if path == "" {
 		return nil

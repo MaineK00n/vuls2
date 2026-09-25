@@ -80,9 +80,12 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Drop a previous run's summary before anything can fail, so a
-			// malformed flag or an unreadable input never leaves stale rows
-			// at --output-json for CI to consume.
+			// Drop a previous run's summary before anything in this command
+			// can fail, so a malformed override or an unreadable input never
+			// leaves stale rows at --output-json for CI to consume. Usage
+			// errors (unparseable flag values, wrong argument count) are
+			// rejected by Cobra before RunE and leave the path untouched;
+			// see outputjson.Clear.
 			if err := outputjson.Clear(options.outputJSON); err != nil {
 				return err
 			}
@@ -113,7 +116,7 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
-	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails, and removed first if the diff cannot run (usage errors are rejected before that and leave the file untouched)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
