@@ -29,6 +29,7 @@ type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
 	writer                       io.Writer
+	summaryWriter                io.Writer
 	debug                        bool
 }
 
@@ -72,6 +73,19 @@ func (o writerOption) apply(opts *options) {
 
 func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
+}
+
+type summaryWriterOption struct{ w io.Writer }
+
+func (o summaryWriterOption) apply(opts *options) {
+	opts.summaryWriter = o.w
+}
+
+// WithSummaryWriter additionally writes the machine-readable summary
+// (package summary, the --output-json contract) to w. It is written whether
+// the diff passes or fails; nil disables it.
+func WithSummaryWriter(w io.Writer) Option {
+	return summaryWriterOption{w: w}
 }
 
 type debugOption bool
@@ -181,6 +195,12 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	pass, err := generateReport(o.writer, results)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
+	}
+
+	if o.summaryWriter != nil {
+		if err := summarize(results, pass).Write(o.summaryWriter); err != nil {
+			return errors.Wrap(err, "write summary")
+		}
 	}
 
 	if !pass {

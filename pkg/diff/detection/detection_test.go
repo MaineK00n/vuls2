@@ -2,6 +2,7 @@ package detection_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 
 	"github.com/MaineK00n/vuls2/pkg/diff/detection"
+	"github.com/MaineK00n/vuls2/pkg/diff/summary"
 )
 
 func TestSubtract(t *testing.T) {
@@ -979,5 +981,106 @@ func TestDiff(t *testing.T) {
 				t.Fatalf("Diff() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	tests := []struct {
+		name  string
+		diffm map[string]detection.FileDiff
+		pass  bool
+		want  summary.Summary
+	}{
+		{
+			// One row per (file, source), rows come out sorted regardless of
+			// map order, and a file without any detected source (the
+			// report's "(none)" placeholder) contributes no row.
+			name: "per-source rows sorted, placeholder skipped",
+			diffm: map[string]detection.FileDiff{
+				"ubuntu_2204": {Name: "ubuntu_2204", Sources: []detection.SourceDiff{
+					{SourceID: "ubuntu-oval", ChangeRate: 66.7, Threshold: 5, Pass: false},
+				}, Pass: false},
+				"cpe_nvd": {Name: "cpe_nvd", Sources: []detection.SourceDiff{
+					{SourceID: "vulncheck-nist-nvd2", ChangeRate: 8.7, Threshold: 5, Pass: false},
+					{SourceID: "nvd-feed-cve-v2", ChangeRate: 0, Threshold: 5, Pass: true},
+				}, Pass: false},
+				"empty_1": {Name: "empty_1", Pass: true},
+			},
+			pass: false,
+			want: summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: false, Rows: []summary.Row{
+				{Name: "cpe_nvd", Source: "nvd-feed-cve-v2", ChangeRate: 0, Threshold: 5, Pass: true},
+				{Name: "cpe_nvd", Source: "vulncheck-nist-nvd2", ChangeRate: 8.7, Threshold: 5, Pass: false},
+				{Name: "ubuntu_2204", Source: "ubuntu-oval", ChangeRate: 66.7, Threshold: 5, Pass: false},
+			}},
+		},
+		{
+			// The overall verdict is taken from the report, so a failing
+			// placeholder row still yields pass=false with no rows.
+			name:  "placeholder-only failure keeps pass false with no rows",
+			diffm: map[string]detection.FileDiff{"empty_1": {Name: "empty_1", Pass: false}},
+			pass:  false,
+			want:  summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: false, Rows: []summary.Row{}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.want, detection.Summarize(tt.diffm, tt.pass)); diff != "" {
+				t.Errorf("summarize() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestDiffSummary locks the end-to-end --output-json path: the summary is
+// written even when the diff fails, and it round-trips through the JSON
+// encoding as the contract type.
+func TestDiffSummary(t *testing.T) {
+	scanDir := t.TempDir()
+	for _, name := range []string{"redhat_9.json", "ubuntu_2204.json"} {
+		if err := os.WriteFile(filepath.Join(scanDir, name), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakeDetect := func(_, _, _, _ string, files map[string]string) (map[string]detection.CVEIDs, error) {
+		result := make(map[string]detection.CVEIDs, len(files))
+		for name := range files {
+			switch name {
+			case "redhat_9":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				}
+			case "ubuntu_2204":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
+				}
+			}
+		}
+		return result, nil
+	}
+
+	var out bytes.Buffer
+	err := detection.Diff(
+		scanDir, "baseline.db", "vuls0", "target.db", "vuls0",
+		detection.WithChangeRateThreshold(10),
+		detection.WithWriter(&bytes.Buffer{}),
+		detection.WithSummaryWriter(&out),
+		detection.WithDetectFunc(fakeDetect),
+	)
+	if err == nil {
+		t.Fatal("Diff() error = nil, want failure on ubuntu_2204")
+	}
+
+	var got summary.Summary
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal summary: %v\n%s", err, out.String())
+	}
+	want := summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: false, Rows: []summary.Row{
+		{Name: "redhat_9", Source: "redhat-csaf", ChangeRate: 0, Threshold: 10, Pass: true},
+		{Name: "ubuntu_2204", Source: "ubuntu-oval", ChangeRate: 200.0 / 3, Threshold: 10, Pass: false},
+	}}
+	if diff := cmp.Diff(want, got, cmpopts.EquateApprox(0, 0.01)); diff != "" {
+		t.Errorf("summary mismatch (-want +got):\n%s", diff)
 	}
 }

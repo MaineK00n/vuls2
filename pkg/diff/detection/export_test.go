@@ -22,5 +22,6 @@ var (
 	Subtract       = subtract
 	DiffDetection  = diffDetection
 	GenerateReport = generateReport
+	Summarize      = summarize
 	CollectSources = collectSources
 )
