@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -72,6 +73,19 @@ func Clear(path string) error {
 	if path == "" {
 		return nil
 	}
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return errors.Wrapf(err, "stat %s", path)
+	}
+	// Only a stale summary is ours to remove. os.Remove would also delete
+	// an empty directory, so an --output-json pointing at a directory by
+	// mistake must fail here instead of destroying it.
+	if fi.IsDir() {
+		return errors.Errorf("--output-json %s is a directory", path)
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return errors.Wrapf(err, "remove stale %s", path)
 	}
@@ -81,9 +95,12 @@ func Clear(path string) error {
 // Validate rejects an output path that names one of the command's inputs,
 // or lies inside an input directory (the scan-results directory), so that
 // Clear and Write can never delete or overwrite a DB, a vuls0 binary or a
-// scan result. Paths are compared after making them absolute and resolving
-// symlinks, so an alias of an input is rejected too. Callers run it before
-// Clear. An empty path is a no-op.
+// scan result. An existing output is matched against existing inputs by
+// filesystem identity (os.SameFile: symlinks, hard links, and on Windows
+// case and short-name spellings); otherwise paths are compared after making
+// them absolute and resolving symlinks, case-insensitively on the
+// platforms whose default filesystems are. Callers run it before Clear. An
+// empty path is a no-op.
 func Validate(path string, inputs ...string) error {
 	if path == "" {
 		return nil
@@ -92,22 +109,52 @@ func Validate(path string, inputs ...string) error {
 	if err != nil {
 		return errors.Wrapf(err, "resolve %s", path)
 	}
+	outInfo, err := os.Stat(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return errors.Wrapf(err, "stat %s", path)
+	}
 	for _, in := range inputs {
 		if in == "" {
 			continue
+		}
+		if outInfo != nil {
+			if inInfo, err := os.Stat(in); err == nil && os.SameFile(outInfo, inInfo) {
+				return errors.Errorf("--output-json %s is an input of the diff", path)
+			}
 		}
 		r, err := resolve(in)
 		if err != nil {
 			return errors.Wrapf(err, "resolve %s", in)
 		}
-		if out == r {
+		if samePath(out, r) {
 			return errors.Errorf("--output-json %s is an input of the diff", path)
 		}
-		if fi, err := os.Stat(r); err == nil && fi.IsDir() && strings.HasPrefix(out, r+string(filepath.Separator)) {
+		if fi, err := os.Stat(r); err == nil && fi.IsDir() && insideDir(out, r) {
 			return errors.Errorf("--output-json %s lies inside the input directory %s", path, in)
 		}
 	}
 	return nil
+}
+
+// caseInsensitivePaths reports whether the platform's default filesystems
+// compare names case-insensitively, in which case two spellings of one path
+// must be treated as the same path.
+var caseInsensitivePaths = runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+
+func samePath(a, b string) bool {
+	if caseInsensitivePaths {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// insideDir reports whether path lies strictly inside dir (both resolved).
+func insideDir(path, dir string) bool {
+	prefix := dir + string(filepath.Separator)
+	if len(path) < len(prefix) {
+		return false
+	}
+	return samePath(path[:len(prefix)], prefix)
 }
 
 // resolve returns path as an absolute, symlink-free, cleaned path. A path

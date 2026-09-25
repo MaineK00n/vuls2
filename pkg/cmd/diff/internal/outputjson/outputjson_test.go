@@ -87,6 +87,18 @@ func TestClear(t *testing.T) {
 			t.Fatalf("Clear() error = %v", err)
 		}
 	})
+	t.Run("directory is refused and kept", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "out")
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := outputjson.Clear(dir); err == nil {
+			t.Fatal("Clear() error = nil, want refusal for a directory")
+		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			t.Fatalf("Clear() removed the directory (stat err = %v)", err)
+		}
+	})
 	t.Run("empty path is a no-op", func(t *testing.T) {
 		if err := outputjson.Clear(""); err != nil {
 			t.Fatalf("Clear() error = %v", err)
@@ -118,6 +130,10 @@ func TestValidate(t *testing.T) {
 	if err := os.Symlink(scanDir, dirLink); err != nil {
 		t.Fatal(err)
 	}
+	hardLink := filepath.Join(dir, "hardlink.db")
+	if err := os.Link(target, hardLink); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name    string
@@ -130,6 +146,7 @@ func TestValidate(t *testing.T) {
 		{name: "same file", path: baseline, inputs: []string{baseline, target}, wantErr: true},
 		{name: "symlink alias of an input", path: link, inputs: []string{baseline}, wantErr: true},
 		{name: "input given through a symlink", path: baseline, inputs: []string{link}, wantErr: true},
+		{name: "hard link of an input (filesystem identity)", path: hardLink, inputs: []string{target}, wantErr: true},
 		{name: "file inside input directory", path: filepath.Join(scanDir, "rhel_10.json"), inputs: []string{scanDir}, wantErr: true},
 		{name: "new file inside input directory", path: filepath.Join(scanDir, "diff.json"), inputs: []string{scanDir}, wantErr: true},
 		{name: "new file inside symlinked input directory", path: filepath.Join(dirLink, "diff.json"), inputs: []string{scanDir}, wantErr: true},
