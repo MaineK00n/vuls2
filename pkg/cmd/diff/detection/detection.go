@@ -94,6 +94,9 @@ func NewCmd() *cobra.Command {
 				return err
 			}
 
+			if err := override.CheckRate(options.changeRateThreshold); err != nil {
+				return errors.Wrapf(err, "unexpected change-rate-threshold %v", options.changeRateThreshold)
+			}
 			overrides, err := override.Parse(options.changeRateThresholdOverrides)
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")

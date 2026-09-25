@@ -1,6 +1,7 @@
 package override_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -120,6 +121,28 @@ func TestParse(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Parse() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCheckRate(t *testing.T) {
+	tests := []struct {
+		name    string
+		rate    float64
+		wantErr bool
+	}{
+		{name: "zero", rate: 0},
+		{name: "positive", rate: 12.5},
+		{name: "negative", rate: -1, wantErr: true},
+		{name: "NaN", rate: math.NaN(), wantErr: true},
+		{name: "+Inf", rate: math.Inf(1), wantErr: true},
+		{name: "-Inf", rate: math.Inf(-1), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := override.CheckRate(tt.rate); (err != nil) != tt.wantErr {
+				t.Fatalf("CheckRate(%v) error = %v, wantErr %v", tt.rate, err, tt.wantErr)
 			}
 		})
 	}
