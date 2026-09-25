@@ -54,6 +54,13 @@ func NewCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
+			// Drop a previous run's summary before anything can fail, so a
+			// malformed flag or an unreadable input never leaves stale rows
+			// at --output-json for CI to consume.
+			if err := outputjson.Clear(options.outputJSON); err != nil {
+				return err
+			}
+
 			overrides, err := override.Parse(options.changeRateThresholdOverrides)
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")

@@ -30,10 +30,7 @@ func Write(path string, summary []byte) error {
 	}
 
 	if len(summary) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return errors.Wrapf(err, "remove stale %s", path)
-		}
-		return nil
+		return Clear(path)
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
@@ -54,6 +51,21 @@ func Write(path string, summary []byte) error {
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return errors.Wrapf(err, "rename %s to %s", tmp.Name(), path)
+	}
+	return nil
+}
+
+// Clear removes any file a previous run left at path; a missing file is not
+// an error. Callers run it before doing anything that can fail ahead of the
+// diff (flag parsing, opening inputs), so that no failure path, however
+// early, can leave a stale summary for CI to consume. An empty path is a
+// no-op.
+func Clear(path string) error {
+	if path == "" {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return errors.Wrapf(err, "remove stale %s", path)
 	}
 	return nil
 }

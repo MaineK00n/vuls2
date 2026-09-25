@@ -68,3 +68,28 @@ func TestWrite(t *testing.T) {
 		}
 	})
 }
+
+func TestClear(t *testing.T) {
+	t.Run("removes stale file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "diff.json")
+		if err := os.WriteFile(path, []byte(`{"stale":true}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := outputjson.Clear(path); err != nil {
+			t.Fatalf("Clear() error = %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("Clear() left %s behind (stat err = %v)", path, err)
+		}
+	})
+	t.Run("missing file is fine", func(t *testing.T) {
+		if err := outputjson.Clear(filepath.Join(t.TempDir(), "diff.json")); err != nil {
+			t.Fatalf("Clear() error = %v", err)
+		}
+	})
+	t.Run("empty path is a no-op", func(t *testing.T) {
+		if err := outputjson.Clear(""); err != nil {
+			t.Fatalf("Clear() error = %v", err)
+		}
+	})
+}
