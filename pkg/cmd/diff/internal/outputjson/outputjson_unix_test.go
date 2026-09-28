@@ -11,15 +11,17 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/outputjson"
 )
 
-func TestClearRefusesFIFO(t *testing.T) {
+func TestCreateRefusesFIFO(t *testing.T) {
 	fifo := filepath.Join(t.TempDir(), "out.json")
 	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := outputjson.Clear(fifo); err == nil {
-		t.Fatal("Clear() error = nil, want refusal for a FIFO")
+	// Opening a FIFO for writing would block until a reader shows up, so
+	// Create must refuse it from the Lstat alone.
+	if _, err := outputjson.Create(fifo); err == nil {
+		t.Fatal("Create() error = nil, want refusal for a FIFO")
 	}
 	if _, err := os.Lstat(fifo); err != nil {
-		t.Fatalf("Clear() removed the FIFO: %v", err)
+		t.Fatalf("Create() removed the FIFO: %v", err)
 	}
 }

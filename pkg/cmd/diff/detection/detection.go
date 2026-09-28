@@ -1,7 +1,6 @@
 package detection
 
 import (
-	"bytes"
 	"path/filepath"
 
 	"github.com/MakeNowJust/heredoc"
@@ -80,20 +79,13 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Refuse an output path that names an input (Clear would delete
-			// it), then drop a previous run's summary before anything in
-			// this command can fail, so a malformed override or an unreadable input never
-			// leaves stale rows at --output-json for CI to consume. Usage
-			// errors (unparseable flag values, wrong argument count) are
-			// rejected by Cobra before RunE and leave the path untouched;
-			// see outputjson.Clear.
+			// Refuse an output path that names an input: Create would
+			// truncate it. Usage errors (unparseable flag values, wrong
+			// argument count) are rejected by Cobra before RunE, so they
+			// never reach the output file at all.
 			if err := outputjson.Validate(options.outputJSON, args[0], args[1], args[2], args[3], args[4]); err != nil {
 				return err
 			}
-			if err := outputjson.Clear(options.outputJSON); err != nil {
-				return err
-			}
-
 			if err := override.CheckRate(options.changeRateThreshold); err != nil {
 				return errors.Wrapf(err, "unexpected change-rate-threshold %v", options.changeRateThreshold)
 			}
@@ -107,14 +99,23 @@ func NewCmd() *cobra.Command {
 				diffdetection.WithChangeRateThresholdOverrides(overrides),
 				diffdetection.WithDebug(options.debug),
 			}
-			var summary bytes.Buffer
-			if options.outputJSON != "" {
-				opts = append(opts, diffdetection.WithSummaryWriter(&summary))
+			// The summary is streamed straight into the file: a diff that
+			// fails before producing one leaves it empty, which is fine
+			// because CI gates on the exit status before reading it. What
+			// matters is that Create truncated a previous run's rows.
+			summaryFile, err := outputjson.Create(options.outputJSON)
+			if err != nil {
+				return err
+			}
+			if summaryFile != nil {
+				opts = append(opts, diffdetection.WithSummaryWriter(summaryFile))
 			}
 
 			err = diffdetection.Diff(args[0], args[1], args[2], args[3], args[4], opts...)
-			if werr := outputjson.Write(options.outputJSON, summary.Bytes()); werr != nil {
-				return werr
+			if summaryFile != nil {
+				if cerr := summaryFile.Close(); cerr != nil && err == nil {
+					err = errors.Wrapf(cerr, "close %s", options.outputJSON)
+				}
 			}
 			return err
 		},
@@ -123,7 +124,7 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
-	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails, and removed first if the diff cannot run (usage errors are rejected before that and leave the file untouched)")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (gate on the exit status before reading it)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

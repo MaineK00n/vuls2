@@ -8,86 +8,66 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/outputjson"
 )
 
-func TestWrite(t *testing.T) {
-	tests := []struct {
-		name     string
-		stale    bool   // a file from a previous run exists at path beforehand
-		summary  string // "" means the diff failed before producing a summary
-		wantFile bool
-		want     string
-	}{
-		{name: "writes summary", summary: `{"pass":true}`, wantFile: true, want: `{"pass":true}`},
-		{name: "replaces previous summary", stale: true, summary: `{"pass":false}`, wantFile: true, want: `{"pass":false}`},
-		{name: "no summary leaves no file", summary: "", wantFile: false},
-		{name: "no summary removes stale file from a previous run", stale: true, summary: "", wantFile: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "diff.json")
-			if tt.stale {
-				if err := os.WriteFile(path, []byte(`{"stale":true}`), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			if err := outputjson.Write(path, []byte(tt.summary)); err != nil {
-				t.Fatalf("Write() error = %v", err)
-			}
-
-			got, err := os.ReadFile(path)
-			switch {
-			case !tt.wantFile:
-				if err == nil {
-					t.Fatalf("Write() left a file at %s with content %q, want none", path, got)
-				}
-				if !os.IsNotExist(err) {
-					t.Fatal(err)
-				}
-			case err != nil:
-				t.Fatalf("Write() produced no readable file: %v", err)
-			case string(got) != tt.want:
-				t.Errorf("Write() content = %q, want %q", got, tt.want)
-			}
-
-			// No temporary file may survive next to the destination.
-			entries, err := os.ReadDir(filepath.Dir(path))
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, e := range entries {
-				if e.Name() != filepath.Base(path) {
-					t.Errorf("unexpected leftover %s", e.Name())
-				}
-			}
-		})
-	}
-
-	t.Run("empty path is a no-op", func(t *testing.T) {
-		if err := outputjson.Write("", []byte(`{"pass":true}`)); err != nil {
-			t.Fatalf("Write() error = %v", err)
-		}
-	})
-}
-
-func TestClear(t *testing.T) {
-	t.Run("removes stale file", func(t *testing.T) {
+func TestCreate(t *testing.T) {
+	t.Run("creates the file", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "diff.json")
-		if err := os.WriteFile(path, []byte(`{"stale":true}`), 0o644); err != nil {
+		f, err := outputjson.Create(path)
+		if err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+		if _, err := f.WriteString(`{"pass":true}`); err != nil {
 			t.Fatal(err)
 		}
-		if err := outputjson.Clear(path); err != nil {
-			t.Fatalf("Clear() error = %v", err)
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
 		}
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("Clear() left %s behind (stat err = %v)", path, err)
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != `{"pass":true}` {
+			t.Errorf("content = %q", got)
 		}
 	})
-	t.Run("missing file is fine", func(t *testing.T) {
-		if err := outputjson.Clear(filepath.Join(t.TempDir(), "diff.json")); err != nil {
-			t.Fatalf("Clear() error = %v", err)
+	t.Run("truncates a previous run's file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "diff.json")
+		if err := os.WriteFile(path, []byte(`{"stale":true,"rows":[1,2,3]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		f, err := outputjson.Create(path)
+		if err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("Create() left previous content %q, want empty", got)
 		}
 	})
-	t.Run("symlink is refused and kept", func(t *testing.T) {
+	t.Run("empty path yields no file", func(t *testing.T) {
+		f, err := outputjson.Create("")
+		if err != nil || f != nil {
+			t.Fatalf("Create(\"\") = %v, %v; want nil, nil", f, err)
+		}
+	})
+	t.Run("directory is refused and kept", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "out")
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := outputjson.Create(dir); err == nil {
+			t.Fatal("Create() error = nil, want refusal for a directory")
+		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			t.Fatalf("Create() disturbed the directory (stat err = %v)", err)
+		}
+	})
+	t.Run("symlink is refused and its target kept", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "target.json")
 		if err := os.WriteFile(target, []byte(`{}`), 0o644); err != nil {
@@ -97,28 +77,12 @@ func TestClear(t *testing.T) {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)
 		}
-		if err := outputjson.Clear(link); err == nil {
-			t.Fatal("Clear() error = nil, want refusal for a symlink")
+		if _, err := outputjson.Create(link); err == nil {
+			t.Fatal("Create() error = nil, want refusal for a symlink")
 		}
-		if _, err := os.Lstat(link); err != nil {
-			t.Fatalf("Clear() removed the symlink: %v", err)
-		}
-	})
-	t.Run("directory is refused and kept", func(t *testing.T) {
-		dir := filepath.Join(t.TempDir(), "out")
-		if err := os.Mkdir(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := outputjson.Clear(dir); err == nil {
-			t.Fatal("Clear() error = nil, want refusal for a directory")
-		}
-		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-			t.Fatalf("Clear() removed the directory (stat err = %v)", err)
-		}
-	})
-	t.Run("empty path is a no-op", func(t *testing.T) {
-		if err := outputjson.Clear(""); err != nil {
-			t.Fatalf("Clear() error = %v", err)
+		got, err := os.ReadFile(target)
+		if err != nil || string(got) != `{}` {
+			t.Fatalf("Create() disturbed the symlink target: %q, %v", got, err)
 		}
 	})
 }
