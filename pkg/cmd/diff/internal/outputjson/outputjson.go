@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -49,10 +48,8 @@ func Create(path string) (*os.File, error) {
 // or lies inside an input directory (the scan-results directory), so that
 // Create can never truncate a DB, a vuls0 binary or a scan result. An
 // existing output is matched against existing inputs by filesystem identity
-// (os.SameFile: symlinks, hard links, and on Windows case and short-name
-// spellings); otherwise paths are compared after making them absolute and
-// resolving symlinks, case-insensitively on the platforms whose default
-// filesystems are. An empty path is a no-op.
+// (os.SameFile); otherwise paths are compared after making them absolute
+// and resolving symlinks. An empty path is a no-op.
 func Validate(path string, inputs ...string) error {
 	if path == "" {
 		return nil
@@ -78,7 +75,7 @@ func Validate(path string, inputs ...string) error {
 		if err != nil {
 			return errors.Wrapf(err, "resolve %s", in)
 		}
-		if samePath(out, r) {
+		if out == r {
 			return errors.Errorf("--output-json %s is an input of the diff", path)
 		}
 		if fi, err := os.Stat(r); err == nil && fi.IsDir() && insideDir(out, r) {
@@ -112,18 +109,6 @@ func resolve(path string) (string, error) {
 	return filepath.Join(r, base), nil
 }
 
-// caseInsensitivePaths reports whether the platform's default filesystems
-// compare names case-insensitively, in which case two spellings of one path
-// must be treated as the same path.
-var caseInsensitivePaths = runtime.GOOS == "windows" || runtime.GOOS == "darwin"
-
-func samePath(a, b string) bool {
-	if caseInsensitivePaths {
-		return strings.EqualFold(a, b)
-	}
-	return a == b
-}
-
 // insideDir reports whether path lies strictly inside dir (both resolved).
 func insideDir(path, dir string) bool {
 	// A root ("/" or `C:\`) already ends with the separator; appending
@@ -132,8 +117,5 @@ func insideDir(path, dir string) bool {
 	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
 		prefix += string(filepath.Separator)
 	}
-	if len(path) <= len(prefix) {
-		return false
-	}
-	return samePath(path[:len(prefix)], prefix)
+	return len(path) > len(prefix) && strings.HasPrefix(path, prefix)
 }
