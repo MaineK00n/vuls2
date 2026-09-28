@@ -1,11 +1,12 @@
 package db
 
 import (
+	"os"
+
 	"github.com/MakeNowJust/heredoc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/outputjson"
 	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
 	diffdb "github.com/MaineK00n/vuls2/pkg/diff/db"
 )
@@ -52,13 +53,6 @@ func NewCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Refuse an output path that names an input: Create would
-			// truncate it. Usage errors (unparseable flag values, wrong
-			// argument count) are rejected by Cobra before RunE, so they
-			// never reach the output file at all.
-			if err := outputjson.Validate(options.outputJSON, args[0], args[1]); err != nil {
-				return err
-			}
 			if err := override.CheckRate(options.changeRateThreshold); err != nil {
 				return errors.Wrapf(err, "unexpected change-rate-threshold %v", options.changeRateThreshold)
 			}
@@ -72,15 +66,18 @@ func NewCmd() *cobra.Command {
 				diffdb.WithChangeRateThresholdOverrides(overrides),
 				diffdb.WithDebug(options.debug),
 			}
-			// The summary is streamed straight into the file: a diff that
-			// fails before producing one leaves it empty, which is fine
-			// because CI gates on the exit status before reading it. What
-			// matters is that Create truncated a previous run's rows.
-			summaryFile, err := outputjson.Create(options.outputJSON)
-			if err != nil {
-				return err
-			}
-			if summaryFile != nil {
+			// The summary is streamed straight into the file, which is
+			// truncated up front so a previous run's rows can never be
+			// mistaken for this run's. A diff that fails before producing a
+			// summary leaves it empty; CI gates on the exit status before
+			// reading it, so that is fine.
+			var summaryFile *os.File
+			if options.outputJSON != "" {
+				f, err := os.Create(options.outputJSON)
+				if err != nil {
+					return errors.Wrapf(err, "create %s", options.outputJSON)
+				}
+				summaryFile = f
 				opts = append(opts, diffdb.WithSummaryWriter(summaryFile))
 			}
 
@@ -97,7 +94,7 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (ecosystem, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <ecosystem>=<rate> (all sources in the ecosystem) or <ecosystem>/<source>=<rate> (single source, wins over the ecosystem key) (repeatable; comma-separated entries also accepted)")
-	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (gate on the exit status before reading it)")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (check the exit status before reading it)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
