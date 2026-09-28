@@ -1799,17 +1799,20 @@ func TestGenerateReport(t *testing.T) {
 
 func TestSummarize(t *testing.T) {
 	tests := []struct {
-		name  string
-		diffs []db.EcosystemDiff
-		pass  bool
-		want  summary.Summary
+		name      string
+		diffs     []db.EcosystemDiff
+		pass      bool
+		threshold float64
+		overrides map[string]float64
+		want      summary.Summary
 	}{
 		{
 			// One row per (ecosystem, source), change_rate is the larger of
 			// the two bucket rates (same rule as the report), rows come out
 			// sorted, and an ecosystem without per-source data (the report's
-			// "(none)" placeholder) contributes no row.
-			name: "per-source rows, max of detection and kb, placeholder skipped",
+			// "(none)" placeholder) is emitted with an empty source, a zero
+			// rate, the ecosystem-level threshold and pass=true.
+			name: "per-source rows, max of detection and kb, placeholder emitted",
 			diffs: []db.EcosystemDiff{
 				{Ecosystem: "redhat:10", Sources: []db.SourceDiff{
 					{SourceID: "redhat-vex", DetectionChangeRate: 6.5, KBChangeRate: 0, Threshold: 5, Pass: false},
@@ -1819,27 +1822,30 @@ func TestSummarize(t *testing.T) {
 					{SourceID: "microsoft-cvrf", DetectionChangeRate: 1, KBChangeRate: 0, Threshold: 10, Pass: true},
 				}, Pass: false},
 				{Ecosystem: "empty:1", Pass: true},
+				{Ecosystem: "empty:2", Pass: true},
 			},
-			pass: false,
+			pass:      false,
+			threshold: 10,
+			overrides: map[string]float64{"empty:2": 30, "empty:2/some-source": 50},
 			want: summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{
+				{Name: "empty:1", Source: "", ChangeRate: 0, Threshold: 10, Pass: true},
+				{Name: "empty:2", Source: "", ChangeRate: 0, Threshold: 30, Pass: true},
 				{Name: "microsoft", Source: "microsoft-cvrf", ChangeRate: 1, Threshold: 10, Pass: true},
 				{Name: "microsoft", Source: "microsoft-msuc", ChangeRate: 40, Threshold: 35, Pass: false},
 				{Name: "redhat:10", Source: "redhat-vex", ChangeRate: 6.5, Threshold: 5, Pass: false},
 			}},
 		},
 		{
-			// The overall verdict is taken from the report, so a failing
-			// placeholder row still yields pass=false even though it emits
-			// no row a consumer could act on.
-			name:  "placeholder-only failure keeps pass false with no rows",
-			diffs: []db.EcosystemDiff{{Ecosystem: "empty:1", Pass: false}},
-			pass:  false,
-			want:  summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{}},
+			name:      "no ecosystems",
+			diffs:     nil,
+			pass:      true,
+			threshold: 10,
+			want:      summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: true, Rows: []summary.Row{}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, db.Summarize(tt.diffs, tt.pass)); diff != "" {
+			if diff := cmp.Diff(tt.want, db.Summarize(tt.diffs, tt.pass, tt.threshold, tt.overrides)); diff != "" {
 				t.Errorf("summarize() mismatch (-want +got):\n%s", diff)
 			}
 		})

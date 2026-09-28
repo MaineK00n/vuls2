@@ -986,16 +986,19 @@ func TestDiff(t *testing.T) {
 
 func TestSummarize(t *testing.T) {
 	tests := []struct {
-		name  string
-		diffm map[string]detection.FileDiff
-		pass  bool
-		want  summary.Summary
+		name      string
+		diffm     map[string]detection.FileDiff
+		pass      bool
+		threshold float64
+		overrides map[string]float64
+		want      summary.Summary
 	}{
 		{
 			// One row per (file, source), rows come out sorted regardless of
 			// map order, and a file without any detected source (the
-			// report's "(none)" placeholder) contributes no row.
-			name: "per-source rows sorted, placeholder skipped",
+			// report's "(none)" placeholder) is emitted with an empty
+			// source, a zero rate, the file-level threshold and pass=true.
+			name: "per-source rows sorted, placeholder emitted",
 			diffm: map[string]detection.FileDiff{
 				"ubuntu_2204": {Name: "ubuntu_2204", Sources: []detection.SourceDiff{
 					{SourceID: "ubuntu-oval", ChangeRate: 66.7, Threshold: 5, Pass: false},
@@ -1005,26 +1008,30 @@ func TestSummarize(t *testing.T) {
 					{SourceID: "nvd-feed-cve-v2", ChangeRate: 0, Threshold: 5, Pass: true},
 				}, Pass: false},
 				"empty_1": {Name: "empty_1", Pass: true},
+				"empty_2": {Name: "empty_2", Pass: true},
 			},
-			pass: false,
+			pass:      false,
+			threshold: 5,
+			overrides: map[string]float64{"empty_2": 15, "empty_2/some-source": 50},
 			want: summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: false, Rows: []summary.Row{
 				{Name: "cpe_nvd", Source: "nvd-feed-cve-v2", ChangeRate: 0, Threshold: 5, Pass: true},
 				{Name: "cpe_nvd", Source: "vulncheck-nist-nvd2", ChangeRate: 8.7, Threshold: 5, Pass: false},
+				{Name: "empty_1", Source: "", ChangeRate: 0, Threshold: 5, Pass: true},
+				{Name: "empty_2", Source: "", ChangeRate: 0, Threshold: 15, Pass: true},
 				{Name: "ubuntu_2204", Source: "ubuntu-oval", ChangeRate: 66.7, Threshold: 5, Pass: false},
 			}},
 		},
 		{
-			// The overall verdict is taken from the report, so a failing
-			// placeholder row still yields pass=false with no rows.
-			name:  "placeholder-only failure keeps pass false with no rows",
-			diffm: map[string]detection.FileDiff{"empty_1": {Name: "empty_1", Pass: false}},
-			pass:  false,
-			want:  summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: false, Rows: []summary.Row{}},
+			name:      "no files",
+			diffm:     nil,
+			pass:      true,
+			threshold: 5,
+			want:      summary.Summary{SchemaVersion: 1, Check: summary.CheckDetection, Pass: true, Rows: []summary.Row{}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, detection.Summarize(tt.diffm, tt.pass)); diff != "" {
+			if diff := cmp.Diff(tt.want, detection.Summarize(tt.diffm, tt.pass, tt.threshold, tt.overrides)); diff != "" {
 				t.Errorf("summarize() mismatch (-want +got):\n%s", diff)
 			}
 		})

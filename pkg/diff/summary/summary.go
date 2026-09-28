@@ -51,31 +51,33 @@ const (
 type Summary struct {
 	SchemaVersion int   `json:"schema_version"`
 	Check         Check `json:"check"`
-	// Pass is the overall result and matches the command's exit status. It
-	// can be false while every row passes when the report contains rows
-	// that have no data source (see Row).
+	// Pass is the overall result and matches the command's exit status.
 	Pass bool  `json:"pass"`
 	Rows []Row `json:"rows"`
 }
 
-// Row is one (name, source) pair of the report's Summary table.
-//
-// Rows without a data source (the report's "(none)" placeholder for an
-// ecosystem or file compared without per-source data) are not emitted: they
-// name nothing a consumer could act on.
+// Row is one row of the report's Summary table, so rows and the table are
+// 1:1. That includes the table's "(none)" placeholder for an ecosystem or
+// file compared without any per-source data on either side; it is emitted
+// with an empty Source (see below) and is always a pass, so consumers that
+// only want data sources filter on source != "" and consumers that want to
+// notice "nothing on either side" can.
 type Row struct {
 	// Name is the ecosystem (db, e.g. "redhat:10") or the scan-result file
 	// basename without ".json" (detection, e.g. "rhel_10"): the same string
 	// the left-hand side of a --change-rate-threshold-override entry uses.
 	Name string `json:"name"`
 	// Source is the data source ID, as `vuls db search datasources` prints
-	// it in "id".
+	// it in "id". It is empty for the report's "(none)" placeholder row.
 	Source string `json:"source"`
 	// ChangeRate is the change rate (%) the threshold was applied to. For
-	// db it is the larger of the detection and KB rates.
+	// db it is the larger of the detection and KB rates; 0 for a
+	// placeholder row.
 	ChangeRate float64 `json:"change_rate"`
 	// Threshold is the threshold (%) applied to this row after override
-	// resolution.
+	// resolution. A placeholder row has nothing to apply a threshold to
+	// (the report renders "-"); it carries the threshold that would have
+	// applied to the name so the field stays numeric.
 	Threshold float64 `json:"threshold"`
 	Pass      bool    `json:"pass"`
 }

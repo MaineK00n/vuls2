@@ -198,7 +198,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if o.summaryWriter != nil {
-		if err := summarize(results, pass).Write(o.summaryWriter); err != nil {
+		if err := summarize(results, pass, o.changeRateThreshold, o.changeRateThresholdOverrides).Write(o.summaryWriter); err != nil {
 			return errors.Wrap(err, "write summary")
 		}
 	}
