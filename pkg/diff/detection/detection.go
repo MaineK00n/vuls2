@@ -90,8 +90,8 @@ func (o jsonWriterOption) apply(opts *options) {
 
 // WithJSONWriter writes the Summary table as JSON (package summary, the
 // --output-json contract) to w, in addition to the Markdown report that
-// WithMarkdownWriter receives. It is written whether the diff passes or fails; nil
-// disables it.
+// WithMarkdownWriter receives. It is written whether the diff passes or
+// fails; nil disables it.
 func WithJSONWriter(w io.Writer) Option {
 	return jsonWriterOption{w: w}
 }
