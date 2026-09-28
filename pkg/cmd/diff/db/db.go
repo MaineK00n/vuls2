@@ -78,7 +78,7 @@ func NewCmd() *cobra.Command {
 					return errors.Wrapf(err, "create %s", options.outputJSON)
 				}
 				summaryFile = f
-				opts = append(opts, diffdb.WithSummaryWriter(summaryFile))
+				opts = append(opts, diffdb.WithJSONWriter(summaryFile))
 			}
 
 			err = diffdb.DiffBoltDB(args[0], args[1], opts...)

@@ -24,7 +24,7 @@ type options struct {
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
 	writer                       io.Writer
-	summaryWriter                io.Writer
+	jsonWriter                io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
@@ -81,17 +81,18 @@ func WithWriter(w io.Writer) Option {
 	return writerOption{w: w}
 }
 
-type summaryWriterOption struct{ w io.Writer }
+type jsonWriterOption struct{ w io.Writer }
 
-func (o summaryWriterOption) apply(opts *options) {
-	opts.summaryWriter = o.w
+func (o jsonWriterOption) apply(opts *options) {
+	opts.jsonWriter = o.w
 }
 
-// WithSummaryWriter additionally writes the machine-readable summary
-// (package summary, the --output-json contract) to w. It is written whether
-// the diff passes or fails; nil disables it.
-func WithSummaryWriter(w io.Writer) Option {
-	return summaryWriterOption{w: w}
+// WithJSONWriter writes the Summary table as JSON (package summary, the
+// --output-json contract) to w, in addition to the Markdown report that
+// WithWriter receives. It is written whether the diff passes or fails; nil
+// disables it.
+func WithJSONWriter(w io.Writer) Option {
+	return jsonWriterOption{w: w}
 }
 
 // SourceDiff holds the comparison result for a single data source within a
@@ -176,8 +177,8 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "generate report")
 	}
 
-	if o.summaryWriter != nil {
-		if err := summarize(diffm, pass, o.changeRateThreshold, o.changeRateThresholdOverrides).Write(o.summaryWriter); err != nil {
+	if o.jsonWriter != nil {
+		if err := summarize(diffm, pass, o.changeRateThreshold, o.changeRateThresholdOverrides).Write(o.jsonWriter); err != nil {
 			return errors.Wrap(err, "write summary")
 		}
 	}

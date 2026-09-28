@@ -1870,7 +1870,7 @@ func TestDiffBoltDBSummary(t *testing.T) {
 		baselinePath, targetPath,
 		db.WithChangeRateThreshold(10),
 		db.WithWriter(&bytes.Buffer{}),
-		db.WithSummaryWriter(&out),
+		db.WithJSONWriter(&out),
 	)
 	if err == nil {
 		t.Fatal("DiffBoltDB() error = nil, want failure on 200% change rate")

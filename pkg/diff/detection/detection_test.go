@@ -1072,7 +1072,7 @@ func TestDiffSummary(t *testing.T) {
 		scanDir, "baseline.db", "vuls0", "target.db", "vuls0",
 		detection.WithChangeRateThreshold(10),
 		detection.WithWriter(&bytes.Buffer{}),
-		detection.WithSummaryWriter(&out),
+		detection.WithJSONWriter(&out),
 		detection.WithDetectFunc(fakeDetect),
 	)
 	if err == nil {

@@ -104,7 +104,7 @@ func NewCmd() *cobra.Command {
 					return errors.Wrapf(err, "create %s", options.outputJSON)
 				}
 				summaryFile = f
-				opts = append(opts, diffdetection.WithSummaryWriter(summaryFile))
+				opts = append(opts, diffdetection.WithJSONWriter(summaryFile))
 			}
 
 			err = diffdetection.Diff(args[0], args[1], args[2], args[3], args[4], opts...)
