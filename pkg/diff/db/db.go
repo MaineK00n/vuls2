@@ -29,7 +29,7 @@ type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
 	writer                       io.Writer
-	jsonWriter                io.Writer
+	jsonWriter                   io.Writer
 	debug                        bool
 }
 

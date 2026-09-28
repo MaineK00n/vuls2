@@ -24,7 +24,7 @@ type options struct {
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
 	writer                       io.Writer
-	jsonWriter                io.Writer
+	jsonWriter                   io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
