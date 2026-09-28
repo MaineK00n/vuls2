@@ -28,7 +28,7 @@ import (
 type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
-	writer                       io.Writer
+	markdownWriter               io.Writer
 	jsonWriter                   io.Writer
 	debug                        bool
 }
@@ -65,14 +65,15 @@ func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
 
-type writerOption struct{ w io.Writer }
+type markdownWriterOption struct{ w io.Writer }
 
-func (o writerOption) apply(opts *options) {
-	opts.writer = o.w
+func (o markdownWriterOption) apply(opts *options) {
+	opts.markdownWriter = o.w
 }
 
-func WithWriter(w io.Writer) Option {
-	return writerOption{w: w}
+// WithMarkdownWriter receives the Markdown report (default: stdout).
+func WithMarkdownWriter(w io.Writer) Option {
+	return markdownWriterOption{w: w}
 }
 
 type jsonWriterOption struct{ w io.Writer }
@@ -83,7 +84,7 @@ func (o jsonWriterOption) apply(opts *options) {
 
 // WithJSONWriter writes the Summary table as JSON (package summary, the
 // --output-json contract) to w, in addition to the Markdown report that
-// WithWriter receives. It is written whether the diff passes or fails; nil
+// WithMarkdownWriter receives. It is written whether the diff passes or fails; nil
 // disables it.
 func WithJSONWriter(w io.Writer) Option {
 	return jsonWriterOption{w: w}
@@ -163,7 +164,7 @@ type EcosystemDiff struct {
 func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	o := &options{
 		changeRateThreshold: 0,
-		writer:              os.Stdout,
+		markdownWriter:      os.Stdout,
 		debug:               false,
 	}
 	for _, opt := range opts {
@@ -193,7 +194,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		return errors.Wrap(err, "compute diffs")
 	}
 
-	pass, err := generateReport(o.writer, results)
+	pass, err := generateReport(o.markdownWriter, results)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}

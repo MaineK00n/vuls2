@@ -637,7 +637,7 @@ func TestDiffBoltDB(t *testing.T) {
 				baselinePath, targetPath,
 				db.WithChangeRateThreshold(tt.args.changeRateThreshold),
 				db.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
-				db.WithWriter(&bytes.Buffer{}),
+				db.WithMarkdownWriter(&bytes.Buffer{}),
 			)
 
 			if (gotErr != nil) != tt.wantErr {
@@ -1869,7 +1869,7 @@ func TestDiffBoltDBSummary(t *testing.T) {
 	err := db.DiffBoltDB(
 		baselinePath, targetPath,
 		db.WithChangeRateThreshold(10),
-		db.WithWriter(&bytes.Buffer{}),
+		db.WithMarkdownWriter(&bytes.Buffer{}),
 		db.WithJSONWriter(&out),
 	)
 	if err == nil {

@@ -23,7 +23,7 @@ type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
-	writer                       io.Writer
+	markdownWriter               io.Writer
 	jsonWriter                   io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
@@ -71,14 +71,15 @@ func WithDebug(d bool) Option {
 	return debugOption(d)
 }
 
-type writerOption struct{ w io.Writer }
+type markdownWriterOption struct{ w io.Writer }
 
-func (o writerOption) apply(opts *options) {
-	opts.writer = o.w
+func (o markdownWriterOption) apply(opts *options) {
+	opts.markdownWriter = o.w
 }
 
-func WithWriter(w io.Writer) Option {
-	return writerOption{w: w}
+// WithMarkdownWriter receives the Markdown report (default: stdout).
+func WithMarkdownWriter(w io.Writer) Option {
+	return markdownWriterOption{w: w}
 }
 
 type jsonWriterOption struct{ w io.Writer }
@@ -89,7 +90,7 @@ func (o jsonWriterOption) apply(opts *options) {
 
 // WithJSONWriter writes the Summary table as JSON (package summary, the
 // --output-json contract) to w, in addition to the Markdown report that
-// WithWriter receives. It is written whether the diff passes or fails; nil
+// WithMarkdownWriter receives. It is written whether the diff passes or fails; nil
 // disables it.
 func WithJSONWriter(w io.Writer) Option {
 	return jsonWriterOption{w: w}
@@ -139,7 +140,7 @@ type cveIDs struct {
 func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, opts ...Option) error {
 	o := &options{
 		changeRateThreshold: 0,
-		writer:              os.Stdout,
+		markdownWriter:      os.Stdout,
 		detectFunc:          detectAll,
 	}
 	for _, opt := range opts {
@@ -172,7 +173,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold)
 	}
 
-	pass, err := generateReport(o.writer, diffm)
+	pass, err := generateReport(o.markdownWriter, diffm)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}

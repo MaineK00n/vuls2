@@ -973,7 +973,7 @@ func TestDiff(t *testing.T) {
 				tt.args.dir, "baseline.db", "vuls0", "target.db", "vuls0",
 				detection.WithChangeRateThreshold(tt.args.changeRateThreshold),
 				detection.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
-				detection.WithWriter(&bytes.Buffer{}),
+				detection.WithMarkdownWriter(&bytes.Buffer{}),
 				detection.WithDetectFunc(tt.args.detectFunc),
 			)
 
@@ -1071,7 +1071,7 @@ func TestDiffSummary(t *testing.T) {
 	err := detection.Diff(
 		scanDir, "baseline.db", "vuls0", "target.db", "vuls0",
 		detection.WithChangeRateThreshold(10),
-		detection.WithWriter(&bytes.Buffer{}),
+		detection.WithMarkdownWriter(&bytes.Buffer{}),
 		detection.WithJSONWriter(&out),
 		detection.WithDetectFunc(fakeDetect),
 	)
