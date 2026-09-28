@@ -17,7 +17,6 @@ import (
 
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	db "github.com/MaineK00n/vuls2/pkg/diff/db"
-	"github.com/MaineK00n/vuls2/pkg/diff/summary"
 )
 
 // populateDB creates a BoltDB at dbPath populated from fixture directories.
@@ -1797,65 +1796,133 @@ func TestGenerateReport(t *testing.T) {
 	}
 }
 
-func TestSummarize(t *testing.T) {
-	tests := []struct {
-		name      string
-		diffs     []db.EcosystemDiff
-		pass      bool
-		threshold float64
-		overrides map[string]float64
-		want      summary.Summary
-	}{
-		{
-			// One row per (ecosystem, source), change_rate is the larger of
-			// the two bucket rates (same rule as the report), rows come out
-			// sorted, and an ecosystem without per-source data (the report's
-			// "(none)" placeholder) is emitted with an empty source, a zero
-			// rate, the ecosystem-level threshold and pass=true.
-			name: "per-source rows, max of detection and kb, placeholder emitted",
-			diffs: []db.EcosystemDiff{
-				{Ecosystem: "redhat:10", Sources: []db.SourceDiff{
-					{SourceID: "redhat-vex", DetectionChangeRate: 6.5, KBChangeRate: 0, Threshold: 5, Pass: false},
-				}, Pass: false},
-				{Ecosystem: "microsoft", Sources: []db.SourceDiff{
-					{SourceID: "microsoft-msuc", DetectionChangeRate: 0, KBChangeRate: 40, Threshold: 35, Pass: false},
-					{SourceID: "microsoft-cvrf", DetectionChangeRate: 1, KBChangeRate: 0, Threshold: 10, Pass: true},
-				}, Pass: false},
-				{Ecosystem: "empty:1", Pass: true},
-				{Ecosystem: "empty:2", Pass: true},
-			},
-			pass:      false,
-			threshold: 10,
-			overrides: map[string]float64{"empty:2": 30, "empty:2/some-source": 50},
-			want: summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{
-				{Name: "empty:1", Source: "", ChangeRate: 0, Threshold: 10, Pass: true},
-				{Name: "empty:2", Source: "", ChangeRate: 0, Threshold: 30, Pass: true},
-				{Name: "microsoft", Source: "microsoft-cvrf", ChangeRate: 1, Threshold: 10, Pass: true},
-				{Name: "microsoft", Source: "microsoft-msuc", ChangeRate: 40, Threshold: 35, Pass: false},
-				{Name: "redhat:10", Source: "redhat-vex", ChangeRate: 6.5, Threshold: 5, Pass: false},
-			}},
-		},
-		{
-			name:      "no ecosystems",
-			diffs:     nil,
-			pass:      true,
-			threshold: 10,
-			want:      summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: true, Rows: []summary.Row{}},
-		},
+// TestWriteJSON pins the exact bytes of the JSON report. vuls-data-db's
+// diff-guard consumes it and may lag behind vuls2 by weeks, so any change to
+// field names, types, ordering or formatting must show up here as a
+// deliberate golden update (and, for removals/renames/retypes, a
+// SchemaVersion bump).
+func TestWriteJSON(t *testing.T) {
+	diffs := []db.EcosystemDiff{
+		{Ecosystem: "redhat:10", Pass: false, Sources: []db.SourceDiff{
+			{SourceID: "redhat-vex", BaselineKeys: 3, TargetKeys: 3, Added: []string{"CVE-2026-0002"}, Removed: nil, Changed: []string{"CVE-2026-0003", "CVE-2026-0001"},
+				BaselineCriterions: 30, TargetCriterions: 31, MatchedCriterions: 28, DetectionChangeRate: 6.5, KBChangeRate: 0, Threshold: 5, Pass: false},
+		}},
+		{Ecosystem: "empty:1", Pass: true},
+		{Ecosystem: "microsoft", Pass: true, Sources: []db.SourceDiff{
+			{SourceID: "microsoft-msuc", BaselineKBKeys: 2, TargetKBKeys: 2, MatchedKBs: 2, Threshold: 35, Pass: true},
+			{SourceID: "microsoft-cvrf", BaselineKeys: 1, TargetKeys: 1, BaselineCriterions: 4, TargetCriterions: 4, MatchedCriterions: 4, Threshold: 10, Pass: true},
+		}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, db.Summarize(tt.diffs, tt.pass, tt.threshold, tt.overrides)); diff != "" {
-				t.Errorf("summarize() mismatch (-want +got):\n%s", diff)
-			}
-		})
+	want := `{
+  "schema_version": 1,
+  "check": "db",
+  "pass": false,
+  "ecosystems": [
+    {
+      "ecosystem": "empty:1",
+      "sources": [],
+      "pass": true
+    },
+    {
+      "ecosystem": "microsoft",
+      "sources": [
+        {
+          "source_id": "microsoft-cvrf",
+          "baseline_keys": 1,
+          "target_keys": 1,
+          "added": [],
+          "removed": [],
+          "changed": [],
+          "baseline_criterions": 4,
+          "target_criterions": 4,
+          "matched_criterions": 4,
+          "baseline_kb_keys": 0,
+          "target_kb_keys": 0,
+          "added_kbs": [],
+          "removed_kbs": [],
+          "changed_kbs": [],
+          "matched_kbs": 0,
+          "detection_change_rate": 0,
+          "kb_change_rate": 0,
+          "threshold": 10,
+          "pass": true
+        },
+        {
+          "source_id": "microsoft-msuc",
+          "baseline_keys": 0,
+          "target_keys": 0,
+          "added": [],
+          "removed": [],
+          "changed": [],
+          "baseline_criterions": 0,
+          "target_criterions": 0,
+          "matched_criterions": 0,
+          "baseline_kb_keys": 2,
+          "target_kb_keys": 2,
+          "added_kbs": [],
+          "removed_kbs": [],
+          "changed_kbs": [],
+          "matched_kbs": 2,
+          "detection_change_rate": 0,
+          "kb_change_rate": 0,
+          "threshold": 35,
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "ecosystem": "redhat:10",
+      "sources": [
+        {
+          "source_id": "redhat-vex",
+          "baseline_keys": 3,
+          "target_keys": 3,
+          "added": [
+            "CVE-2026-0002"
+          ],
+          "removed": [],
+          "changed": [
+            "CVE-2026-0001",
+            "CVE-2026-0003"
+          ],
+          "baseline_criterions": 30,
+          "target_criterions": 31,
+          "matched_criterions": 28,
+          "baseline_kb_keys": 0,
+          "target_kb_keys": 0,
+          "added_kbs": [],
+          "removed_kbs": [],
+          "changed_kbs": [],
+          "matched_kbs": 0,
+          "detection_change_rate": 6.5,
+          "kb_change_rate": 0,
+          "threshold": 5,
+          "pass": false
+        }
+      ],
+      "pass": false
+    }
+  ]
+}
+`
+	var buf bytes.Buffer
+	if err := db.WriteJSON(&buf, diffs, false); err != nil {
+		t.Fatalf("writeJSON() error = %v", err)
+	}
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Errorf("writeJSON() mismatch (-want +got):\n%s", diff)
+	}
+	// Sorting must not have touched the caller's slices.
+	if got := diffs[0].Sources[0].Changed; !cmp.Equal(got, []string{"CVE-2026-0003", "CVE-2026-0001"}) {
+		t.Errorf("writeJSON() mutated its input: %v", got)
 	}
 }
 
-// TestDiffBoltDBSummary locks the end-to-end --output-json path: the summary
-// is written even when the diff fails, and it round-trips through the JSON
-// encoding as the contract type.
-func TestDiffBoltDBSummary(t *testing.T) {
+// TestDiffBoltDBJSON locks the end-to-end --output-json path: the report is
+// written even when the diff fails, and it round-trips through the JSON
+// encoding as Report.
+func TestDiffBoltDBJSON(t *testing.T) {
 	baselinePath := filepath.Join(t.TempDir(), "vuls.db")
 	if err := populateDB(baselinePath, "testdata/fixtures/baseline"); err != nil {
 		t.Fatal(err)
@@ -1876,14 +1943,18 @@ func TestDiffBoltDBSummary(t *testing.T) {
 		t.Fatal("DiffBoltDB() error = nil, want failure on 200% change rate")
 	}
 
-	var got summary.Summary
+	var got db.Report
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal summary: %v\n%s", err, out.String())
+		t.Fatalf("unmarshal report: %v\n%s", err, out.String())
 	}
-	want := summary.Summary{SchemaVersion: 1, Check: summary.CheckDB, Pass: false, Rows: []summary.Row{
-		{Name: "alma:8", Source: "alma-errata", ChangeRate: 200, Threshold: 10, Pass: false},
-	}}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("summary mismatch (-want +got):\n%s", diff)
+	if got.SchemaVersion != 1 || got.Check != "db" || got.Pass {
+		t.Fatalf("report header = %+v, want schema 1 / db / pass=false", got)
+	}
+	if len(got.Ecosystems) != 1 || got.Ecosystems[0].Ecosystem != "alma:8" || len(got.Ecosystems[0].Sources) != 1 {
+		t.Fatalf("report ecosystems = %+v, want exactly alma:8 with one source", got.Ecosystems)
+	}
+	sd := got.Ecosystems[0].Sources[0]
+	if sd.SourceID != "alma-errata" || sd.DetectionChangeRate != 200 || sd.Threshold != 10 || sd.Pass {
+		t.Errorf("alma:8 source = %+v, want alma-errata at 200%% vs 10%%, FAIL", sd)
 	}
 }

@@ -2,13 +2,13 @@ package detection
 
 import (
 	"cmp"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"slices"
 
 	"github.com/pkg/errors"
-
-	"github.com/MaineK00n/vuls2/pkg/diff/summary"
 )
 
 // placeholderSourceID marks the row emitted for a file compared without any
@@ -163,33 +163,53 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	return nil
 }
 
-// summarize projects diffm onto the --output-json contract (package summary),
-// one row per row of the report's Summary table.
+// Report is the JSON form of the diff, written by WithJSONWriter: the same
+// information as the Markdown report, as data. It is consumed by CI
+// (vuls-data-db's diff-guard reads which (file, source) pairs failed),
+// which may lag behind this producer, so the shape is a contract:
 //
-// A file in which neither side detected anything is the report's "(none)"
-// placeholder row; it is emitted with an empty Source, a zero rate and the
-// threshold that would have applied to the file (override resolution with
-// no source), and it always passes since there is nothing to compare.
-func summarize(diffm map[string]FileDiff, pass bool, threshold float64, overrides map[string]float64) summary.Summary {
-	var rows []summary.Row
+//   - field names are the snake_case json tags on Report, FileDiff and
+//     SourceDiff; adding a field keeps SchemaVersion, removing, renaming or
+//     retyping one bumps it, and consumers ignore unknown fields;
+//   - files are sorted by name, sources by ID, ID lists lexically, so the
+//     output is deterministic; empty lists are [] rather than null;
+//   - a file in which neither side detected anything has an empty sources
+//     list (the Markdown renders it as a "(none)" row).
+type Report struct {
+	SchemaVersion int        `json:"schema_version"`
+	Check         string     `json:"check"`
+	Pass          bool       `json:"pass"`
+	Files         []FileDiff `json:"files"`
+}
+
+// jsonSchemaVersion is the current Report.SchemaVersion.
+const jsonSchemaVersion = 1
+
+// writeJSON encodes diffm as a Report. It sorts deep copies so the caller's
+// slices are left untouched.
+func writeJSON(w io.Writer, diffm map[string]FileDiff, pass bool) error {
+	r := Report{SchemaVersion: jsonSchemaVersion, Check: "detection", Pass: pass, Files: make([]FileDiff, 0, len(diffm))}
 	for _, d := range diffm {
-		if len(d.Sources) == 0 {
-			rows = append(rows, summary.Row{
-				Name:      d.Name,
-				Threshold: resolveThreshold(overrides, threshold, d.Name, ""),
-				Pass:      d.Pass,
-			})
-			continue
-		}
+		f := d
+		f.Sources = make([]SourceDiff, 0, len(d.Sources))
 		for _, s := range d.Sources {
-			rows = append(rows, summary.Row{
-				Name:       d.Name,
-				Source:     string(s.SourceID),
-				ChangeRate: s.ChangeRate,
-				Threshold:  s.Threshold,
-				Pass:       s.Pass,
-			})
+			for _, ids := range []*[]string{&s.BaselineIDs, &s.TargetIDs, &s.Added, &s.Removed} {
+				sorted := slices.Clone(*ids)
+				slices.Sort(sorted)
+				*ids = sorted
+			}
+			f.Sources = append(f.Sources, s)
 		}
+		slices.SortFunc(f.Sources, func(a, b SourceDiff) int { return cmp.Compare(a.SourceID, b.SourceID) })
+		r.Files = append(r.Files, f)
 	}
-	return summary.New(summary.CheckDetection, pass, rows)
+	slices.SortFunc(r.Files, func(a, b FileDiff) int { return cmp.Compare(a.Name, b.Name) })
+
+	if err := json.MarshalWrite(w, r, jsontext.WithIndent("  ")); err != nil {
+		return errors.Wrap(err, "marshal report")
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
+		return errors.Wrap(err, "write trailing newline")
+	}
+	return nil
 }

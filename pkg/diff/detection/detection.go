@@ -88,10 +88,9 @@ func (o jsonWriterOption) apply(opts *options) {
 	opts.jsonWriter = o.w
 }
 
-// WithJSONWriter writes the Summary table as JSON (package summary, the
-// --output-json contract) to w, in addition to the Markdown report that
-// WithMarkdownWriter receives. It is written whether the diff passes or
-// fails; nil disables it.
+// WithJSONWriter writes the report as JSON (see Report) to w, in addition
+// to the Markdown report that WithMarkdownWriter receives. It is written
+// whether the diff passes or fails; nil disables it.
 func WithJSONWriter(w io.Writer) Option {
 	return jsonWriterOption{w: w}
 }
@@ -102,30 +101,30 @@ func WithJSONWriter(w io.Writer) Option {
 // from masking the disappearance of a small source's detections when only the
 // union of CVE IDs is compared.
 type SourceDiff struct {
-	SourceID    sourceTypes.SourceID
-	BaselineIDs []string
-	TargetIDs   []string
-	Added       []string
-	Removed     []string
-	ChangeRate  float64
+	SourceID    sourceTypes.SourceID `json:"source_id"`
+	BaselineIDs []string             `json:"baseline_ids"`
+	TargetIDs   []string             `json:"target_ids"`
+	Added       []string             `json:"added"`
+	Removed     []string             `json:"removed"`
+	ChangeRate  float64              `json:"change_rate"`
 
 	// Threshold actually applied to this (file, source) pair (post override
 	// resolution: "<file>/<source>" > "<file>" > default).
-	Threshold float64
+	Threshold float64 `json:"threshold"`
 
-	Pass bool
+	Pass bool `json:"pass"`
 }
 
 // FileDiff holds the comparison result for a single scan result file, broken
 // down per data source. A file Passes only when every source passes.
 type FileDiff struct {
-	Name string
+	Name string `json:"name"`
 
 	// Per-source diffs computed by diffDetection, in no particular order;
 	// the report sorts for presentation.
-	Sources []SourceDiff
+	Sources []SourceDiff `json:"sources"`
 
-	Pass bool
+	Pass bool `json:"pass"`
 }
 
 // cveIDs carries the raw per-source CVE ID collections of one scan result
@@ -179,8 +178,8 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 	}
 
 	if o.jsonWriter != nil {
-		if err := summarize(diffm, pass, o.changeRateThreshold, o.changeRateThresholdOverrides).Write(o.jsonWriter); err != nil {
-			return errors.Wrap(err, "write summary")
+		if err := writeJSON(o.jsonWriter, diffm, pass); err != nil {
+			return errors.Wrap(err, "write json report")
 		}
 	}
 

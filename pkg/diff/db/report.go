@@ -2,6 +2,8 @@ package db
 
 import (
 	"cmp"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"slices"
@@ -9,8 +11,6 @@ import (
 	"github.com/pkg/errors"
 
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
-
-	"github.com/MaineK00n/vuls2/pkg/diff/summary"
 )
 
 // placeholderSourceID marks the row emitted for an ecosystem compared
@@ -228,36 +228,53 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	return nil
 }
 
-// summarize projects diffs onto the --output-json contract (package summary),
-// one row per row of the report's Summary table.
+// Report is the JSON form of the diff, written by WithJSONWriter: the same
+// information as the Markdown report, as data. It is consumed by CI
+// (vuls-data-db's diff-guard reads which (ecosystem, source) pairs failed),
+// which may lag behind this producer, so the shape is a contract:
 //
-// An ecosystem compared without per-source data on either side is the
-// report's "(none)" placeholder row; it is emitted with an empty Source, a
-// zero rate and the threshold that would have applied to the ecosystem
-// (override resolution with no source), and it always passes since there
-// is nothing to compare.
-func summarize(diffs []EcosystemDiff, pass bool, threshold float64, overrides map[string]float64) summary.Summary {
-	var rows []summary.Row
+//   - field names are the snake_case json tags on Report, EcosystemDiff and
+//     SourceDiff; adding a field keeps SchemaVersion, removing, renaming or
+//     retyping one bumps it, and consumers ignore unknown fields;
+//   - ecosystems are sorted by name, sources by ID, ID lists lexically, so
+//     the output is deterministic; empty lists are [] rather than null;
+//   - an ecosystem compared without per-source data has an empty sources
+//     list (the Markdown renders it as a "(none)" row).
+type Report struct {
+	SchemaVersion int             `json:"schema_version"`
+	Check         string          `json:"check"`
+	Pass          bool            `json:"pass"`
+	Ecosystems    []EcosystemDiff `json:"ecosystems"`
+}
+
+// jsonSchemaVersion is the current Report.SchemaVersion.
+const jsonSchemaVersion = 1
+
+// writeJSON encodes diffs as a Report. It sorts deep copies so the caller's
+// slices are left untouched.
+func writeJSON(w io.Writer, diffs []EcosystemDiff, pass bool) error {
+	r := Report{SchemaVersion: jsonSchemaVersion, Check: "db", Pass: pass, Ecosystems: make([]EcosystemDiff, 0, len(diffs))}
 	for _, d := range diffs {
-		if len(d.Sources) == 0 {
-			rows = append(rows, summary.Row{
-				Name:      string(d.Ecosystem),
-				Threshold: resolveThreshold(overrides, threshold, d.Ecosystem, ""),
-				Pass:      d.Pass,
-			})
-			continue
-		}
+		e := d
+		e.Sources = make([]SourceDiff, 0, len(d.Sources))
 		for _, s := range d.Sources {
-			rows = append(rows, summary.Row{
-				Name:   string(d.Ecosystem),
-				Source: string(s.SourceID),
-				// Same rule as the report: a source fails on whichever
-				// bucket drifted more.
-				ChangeRate: max(s.DetectionChangeRate, s.KBChangeRate),
-				Threshold:  s.Threshold,
-				Pass:       s.Pass,
-			})
+			for _, ids := range []*[]string{&s.Added, &s.Removed, &s.Changed, &s.AddedKBs, &s.RemovedKBs, &s.ChangedKBs} {
+				sorted := slices.Clone(*ids)
+				slices.Sort(sorted)
+				*ids = sorted
+			}
+			e.Sources = append(e.Sources, s)
 		}
+		slices.SortFunc(e.Sources, func(a, b SourceDiff) int { return cmp.Compare(a.SourceID, b.SourceID) })
+		r.Ecosystems = append(r.Ecosystems, e)
 	}
-	return summary.New(summary.CheckDB, pass, rows)
+	slices.SortFunc(r.Ecosystems, func(a, b EcosystemDiff) int { return cmp.Compare(a.Ecosystem, b.Ecosystem) })
+
+	if err := json.MarshalWrite(w, r, jsontext.WithIndent("  ")); err != nil {
+		return errors.Wrap(err, "marshal report")
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
+		return errors.Wrap(err, "write trailing newline")
+	}
+	return nil
 }

@@ -22,6 +22,6 @@ var (
 	Subtract       = subtract
 	DiffDetection  = diffDetection
 	GenerateReport = generateReport
-	Summarize      = summarize
+	WriteJSON      = writeJSON
 	CollectSources = collectSources
 )

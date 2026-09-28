@@ -8,7 +8,7 @@ var (
 	CompareKBs        = compareKBs
 	KBSources         = kbSources
 	GenerateReport    = generateReport
-	Summarize         = summarize
+	WriteJSON         = writeJSON
 )
 
 // Tally exposes the per-source unit tally type for external tests.

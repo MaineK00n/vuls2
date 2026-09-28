@@ -82,10 +82,9 @@ func (o jsonWriterOption) apply(opts *options) {
 	opts.jsonWriter = o.w
 }
 
-// WithJSONWriter writes the Summary table as JSON (package summary, the
-// --output-json contract) to w, in addition to the Markdown report that
-// WithMarkdownWriter receives. It is written whether the diff passes or
-// fails; nil disables it.
+// WithJSONWriter writes the report as JSON (see Report) to w, in addition
+// to the Markdown report that WithMarkdownWriter receives. It is written
+// whether the diff passes or fails; nil disables it.
 func WithJSONWriter(w io.Writer) Option {
 	return jsonWriterOption{w: w}
 }
@@ -111,48 +110,48 @@ func WithDebug(d bool) Option {
 // hide a large relative change in the smaller bucket.
 // A source Passes only when both change rates are within its threshold.
 type SourceDiff struct {
-	SourceID sourceTypes.SourceID
+	SourceID sourceTypes.SourceID `json:"source_id"`
 
 	// Detection bucket diff (`<ecosystem>/detection/<Root ID>`), restricted
 	// to the entries this source contributes to.
-	BaselineKeys       int      // root IDs whose baseline value contains this source
-	TargetKeys         int      // root IDs whose target value contains this source
-	Added              []string // root IDs where this source appears only in target
-	Removed            []string // root IDs where this source appears only in baseline
-	Changed            []string // root IDs in both but with different detection data for this source
-	BaselineCriterions int      // total leaf criterion count for this source across all baseline root IDs
-	TargetCriterions   int      // total leaf criterion count for this source across all target root IDs
-	MatchedCriterions  int      // criterions structurally identical in both (Sort + Compare == 0)
+	BaselineKeys       int      `json:"baseline_keys"`       // root IDs whose baseline value contains this source
+	TargetKeys         int      `json:"target_keys"`         // root IDs whose target value contains this source
+	Added              []string `json:"added"`               // root IDs where this source appears only in target
+	Removed            []string `json:"removed"`             // root IDs where this source appears only in baseline
+	Changed            []string `json:"changed"`             // root IDs in both but with different detection data for this source
+	BaselineCriterions int      `json:"baseline_criterions"` // total leaf criterion count for this source across all baseline root IDs
+	TargetCriterions   int      `json:"target_criterions"`   // total leaf criterion count for this source across all target root IDs
+	MatchedCriterions  int      `json:"matched_criterions"`  // criterions structurally identical in both (Sort + Compare == 0)
 
 	// KB bucket diff (`<ecosystem>/kb/<KB ID>`), restricted to the entries
 	// this source contributes to. A source stores at most one KB record per
 	// KB ID, so a per-source unit count would always equal the key count —
 	// only key counts are kept.
-	BaselineKBKeys int      // KB IDs whose baseline value contains this source
-	TargetKBKeys   int      // KB IDs whose target value contains this source
-	AddedKBs       []string // KB IDs where this source appears only in target
-	RemovedKBs     []string // KB IDs where this source appears only in baseline
-	ChangedKBs     []string // KB IDs in both but with different KB data for this source
-	MatchedKBs     int      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
+	BaselineKBKeys int      `json:"baseline_kb_keys"` // KB IDs whose baseline value contains this source
+	TargetKBKeys   int      `json:"target_kb_keys"`   // KB IDs whose target value contains this source
+	AddedKBs       []string `json:"added_kbs"`        // KB IDs where this source appears only in target
+	RemovedKBs     []string `json:"removed_kbs"`      // KB IDs where this source appears only in baseline
+	ChangedKBs     []string `json:"changed_kbs"`      // KB IDs in both but with different KB data for this source
+	MatchedKBs     int      `json:"matched_kbs"`      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
 
 	// Per-bucket change rates. When a bucket is absent in both baseline
 	// and target, its rate is 0.
-	DetectionChangeRate float64
-	KBChangeRate        float64
+	DetectionChangeRate float64 `json:"detection_change_rate"`
+	KBChangeRate        float64 `json:"kb_change_rate"`
 
 	// Threshold actually applied to this source (post override resolution:
 	// "<ecosystem>/<source>" > "<ecosystem>" > default).
-	Threshold float64
+	Threshold float64 `json:"threshold"`
 
-	Pass bool
+	Pass bool `json:"pass"`
 }
 
 // EcosystemDiff holds the comparison result for a single ecosystem, broken
 // down per data source. An ecosystem Passes only when every source passes.
 type EcosystemDiff struct {
-	Ecosystem ecosystemTypes.Ecosystem
-	Sources   []SourceDiff // unordered; the report sorts for presentation
-	Pass      bool
+	Ecosystem ecosystemTypes.Ecosystem `json:"ecosystem"`
+	Sources   []SourceDiff             `json:"sources"` // unordered; the report sorts for presentation
+	Pass      bool                     `json:"pass"`
 }
 
 // DiffBoltDB compares detection data directly between two BoltDB files.
@@ -200,8 +199,8 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if o.jsonWriter != nil {
-		if err := summarize(results, pass, o.changeRateThreshold, o.changeRateThresholdOverrides).Write(o.jsonWriter); err != nil {
-			return errors.Wrap(err, "write summary")
+		if err := writeJSON(o.jsonWriter, results, pass); err != nil {
+			return errors.Wrap(err, "write json report")
 		}
 	}
 

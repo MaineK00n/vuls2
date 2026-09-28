@@ -59,7 +59,7 @@ func NewCmd() *cobra.Command {
 		    --change-rate-threshold 5 \
 		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/jvn-feed-rss=25'
 
-		# also write the Summary table as JSON for CI to consume
+		# also write the report as JSON for CI to consume
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
@@ -120,7 +120,7 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
-	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the Summary table as JSON to this file (schema_version 1, see pkg/diff/summary); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (check the exit status before reading it)")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the report as JSON to this file (schema_version 1, see Report in pkg/diff/db and pkg/diff/detection); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (check the exit status before reading it)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
