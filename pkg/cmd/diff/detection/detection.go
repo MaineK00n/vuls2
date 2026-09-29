@@ -1,6 +1,7 @@
 package detection
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/MakeNowJust/heredoc"
@@ -15,6 +16,7 @@ func NewCmd() *cobra.Command {
 	options := struct {
 		changeRateThreshold          float64
 		changeRateThresholdOverrides []string
+		outputJSON                   string
 		debug                        bool
 	}{
 		changeRateThreshold: 0,
@@ -56,6 +58,14 @@ func NewCmd() *cobra.Command {
 		    ./target.db ./vuls0 \
 		    --change-rate-threshold 5 \
 		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/jvn-feed-rss=25'
+
+		# also write the report as JSON for CI to consume
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0 \
+		    --change-rate-threshold 5 \
+		    --output-json ./diff-detection.json
 		`),
 		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -69,22 +79,48 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := override.CheckRate(options.changeRateThreshold); err != nil {
+				return errors.Wrapf(err, "unexpected change-rate-threshold %v", options.changeRateThreshold)
+			}
 			overrides, err := override.Parse(options.changeRateThresholdOverrides)
 			if err != nil {
 				return errors.Wrap(err, "parse change-rate-threshold-override")
 			}
-			return diffdetection.Diff(
-				args[0], args[1], args[2], args[3], args[4],
+
+			opts := []diffdetection.Option{
 				diffdetection.WithChangeRateThreshold(options.changeRateThreshold),
 				diffdetection.WithChangeRateThresholdOverrides(overrides),
 				diffdetection.WithDebug(options.debug),
-			)
+			}
+			// The summary is streamed straight into the file, which is
+			// truncated up front so a previous run's rows can never be
+			// mistaken for this run's. A diff that fails before producing a
+			// summary leaves it empty; CI gates on the exit status before
+			// reading it, so that is fine.
+			var summaryFile *os.File
+			if options.outputJSON != "" {
+				f, err := os.Create(options.outputJSON)
+				if err != nil {
+					return errors.Wrapf(err, "create %s", options.outputJSON)
+				}
+				summaryFile = f
+				opts = append(opts, diffdetection.WithJSONWriter(summaryFile))
+			}
+
+			err = diffdetection.Diff(args[0], args[1], args[2], args[3], args[4], opts...)
+			if summaryFile != nil {
+				if cerr := summaryFile.Close(); cerr != nil && err == nil {
+					err = errors.Wrapf(cerr, "close %s", options.outputJSON)
+				}
+			}
+			return err
 		},
 	}
 
 	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
 	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
 		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
+	cmd.Flags().StringVar(&options.outputJSON, "output-json", "", "also write the report as JSON to this file (schema_version 1, see Report in pkg/diff/db and pkg/diff/detection); written whether the diff passes or fails; the file is truncated before the diff runs, so a diff that fails early leaves it empty (check the exit status before reading it)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

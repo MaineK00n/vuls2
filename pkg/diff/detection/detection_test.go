@@ -2,6 +2,7 @@ package detection_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -971,7 +972,7 @@ func TestDiff(t *testing.T) {
 				tt.args.dir, "baseline.db", "vuls0", "target.db", "vuls0",
 				detection.WithChangeRateThreshold(tt.args.changeRateThreshold),
 				detection.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
-				detection.WithWriter(&bytes.Buffer{}),
+				detection.WithMarkdownWriter(&bytes.Buffer{}),
 				detection.WithDetectFunc(tt.args.detectFunc),
 			)
 
@@ -979,5 +980,165 @@ func TestDiff(t *testing.T) {
 				t.Fatalf("Diff() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestWriteJSON pins the exact bytes of the JSON report. vuls-data-db's
+// diff-guard consumes it and may lag behind vuls2 by weeks, so any change to
+// field names, types, ordering or formatting must show up here as a
+// deliberate golden update (and, for removals/renames/retypes, a
+// SchemaVersion bump).
+func TestWriteJSON(t *testing.T) {
+	diffm := map[string]detection.FileDiff{
+		"ubuntu_2204": {Name: "ubuntu_2204", Pass: false, Sources: []detection.SourceDiff{
+			{SourceID: "ubuntu-oval", BaselineIDs: []string{"CVE-2026-0003", "CVE-2026-0001", "CVE-2026-0002"}, TargetIDs: []string{"CVE-2026-0001"},
+				Added: nil, Removed: []string{"CVE-2026-0003", "CVE-2026-0002"}, ChangeRate: 66.5, Threshold: 5, Pass: false},
+		}},
+		"empty_1": {Name: "empty_1", Pass: true},
+		"cpe_nvd": {Name: "cpe_nvd", Pass: true, Sources: []detection.SourceDiff{
+			{SourceID: "vulncheck-nist-nvd2", BaselineIDs: []string{"CVE-2026-0009"}, TargetIDs: []string{"CVE-2026-0009"}, Threshold: 25, Pass: true},
+			{SourceID: "nvd-feed-cve-v2", BaselineIDs: []string{"CVE-2026-0009"}, TargetIDs: []string{"CVE-2026-0009"}, Threshold: 5, Pass: true},
+		}},
+	}
+	want := `{
+  "schema_version": 1,
+  "check": "detection",
+  "pass": false,
+  "files": [
+    {
+      "name": "cpe_nvd",
+      "sources": [
+        {
+          "source_id": "nvd-feed-cve-v2",
+          "baseline_ids": [
+            "CVE-2026-0009"
+          ],
+          "target_ids": [
+            "CVE-2026-0009"
+          ],
+          "added": [],
+          "removed": [],
+          "change_rate": 0,
+          "threshold": 5,
+          "pass": true
+        },
+        {
+          "source_id": "vulncheck-nist-nvd2",
+          "baseline_ids": [
+            "CVE-2026-0009"
+          ],
+          "target_ids": [
+            "CVE-2026-0009"
+          ],
+          "added": [],
+          "removed": [],
+          "change_rate": 0,
+          "threshold": 25,
+          "pass": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "empty_1",
+      "sources": [],
+      "pass": true
+    },
+    {
+      "name": "ubuntu_2204",
+      "sources": [
+        {
+          "source_id": "ubuntu-oval",
+          "baseline_ids": [
+            "CVE-2026-0001",
+            "CVE-2026-0002",
+            "CVE-2026-0003"
+          ],
+          "target_ids": [
+            "CVE-2026-0001"
+          ],
+          "added": [],
+          "removed": [
+            "CVE-2026-0002",
+            "CVE-2026-0003"
+          ],
+          "change_rate": 66.5,
+          "threshold": 5,
+          "pass": false
+        }
+      ],
+      "pass": false
+    }
+  ]
+}
+`
+	var buf bytes.Buffer
+	if err := detection.WriteJSON(&buf, diffm, false); err != nil {
+		t.Fatalf("writeJSON() error = %v", err)
+	}
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Errorf("writeJSON() mismatch (-want +got):\n%s", diff)
+	}
+	// Sorting must not have touched the caller's slices.
+	if got := diffm["ubuntu_2204"].Sources[0].BaselineIDs; !cmp.Equal(got, []string{"CVE-2026-0003", "CVE-2026-0001", "CVE-2026-0002"}) {
+		t.Errorf("writeJSON() mutated its input: %v", got)
+	}
+}
+
+// TestDiffJSON locks the end-to-end --output-json path: the report is
+// written even when the diff fails, and it round-trips through the JSON
+// encoding as Report.
+func TestDiffJSON(t *testing.T) {
+	scanDir := t.TempDir()
+	for _, name := range []string{"redhat_9.json", "ubuntu_2204.json"} {
+		if err := os.WriteFile(filepath.Join(scanDir, name), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakeDetect := func(_, _, _, _ string, files map[string]string) (map[string]detection.CVEIDs, error) {
+		result := make(map[string]detection.CVEIDs, len(files))
+		for name := range files {
+			switch name {
+			case "redhat_9":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				}
+			case "ubuntu_2204":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
+					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
+				}
+			}
+		}
+		return result, nil
+	}
+
+	var out bytes.Buffer
+	err := detection.Diff(
+		scanDir, "baseline.db", "vuls0", "target.db", "vuls0",
+		detection.WithChangeRateThreshold(10),
+		detection.WithMarkdownWriter(&bytes.Buffer{}),
+		detection.WithJSONWriter(&out),
+		detection.WithDetectFunc(fakeDetect),
+	)
+	if err == nil {
+		t.Fatal("Diff() error = nil, want failure on ubuntu_2204")
+	}
+
+	var got detection.Report
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal report: %v\n%s", err, out.String())
+	}
+	want := detection.Report{SchemaVersion: 1, Check: "detection", Pass: false, Files: []detection.FileDiff{
+		{Name: "redhat_9", Pass: true, Sources: []detection.SourceDiff{
+			{SourceID: "redhat-csaf", BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"}, TargetIDs: []string{"CVE-2026-0001", "CVE-2026-0002"}, Added: []string{}, Removed: []string{}, ChangeRate: 0, Threshold: 10, Pass: true},
+		}},
+		{Name: "ubuntu_2204", Pass: false, Sources: []detection.SourceDiff{
+			{SourceID: "ubuntu-oval", BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}, TargetIDs: []string{"CVE-2026-0001"}, Added: []string{}, Removed: []string{"CVE-2026-0002", "CVE-2026-0003"}, ChangeRate: 200.0 / 3, Threshold: 10, Pass: false},
+		}},
+	}}
+	if diff := cmp.Diff(want, got, cmpopts.EquateApprox(0, 0.01)); diff != "" {
+		t.Errorf("report mismatch (-want +got):\n%s", diff)
 	}
 }

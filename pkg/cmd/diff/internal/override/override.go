@@ -35,15 +35,8 @@ func Parse(entries []string) (map[string]float64, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "unexpected override rate. expected: numeric, actual: %q (entry: %q)", v, e)
 		}
-		// strconv.ParseFloat happily accepts "NaN" / "Inf"; both produce
-		// surprising downstream behavior (NaN: every comparison false,
-		// every diff FAILs even when within threshold; Inf: every diff
-		// PASSes regardless of rate). Refuse them up front.
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, errors.Errorf("unexpected override rate. expected: finite, actual: %v (entry: %q)", f, e)
-		}
-		if f < 0 {
-			return nil, errors.Errorf("unexpected override rate. expected: >= 0, actual: %v (entry: %q)", f, e)
+		if err := CheckRate(f); err != nil {
+			return nil, errors.Wrapf(err, "unexpected override rate (entry: %q)", e)
 		}
 		if _, dup := m[k]; dup {
 			slog.Warn("duplicate override key, last wins", "key", k, "rate", f)
@@ -51,4 +44,22 @@ func Parse(entries []string) (map[string]float64, error) {
 		m[k] = f
 	}
 	return m, nil
+}
+
+// CheckRate rejects a change-rate threshold that is not finite or is
+// negative. It backs both the override entries and the default
+// --change-rate-threshold flag: strconv.ParseFloat (and pflag's Float64)
+// happily accept "NaN" / "Inf", and both produce surprising downstream
+// behavior (NaN: every comparison false, so every diff FAILs even when
+// within threshold; Inf: every diff PASSes regardless of rate). NaN and
+// Inf also cannot be JSON-encoded, so they would additionally prevent the
+// --output-json summary from being published.
+func CheckRate(f float64) error {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return errors.Errorf("expected: finite, actual: %v", f)
+	}
+	if f < 0 {
+		return errors.Errorf("expected: >= 0, actual: %v", f)
+	}
+	return nil
 }

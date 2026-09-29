@@ -23,7 +23,8 @@ type options struct {
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
 	debug                        bool
-	writer                       io.Writer
+	markdownWriter               io.Writer
+	jsonWriter                   io.Writer
 	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
@@ -70,14 +71,28 @@ func WithDebug(d bool) Option {
 	return debugOption(d)
 }
 
-type writerOption struct{ w io.Writer }
+type markdownWriterOption struct{ w io.Writer }
 
-func (o writerOption) apply(opts *options) {
-	opts.writer = o.w
+func (o markdownWriterOption) apply(opts *options) {
+	opts.markdownWriter = o.w
 }
 
-func WithWriter(w io.Writer) Option {
-	return writerOption{w: w}
+// WithMarkdownWriter receives the Markdown report (default: stdout).
+func WithMarkdownWriter(w io.Writer) Option {
+	return markdownWriterOption{w: w}
+}
+
+type jsonWriterOption struct{ w io.Writer }
+
+func (o jsonWriterOption) apply(opts *options) {
+	opts.jsonWriter = o.w
+}
+
+// WithJSONWriter writes the report as JSON (see Report) to w, in addition
+// to the Markdown report that WithMarkdownWriter receives. It is written
+// whether the diff passes or fails; nil disables it.
+func WithJSONWriter(w io.Writer) Option {
+	return jsonWriterOption{w: w}
 }
 
 // SourceDiff holds the comparison result for a single data source within a
@@ -86,30 +101,30 @@ func WithWriter(w io.Writer) Option {
 // from masking the disappearance of a small source's detections when only the
 // union of CVE IDs is compared.
 type SourceDiff struct {
-	SourceID    sourceTypes.SourceID
-	BaselineIDs []string
-	TargetIDs   []string
-	Added       []string
-	Removed     []string
-	ChangeRate  float64
+	SourceID    sourceTypes.SourceID `json:"source_id"`
+	BaselineIDs []string             `json:"baseline_ids"`
+	TargetIDs   []string             `json:"target_ids"`
+	Added       []string             `json:"added"`
+	Removed     []string             `json:"removed"`
+	ChangeRate  float64              `json:"change_rate"`
 
 	// Threshold actually applied to this (file, source) pair (post override
 	// resolution: "<file>/<source>" > "<file>" > default).
-	Threshold float64
+	Threshold float64 `json:"threshold"`
 
-	Pass bool
+	Pass bool `json:"pass"`
 }
 
 // FileDiff holds the comparison result for a single scan result file, broken
 // down per data source. A file Passes only when every source passes.
 type FileDiff struct {
-	Name string
+	Name string `json:"name"`
 
 	// Per-source diffs computed by diffDetection, in no particular order;
 	// the report sorts for presentation.
-	Sources []SourceDiff
+	Sources []SourceDiff `json:"sources"`
 
-	Pass bool
+	Pass bool `json:"pass"`
 }
 
 // cveIDs carries the raw per-source CVE ID collections of one scan result
@@ -124,7 +139,7 @@ type cveIDs struct {
 func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, opts ...Option) error {
 	o := &options{
 		changeRateThreshold: 0,
-		writer:              os.Stdout,
+		markdownWriter:      os.Stdout,
 		detectFunc:          detectAll,
 	}
 	for _, opt := range opts {
@@ -157,10 +172,17 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold)
 	}
 
-	pass, err := generateReport(o.writer, diffm)
+	pass, err := generateReport(o.markdownWriter, diffm)
 	if err != nil {
 		return errors.Wrap(err, "generate report")
 	}
+
+	if o.jsonWriter != nil {
+		if err := writeJSON(o.jsonWriter, diffm, pass); err != nil {
+			return errors.Wrap(err, "write json report")
+		}
+	}
+
 	if !pass {
 		// Resolved per-(file, source) threshold is rendered per row in the
 		// report's Threshold column, so the exit error stays threshold-free to

@@ -2,6 +2,8 @@ package detection
 
 import (
 	"cmp"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"slices"
@@ -157,6 +159,57 @@ func writeIDList(w io.Writer, label string, ids []string) error {
 	}
 	if _, err := fmt.Fprintln(w); err != nil {
 		return errors.Wrap(err, "write separator")
+	}
+	return nil
+}
+
+// Report is the JSON form of the diff, written by WithJSONWriter: the same
+// information as the Markdown report, as data. It is consumed by CI
+// (vuls-data-db's diff-guard reads which (file, source) pairs failed),
+// which may lag behind this producer, so the shape is a contract:
+//
+//   - field names are the snake_case json tags on Report, FileDiff and
+//     SourceDiff; adding a field keeps SchemaVersion, removing, renaming or
+//     retyping one bumps it, and consumers ignore unknown fields;
+//   - files are sorted by name, sources by ID, ID lists lexically, so the
+//     output is deterministic; empty lists are [] rather than null;
+//   - a file in which neither side detected anything has an empty sources
+//     list (the Markdown renders it as a "(none)" row).
+type Report struct {
+	SchemaVersion int        `json:"schema_version"`
+	Check         string     `json:"check"`
+	Pass          bool       `json:"pass"`
+	Files         []FileDiff `json:"files"`
+}
+
+// jsonSchemaVersion is the current Report.SchemaVersion.
+const jsonSchemaVersion = 1
+
+// writeJSON encodes diffm as a Report. It sorts deep copies so the caller's
+// slices are left untouched.
+func writeJSON(w io.Writer, diffm map[string]FileDiff, pass bool) error {
+	r := Report{SchemaVersion: jsonSchemaVersion, Check: "detection", Pass: pass, Files: make([]FileDiff, 0, len(diffm))}
+	for _, d := range diffm {
+		f := d
+		f.Sources = make([]SourceDiff, 0, len(d.Sources))
+		for _, s := range d.Sources {
+			for _, ids := range []*[]string{&s.BaselineIDs, &s.TargetIDs, &s.Added, &s.Removed} {
+				sorted := slices.Clone(*ids)
+				slices.Sort(sorted)
+				*ids = sorted
+			}
+			f.Sources = append(f.Sources, s)
+		}
+		slices.SortFunc(f.Sources, func(a, b SourceDiff) int { return cmp.Compare(a.SourceID, b.SourceID) })
+		r.Files = append(r.Files, f)
+	}
+	slices.SortFunc(r.Files, func(a, b FileDiff) int { return cmp.Compare(a.Name, b.Name) })
+
+	if err := json.MarshalWrite(w, r, jsontext.WithIndent("  ")); err != nil {
+		return errors.Wrap(err, "marshal report")
+	}
+	if _, err := io.WriteString(w, "\n"); err != nil {
+		return errors.Wrap(err, "write trailing newline")
 	}
 	return nil
 }
