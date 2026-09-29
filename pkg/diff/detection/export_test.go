@@ -19,8 +19,9 @@ type (
 )
 
 var (
-	Subtract       = subtract
-	DiffDetection  = diffDetection
-	GenerateReport = generateReport
-	CollectSources = collectSources
+	Subtract           = subtract
+	DiffDetection      = diffDetection
+	GenerateReport     = generateReport
+	CollectSources     = collectSources
+	EffectiveThreshold = effectiveThreshold
 )
