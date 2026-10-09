@@ -1,7 +1,9 @@
 package threshold_test
 
 import (
+	"maps"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +28,7 @@ func TestLegacy(t *testing.T) {
 			want: threshold.Threshold{
 				Axes:      all,
 				Default:   threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
-				Overrides: map[threshold.Axis]map[string]float64{},
+				Overrides: map[string]threshold.Rates{},
 			},
 		},
 		{
@@ -37,9 +39,9 @@ func TestLegacy(t *testing.T) {
 			want: threshold.Threshold{
 				Axes:    []threshold.Axis{threshold.Added, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 5, threshold.Removed: 5},
-				Overrides: map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"debian_13": 15, "cpe_jvn/jvn-feed-rss": 25},
-					threshold.Removed: {"debian_13": 15, "cpe_jvn/jvn-feed-rss": 25},
+				Overrides: map[string]threshold.Rates{
+					"debian_13":            {threshold.Added: 15, threshold.Removed: 15},
+					"cpe_jvn/jvn-feed-rss": {threshold.Added: 25, threshold.Removed: 25},
 				},
 			},
 		},
@@ -50,12 +52,12 @@ func TestLegacy(t *testing.T) {
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Legacy() mismatch (-want +got):\n%s", diff)
 			}
-			// The per-axis maps must be independent copies: mutating one
-			// axis' overrides must not leak into another.
-			if len(tt.overrides) > 0 {
-				got.Overrides[tt.axes[0]]["mutated"] = 1
-				if _, leaked := got.Overrides[tt.axes[1]]["mutated"]; leaked {
-					t.Error("Legacy() shares one override map between axes")
+			// The per-key Rates must be independent copies: mutating one
+			// key's overrides must not leak into another.
+			if keys := slices.Sorted(maps.Keys(tt.overrides)); len(keys) > 1 {
+				got.Overrides[keys[0]]["mutated"] = 1
+				if _, leaked := got.Overrides[keys[1]]["mutated"]; leaked {
+					t.Error("Legacy() shares one Rates between override keys")
 				}
 			}
 		})
@@ -73,7 +75,7 @@ func TestThresholdValidate(t *testing.T) {
 			th: threshold.Threshold{
 				Axes:      all,
 				Default:   threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
-				Overrides: map[threshold.Axis]map[string]float64{threshold.Removed: {"cpe/cisco-json": 25}},
+				Overrides: map[string]threshold.Rates{"cpe/cisco-json": {threshold.Removed: 25}},
 			},
 		},
 		{
@@ -88,7 +90,7 @@ func TestThresholdValidate(t *testing.T) {
 		},
 		{
 			name:    "override on undeclared axis",
-			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Overrides: map[threshold.Axis]map[string]float64{threshold.Changed: {"k": 1}}},
+			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Overrides: map[string]threshold.Rates{"k": {threshold.Changed: 1}}},
 			wantErr: true,
 		},
 		{
@@ -103,12 +105,12 @@ func TestThresholdValidate(t *testing.T) {
 		},
 		{
 			name:    "Inf override",
-			th:      threshold.Threshold{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"k": math.Inf(1)}}},
+			th:      threshold.Threshold{Axes: all, Overrides: map[string]threshold.Rates{"k": {threshold.Added: math.Inf(1)}}},
 			wantErr: true,
 		},
 		{
 			name:    "empty override key",
-			th:      threshold.Threshold{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"": 1}}},
+			th:      threshold.Threshold{Axes: all, Overrides: map[string]threshold.Rates{"": {threshold.Added: 1}}},
 			wantErr: true,
 		},
 	}
@@ -125,9 +127,9 @@ func TestThresholdResolve(t *testing.T) {
 	th := threshold.Threshold{
 		Axes:    all,
 		Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10}, // removed left unset → 0
-		Overrides: map[threshold.Axis]map[string]float64{
-			threshold.Added:   {"cpe": 50},
-			threshold.Removed: {"cpe": 20, "cpe/cisco-json": 40},
+		Overrides: map[string]threshold.Rates{
+			"cpe":            {threshold.Added: 50, threshold.Removed: 20},
+			"cpe/cisco-json": {threshold.Removed: 40},
 		},
 	}
 	tests := []struct {

@@ -40,10 +40,11 @@ type Threshold struct {
 	// Default threshold per axis. A missing axis means 0 (no change
 	// tolerated on it).
 	Default Rates
-	// Overrides per axis, keyed by target (e.g. "ubuntu:26.04" or
-	// "cpe/cisco-json" for db; "debian_13" or "cpe_jvn/jvn-feed-rss" for
-	// detection). Resolve looks keys up in precedence order.
-	Overrides map[Axis]map[string]float64
+	// Overrides keyed by target (e.g. "ubuntu:26.04" or "cpe/cisco-json"
+	// for db; "debian_13" or "cpe_jvn/jvn-feed-rss" for detection), each a
+	// partial Rates: an axis a target does not mention is not overridden
+	// for it. Resolve looks keys up in precedence order, per axis.
+	Overrides map[string]Rates
 }
 
 // Legacy builds the Threshold equivalent to the single-threshold flags
@@ -52,16 +53,16 @@ type Threshold struct {
 // most the legacy combined rate, so the mapping is never stricter than the
 // legacy judgement.
 func Legacy(axes []Axis, def float64, overrides map[string]float64) Threshold {
-	t := Threshold{Axes: axes, Default: make(Rates, len(axes)), Overrides: make(map[Axis]map[string]float64, len(axes))}
+	t := Threshold{Axes: axes, Default: make(Rates, len(axes)), Overrides: make(map[string]Rates, len(overrides))}
 	for _, a := range axes {
 		t.Default[a] = def
-		if len(overrides) > 0 {
-			m := make(map[string]float64, len(overrides))
-			for k, v := range overrides {
-				m[k] = v
-			}
-			t.Overrides[a] = m
+	}
+	for k, v := range overrides {
+		r := make(Rates, len(axes))
+		for _, a := range axes {
+			r[a] = v
 		}
+		t.Overrides[k] = r
 	}
 	return t
 }
@@ -80,13 +81,13 @@ func (t Threshold) Validate() error {
 			return errors.Wrapf(err, "validate default of %s axis", a)
 		}
 	}
-	for a, m := range t.Overrides {
-		if !slices.Contains(t.Axes, a) {
-			return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q", t.Axes, a)
+	for k, r := range t.Overrides {
+		if k == "" {
+			return errors.Errorf("unexpected override key. expected: non-empty, actual: %q", k)
 		}
-		for k, v := range m {
-			if k == "" {
-				return errors.Errorf("unexpected override key. expected: non-empty, actual: %q (axis: %s)", k, a)
+		for a, v := range r {
+			if !slices.Contains(t.Axes, a) {
+				return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (key: %q)", t.Axes, a, k)
 			}
 			if err := validateValue(v); err != nil {
 				return errors.Wrapf(err, "validate override of %s axis for %q", a, k)
@@ -119,7 +120,7 @@ func (t Threshold) Resolve(keys ...string) Rates {
 	for _, a := range t.Axes {
 		r[a] = t.Default[a]
 		for _, k := range keys {
-			if v, ok := t.Overrides[a][k]; ok {
+			if v, ok := t.Overrides[k][a]; ok {
 				r[a] = v
 				break
 			}

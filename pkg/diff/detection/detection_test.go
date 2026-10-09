@@ -433,9 +433,8 @@ func TestDiffDetection(t *testing.T) {
 				th: threshold.Threshold{
 					Axes:    detection.Axes,
 					Default: rates(10, 10),
-					Overrides: map[threshold.Axis]map[string]float64{
-						threshold.Added:   {"cpe_jvn/jvn-feed-rss": 150},
-						threshold.Removed: {"cpe_jvn/jvn-feed-rss": 50},
+					Overrides: map[string]threshold.Rates{
+						"cpe_jvn/jvn-feed-rss": {threshold.Added: 150, threshold.Removed: 50},
 					},
 				},
 			},
@@ -516,7 +515,7 @@ func TestDiffDetection(t *testing.T) {
 				th: threshold.Threshold{
 					Axes:      detection.Axes,
 					Default:   rates(10, 10),
-					Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"debian_13": 80}},
+					Overrides: map[string]threshold.Rates{"debian_13": {threshold.Added: 80}},
 				},
 			},
 			want: detection.FileDiff{
@@ -909,7 +908,7 @@ func TestDiff(t *testing.T) {
 	// production mirrors the vuls-data-db defaults: additions tolerated up
 	// to 30%, removals up to 5%.
 	production := threshold.Threshold{Axes: detection.Axes, Default: rates(30, 5)}
-	withOverrides := func(ov map[threshold.Axis]map[string]float64) threshold.Threshold {
+	withOverrides := func(ov map[string]threshold.Rates) threshold.Threshold {
 		c := production
 		c.Overrides = ov
 		return c
@@ -991,8 +990,8 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Removed: {"ubuntu_2204": 70},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204": {threshold.Removed: 70},
 				}))},
 			},
 			wantErr: false,
@@ -1003,8 +1002,8 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Removed: {"ubuntu_2204/ubuntu-oval": 70},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204/ubuntu-oval": {threshold.Removed: 70},
 				}))},
 			},
 			wantErr: false,
@@ -1015,8 +1014,8 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Added: {"ubuntu_2204": 70},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204": {threshold.Added: 70},
 				}))},
 			},
 			wantErr: true,
@@ -1029,8 +1028,9 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Removed: {"ubuntu_2204": 10, "ubuntu_2204/ubuntu-oval": 70},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204":             {threshold.Removed: 10},
+					"ubuntu_2204/ubuntu-oval": {threshold.Removed: 70},
 				}))},
 			},
 			wantErr: false,
@@ -1043,8 +1043,9 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Removed: {"ubuntu_2204": 70, "ubuntu_2204/ubuntu-oval": 10},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204":             {threshold.Removed: 70},
+					"ubuntu_2204/ubuntu-oval": {threshold.Removed: 10},
 				}))},
 			},
 			wantErr: true,
@@ -1059,7 +1060,7 @@ func TestDiff(t *testing.T) {
 				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
 					Axes:      detection.Axes,
 					Default:   rates(100, 100), // both files pass at default
-					Overrides: map[threshold.Axis]map[string]float64{threshold.Removed: {"unknown_99": 1}},
+					Overrides: map[string]threshold.Rates{"unknown_99": {threshold.Removed: 1}},
 				})},
 			},
 			wantErr: false,
@@ -1086,8 +1087,8 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Changed: {"ubuntu_2204": 70},
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"ubuntu_2204": {threshold.Changed: 70},
 				}))},
 			},
 			wantErr: true,

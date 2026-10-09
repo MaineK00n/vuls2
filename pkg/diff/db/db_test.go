@@ -347,9 +347,9 @@ func TestDiffEcosystem(t *testing.T) {
 				th: threshold.Threshold{
 					Axes:    db.Axes,
 					Default: rates(0, 0, 0),
-					Overrides: map[threshold.Axis]map[string]float64{
-						threshold.Changed: {"test:multi/test-source-2": 250},
-						threshold.Added:   {"test:multi/test-source-3": 150},
+					Overrides: map[string]threshold.Rates{
+						"test:multi/test-source-2": {threshold.Changed: 250},
+						"test:multi/test-source-3": {threshold.Added: 150},
 					},
 				},
 			},
@@ -408,8 +408,9 @@ func TestDiffEcosystem(t *testing.T) {
 				th: threshold.Threshold{
 					Axes:    db.Axes,
 					Default: rates(0, 0, 0),
-					Overrides: map[threshold.Axis]map[string]float64{
-						threshold.Added: {"test:multi/test-source-2": 250, "test:multi/test-source-3": 150},
+					Overrides: map[string]threshold.Rates{
+						"test:multi/test-source-2": {threshold.Added: 250},
+						"test:multi/test-source-3": {threshold.Added: 150},
 					},
 				},
 			},
@@ -643,7 +644,7 @@ func TestDiffBoltDB(t *testing.T) {
 	// production mirrors the vuls-data-db defaults: additions tolerated up
 	// to 30%, changes and removals up to 10%.
 	production := threshold.Threshold{Axes: db.Axes, Default: rates(30, 10, 10)}
-	withOverrides := func(ov map[threshold.Axis]map[string]float64) threshold.Threshold {
+	withOverrides := func(ov map[string]threshold.Rates) threshold.Threshold {
 		c := production
 		c.Overrides = ov
 		return c
@@ -738,9 +739,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"alma:8": 250},
-					threshold.Removed: {"alma:8": 250},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"alma:8": {threshold.Added: 250, threshold.Removed: 250},
 				}))},
 			},
 			wantErr: false,
@@ -751,9 +751,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"alma:8": 250},
-					threshold.Removed: {"alma:8": 50},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"alma:8": {threshold.Added: 250, threshold.Removed: 50},
 				}))},
 			},
 			wantErr: true,
@@ -764,8 +763,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Added: {"alma:8": 250},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"alma:8": {threshold.Added: 250},
 				}))},
 			},
 			wantErr: true,
@@ -777,8 +776,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Removed: {"unknown:99": 50},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"unknown:99": {threshold.Removed: 50},
 				}))},
 			},
 			wantErr: false,
@@ -791,9 +790,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"test:multi": 250},
-					threshold.Changed: {"test:multi": 250},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"test:multi": {threshold.Added: 250, threshold.Changed: 250},
 				}))},
 			},
 			wantErr: false,
@@ -805,9 +803,9 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Changed: {"test:multi/test-source-2": 250},
-					threshold.Added:   {"test:multi/test-source-3": 150},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"test:multi/test-source-2": {threshold.Changed: 250},
+					"test:multi/test-source-3": {threshold.Added: 150},
 				}))},
 			},
 			wantErr: false,
@@ -821,9 +819,10 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Changed: {"test:multi": 50, "test:multi/test-source-2": 250},
-					threshold.Added:   {"test:multi": 50, "test:multi/test-source-3": 150},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"test:multi":               {threshold.Added: 50, threshold.Changed: 50},
+					"test:multi/test-source-2": {threshold.Changed: 250},
+					"test:multi/test-source-3": {threshold.Added: 150},
 				}))},
 			},
 			wantErr: false,
@@ -836,9 +835,9 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					threshold.Changed: {"test:multi": 300, "test:multi/test-source-2": 50},
-					threshold.Added:   {"test:multi": 300},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"test:multi":               {threshold.Added: 300, threshold.Changed: 300},
+					"test:multi/test-source-2": {threshold.Changed: 50},
 				}))},
 			},
 			wantErr: true,
@@ -865,8 +864,8 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
-					"renamed": {"alma:8": 50},
+				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
+					"alma:8": {"renamed": 50},
 				}))},
 			},
 			wantErr: true,

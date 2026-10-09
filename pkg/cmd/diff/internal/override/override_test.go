@@ -132,7 +132,7 @@ func TestParseAxes(t *testing.T) {
 		name    string
 		entries []string
 		axes    []threshold.Axis
-		want    map[threshold.Axis]map[string]float64
+		want    map[string]threshold.Rates
 		wantErr bool
 	}{
 		{
@@ -145,7 +145,7 @@ func TestParseAxes(t *testing.T) {
 			name:    "single entry",
 			entries: []string{"ubuntu:26.04=added:50"},
 			axes:    all,
-			want:    map[threshold.Axis]map[string]float64{threshold.Added: {"ubuntu:26.04": 50}},
+			want:    map[string]threshold.Rates{"ubuntu:26.04": {threshold.Added: 50}},
 		},
 		{
 			// Keys containing ":" and "/" are split only at the first "=",
@@ -153,29 +153,28 @@ func TestParseAxes(t *testing.T) {
 			name:    "keys with colon and slash, several axes",
 			entries: []string{"ubuntu:26.04=added:50", "cpe/cisco-json=removed:20", "cpe/cisco-json=changed:15"},
 			axes:    all,
-			want: map[threshold.Axis]map[string]float64{
-				threshold.Added:   {"ubuntu:26.04": 50},
-				threshold.Changed: {"cpe/cisco-json": 15},
-				threshold.Removed: {"cpe/cisco-json": 20},
+			want: map[string]threshold.Rates{
+				"ubuntu:26.04":   {threshold.Added: 50},
+				"cpe/cisco-json": {threshold.Changed: 15, threshold.Removed: 20},
 			},
 		},
 		{
 			name:    "whitespace tolerated",
 			entries: []string{"  debian_13 = added : 15 "},
 			axes:    all,
-			want:    map[threshold.Axis]map[string]float64{threshold.Added: {"debian_13": 15}},
+			want:    map[string]threshold.Rates{"debian_13": {threshold.Added: 15}},
 		},
 		{
 			name:    "duplicate key and axis last wins",
 			entries: []string{"debian_13=added:10", "debian_13=added:25"},
 			axes:    all,
-			want:    map[threshold.Axis]map[string]float64{threshold.Added: {"debian_13": 25}},
+			want:    map[string]threshold.Rates{"debian_13": {threshold.Added: 25}},
 		},
 		{
 			name:    "explicit zero kept",
 			entries: []string{"strict=removed:0"},
 			axes:    all,
-			want:    map[threshold.Axis]map[string]float64{threshold.Removed: {"strict": 0}},
+			want:    map[string]threshold.Rates{"strict": {threshold.Removed: 0}},
 		},
 		{
 			// The legacy "<key>=<rate>" form is refused: an override must

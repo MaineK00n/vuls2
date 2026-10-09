@@ -43,9 +43,10 @@ func TestThreshold(t *testing.T) {
 			want: threshold.Threshold{
 				Axes:    all,
 				Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 5, threshold.Removed: 0},
-				Overrides: map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"ubuntu:26.04": 80, "microsoft/microsoft-msuc": 35},
-					threshold.Removed: {"cpe/cisco-json": 25},
+				Overrides: map[string]threshold.Rates{
+					"ubuntu:26.04":             {threshold.Added: 80},
+					"microsoft/microsoft-msuc": {threshold.Added: 35},
+					"cpe/cisco-json":           {threshold.Removed: 25},
 				},
 			},
 		},
@@ -103,10 +104,9 @@ func TestThreshold(t *testing.T) {
 			want: threshold.Threshold{
 				Axes:    all,
 				Default: threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
-				Overrides: map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"ubuntu:26.04": 30, "cpe/cisco-json": 25},
-					threshold.Changed: {"ubuntu:26.04": 30, "cpe/cisco-json": 25},
-					threshold.Removed: {"ubuntu:26.04": 30, "cpe/cisco-json": 25},
+				Overrides: map[string]threshold.Rates{
+					"ubuntu:26.04":   {threshold.Added: 30, threshold.Changed: 30, threshold.Removed: 30},
+					"cpe/cisco-json": {threshold.Added: 25, threshold.Changed: 25, threshold.Removed: 25},
 				},
 			},
 		},
@@ -117,9 +117,8 @@ func TestThreshold(t *testing.T) {
 			want: threshold.Threshold{
 				Axes:    two,
 				Default: threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
-				Overrides: map[threshold.Axis]map[string]float64{
-					threshold.Added:   {"debian_13": 15},
-					threshold.Removed: {"debian_13": 15},
+				Overrides: map[string]threshold.Rates{
+					"debian_13": {threshold.Added: 15, threshold.Removed: 15},
 				},
 			},
 		},

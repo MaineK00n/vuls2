@@ -54,19 +54,19 @@ func Parse(entries []string) (map[string]float64, error) {
 }
 
 // ParseAxes converts a slice of "<key>=<axis>:<rate>" entries into a
-// per-axis map. The key is everything before the first "=", so keys
-// containing ":" (e.g. "ubuntu:26.04") or "/" (e.g. "cpe/cisco-json") need
-// no quoting. axes lists the axes the command accepts; an entry naming any
-// other axis is an error, as is an entry without an axis — "relax every
-// axis at once" is deliberately not expressible here, so that the removed
-// axis stays tight unless named. Whitespace around each part is tolerated.
-// Duplicate (key, axis) pairs are accepted with the last value winning and
-// a warning logged.
-func ParseAxes(entries []string, axes []threshold.Axis) (map[threshold.Axis]map[string]float64, error) {
+// per-key map of partial Rates. The key is everything before the first
+// "=", so keys containing ":" (e.g. "ubuntu:26.04") or "/" (e.g.
+// "cpe/cisco-json") need no quoting. axes lists the axes the command
+// accepts; an entry naming any other axis is an error, as is an entry
+// without an axis — "relax every axis at once" is deliberately not
+// expressible here, so that the removed axis stays tight unless named.
+// Whitespace around each part is tolerated. Duplicate (key, axis) pairs
+// are accepted with the last value winning and a warning logged.
+func ParseAxes(entries []string, axes []threshold.Axis) (map[string]threshold.Rates, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
-	m := make(map[threshold.Axis]map[string]float64, len(axes))
+	m := make(map[string]threshold.Rates, len(entries))
 	for _, e := range entries {
 		k, v, ok := strings.Cut(e, "=")
 		if !ok {
@@ -88,13 +88,13 @@ func ParseAxes(entries []string, axes []threshold.Axis) (map[threshold.Axis]map[
 		if err != nil {
 			return nil, err
 		}
-		if m[a] == nil {
-			m[a] = make(map[string]float64)
+		if m[k] == nil {
+			m[k] = make(threshold.Rates, len(axes))
 		}
-		if _, dup := m[a][k]; dup {
+		if _, dup := m[k][a]; dup {
 			slog.Warn("duplicate override key, last wins", "key", k, "axis", a, "rate", f)
 		}
-		m[a][k] = f
+		m[k][a] = f
 	}
 	return m, nil
 }
