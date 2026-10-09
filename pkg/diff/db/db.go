@@ -70,7 +70,6 @@ func WithThresholds(c threshold.Config) Option {
 	return thresholdsOption(c)
 }
 
-
 type writerOption struct{ w io.Writer }
 
 func (o writerOption) apply(opts *options) {

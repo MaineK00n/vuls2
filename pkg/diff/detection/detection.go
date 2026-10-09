@@ -65,7 +65,6 @@ func WithThresholds(c threshold.Config) Option {
 	return thresholdsOption(c)
 }
 
-
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
