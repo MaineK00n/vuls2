@@ -32,8 +32,8 @@ const (
 // Rates maps an axis to a percentage: either a change rate or a threshold.
 type Rates map[Axis]float64
 
-// Config is the threshold configuration of one diff command.
-type Config struct {
+// Threshold is the per-axis threshold set of one diff command.
+type Threshold struct {
 	// Axes the command judges, in report order. Default and Overrides may
 	// only mention these.
 	Axes []Axis
@@ -46,43 +46,43 @@ type Config struct {
 	Overrides map[Axis]map[string]float64
 }
 
-// Legacy builds the Config equivalent to the single-threshold flags
+// Legacy builds the Threshold equivalent to the single-threshold flags
 // (`--change-rate-threshold` / `--change-rate-threshold-override`): the
 // default and every override apply to all axes alike. Each axis rate is at
 // most the legacy combined rate, so the mapping is never stricter than the
 // legacy judgement.
-func Legacy(axes []Axis, def float64, overrides map[string]float64) Config {
-	c := Config{Axes: axes, Default: make(Rates, len(axes)), Overrides: make(map[Axis]map[string]float64, len(axes))}
+func Legacy(axes []Axis, def float64, overrides map[string]float64) Threshold {
+	t := Threshold{Axes: axes, Default: make(Rates, len(axes)), Overrides: make(map[Axis]map[string]float64, len(axes))}
 	for _, a := range axes {
-		c.Default[a] = def
+		t.Default[a] = def
 		if len(overrides) > 0 {
 			m := make(map[string]float64, len(overrides))
 			for k, v := range overrides {
 				m[k] = v
 			}
-			c.Overrides[a] = m
+			t.Overrides[a] = m
 		}
 	}
-	return c
+	return t
 }
 
 // Validate checks that Default and Overrides only mention declared axes
 // and only carry finite, non-negative rates.
-func (c Config) Validate() error {
-	if len(c.Axes) == 0 {
+func (t Threshold) Validate() error {
+	if len(t.Axes) == 0 {
 		return errors.New("unexpected axes. expected: non-empty, actual: empty")
 	}
-	for a, v := range c.Default {
-		if !slices.Contains(c.Axes, a) {
-			return errors.Errorf("unexpected default axis. expected: one of %v, actual: %q", c.Axes, a)
+	for a, v := range t.Default {
+		if !slices.Contains(t.Axes, a) {
+			return errors.Errorf("unexpected default axis. expected: one of %v, actual: %q", t.Axes, a)
 		}
 		if err := checkRate(v); err != nil {
 			return errors.Wrapf(err, "default threshold. axis: %s", a)
 		}
 	}
-	for a, m := range c.Overrides {
-		if !slices.Contains(c.Axes, a) {
-			return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q", c.Axes, a)
+	for a, m := range t.Overrides {
+		if !slices.Contains(t.Axes, a) {
+			return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q", t.Axes, a)
 		}
 		for k, v := range m {
 			if k == "" {
@@ -113,13 +113,13 @@ func checkRate(f float64) error {
 // Resolve returns the threshold of every axis for one target. keys are the
 // override keys to try, narrowest first (e.g. "cpe/cisco-json", then
 // "cpe"); the first hit wins per axis, and an axis with no hit falls back to
-// Default (0 when absent). The result carries every axis in c.Axes.
-func (c Config) Resolve(keys ...string) Rates {
-	r := make(Rates, len(c.Axes))
-	for _, a := range c.Axes {
-		r[a] = c.Default[a]
+// Default (0 when absent). The result carries every axis in t.Axes.
+func (t Threshold) Resolve(keys ...string) Rates {
+	r := make(Rates, len(t.Axes))
+	for _, a := range t.Axes {
+		r[a] = t.Default[a]
 		for _, k := range keys {
-			if v, ok := c.Overrides[a][k]; ok {
+			if v, ok := t.Overrides[a][k]; ok {
 				r[a] = v
 				break
 			}

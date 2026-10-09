@@ -33,9 +33,9 @@ var Axes = []threshold.Axis{threshold.Added, threshold.Removed}
 var Defaults = threshold.Rates{threshold.Added: 30, threshold.Removed: 5}
 
 type options struct {
-	// thresholds is the per-axis configuration (WithThresholds); nil means
+	// threshold is the per-axis threshold set (WithThreshold); nil means
 	// Defaults.
-	thresholds *threshold.Config
+	threshold *threshold.Threshold
 
 	debug      bool
 	writer     io.Writer
@@ -46,22 +46,22 @@ type Option interface {
 	apply(*options)
 }
 
-type thresholdsOption threshold.Config
+type thresholdOption threshold.Threshold
 
-func (o thresholdsOption) apply(opts *options) {
-	opts.thresholds = new(threshold.Config(o))
+func (o thresholdOption) apply(opts *options) {
+	opts.threshold = new(threshold.Threshold(o))
 }
 
-// WithThresholds supplies the per-axis thresholds. Override keys are either
+// WithThreshold supplies the per-axis thresholds. Override keys are either
 // a scan-result file basename (without the `.json` extension, e.g.
 // "debian_13"), which applies to every data source detected in that file,
 // or "<file>/<source ID>" (e.g. "cpe_jvn/jvn-feed-rss"), which applies to a
 // single source and takes precedence over the file-wide key — the same
 // source ID vocabulary `vuls diff db` overrides use. Values are
-// percentages. An axis or key with no override falls back to the config's
+// percentages. An axis or key with no override falls back to the threshold's
 // default for that axis. Without this option the diff judges on Defaults.
-func WithThresholds(c threshold.Config) Option {
-	return thresholdsOption(c)
+func WithThreshold(t threshold.Threshold) Option {
+	return thresholdOption(t)
 }
 
 type debugOption bool
@@ -138,7 +138,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		opt.apply(o)
 	}
 
-	cfg, err := o.config()
+	th, err := o.effectiveThreshold()
 	if err != nil {
 		return errors.Wrap(err, "resolve thresholds")
 	}
@@ -166,7 +166,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 	diffm := make(map[string]FileDiff, len(idm))
 	for name, ids := range idm {
-		diffm[name] = diffDetection(name, ids, cfg)
+		diffm[name] = diffDetection(name, ids, th)
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -183,23 +183,23 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 	return nil
 }
 
-// config resolves the threshold configuration: the per-axis config when
-// given, else Defaults. A config whose Axes differ from this command's
-// Axes is rejected — the judged axes are fixed by the command, not by the
-// caller, so a config that omits an axis cannot silently disable its
-// check.
-func (o *options) config() (threshold.Config, error) {
-	cfg := threshold.Config{Axes: Axes, Default: Defaults}
-	if o.thresholds != nil {
-		cfg = *o.thresholds
+// effectiveThreshold returns the threshold to judge on: the one given via
+// WithThreshold, else Defaults. A threshold whose Axes differ from this
+// command's Axes is rejected — the judged axes are fixed by the command, not
+// by the caller, so a threshold that omits an axis cannot silently disable
+// its check.
+func (o *options) effectiveThreshold() (threshold.Threshold, error) {
+	th := threshold.Threshold{Axes: Axes, Default: Defaults}
+	if o.threshold != nil {
+		th = *o.threshold
 	}
-	if !slices.Equal(cfg.Axes, Axes) {
-		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)
+	if !slices.Equal(th.Axes, Axes) {
+		return threshold.Threshold{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, th.Axes)
 	}
-	if err := cfg.Validate(); err != nil {
-		return threshold.Config{}, errors.Wrap(err, "validate thresholds")
+	if err := th.Validate(); err != nil {
+		return threshold.Threshold{}, errors.Wrap(err, "validate thresholds")
 	}
-	return cfg, nil
+	return th, nil
 }
 
 // listScanResults lists *.json files in the directory.
@@ -442,8 +442,8 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 
 // diffDetection builds the FileDiff of one scan result file from its raw
 // per-source CVE ID collections. Per-source thresholds are resolved per
-// axis from cfg ("<file>/<source>" > "<file>" > default) and judged on this
-// package's Axes; cfg.Axes is expected to equal Axes (Diff enforces it).
+// axis from th ("<file>/<source>" > "<file>" > default) and judged on this
+// package's Axes; th.Axes is expected to equal Axes (Diff enforces it).
 // Parallels `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
@@ -452,7 +452,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
-func diffDetection(name string, ids cveIDs, cfg threshold.Config) FileDiff {
+func diffDetection(name string, ids cveIDs, th threshold.Threshold) FileDiff {
 	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
 	for s := range ids.Baseline {
 		sources[s] = struct{}{}
@@ -477,7 +477,7 @@ func diffDetection(name string, ids cveIDs, cfg threshold.Config) FileDiff {
 			threshold.Added:   threshold.Rate(len(sd.BaselineIDs), len(sd.Added)),
 			threshold.Removed: threshold.Rate(len(sd.BaselineIDs), len(sd.Removed)),
 		}
-		sd.Thresholds = cfg.Resolve(fmt.Sprintf("%s/%s", name, sid), name)
+		sd.Thresholds = th.Resolve(fmt.Sprintf("%s/%s", name, sid), name)
 		sd.Pass = len(threshold.Exceeded(Axes, sd.Rates, sd.Thresholds)) == 0
 		d.Sources = append(d.Sources, sd)
 	}

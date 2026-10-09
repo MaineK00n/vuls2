@@ -81,13 +81,13 @@ func NewCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := options.thresholds.Config(cmd.Flags())
+			th, err := options.thresholds.Threshold(cmd.Flags())
 			if err != nil {
 				return errors.Wrap(err, "resolve thresholds")
 			}
 			return diffdetection.Diff(
 				args[0], args[1], args[2], args[3], args[4],
-				diffdetection.WithThresholds(cfg),
+				diffdetection.WithThreshold(th),
 				diffdetection.WithDebug(options.debug),
 			)
 		},

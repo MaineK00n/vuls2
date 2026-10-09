@@ -48,13 +48,13 @@ func NewCmd() *cobra.Command {
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := options.thresholds.Config(cmd.Flags())
+			th, err := options.thresholds.Threshold(cmd.Flags())
 			if err != nil {
 				return errors.Wrap(err, "resolve thresholds")
 			}
 			return diffdb.DiffBoltDB(
 				args[0], args[1],
-				diffdb.WithThresholds(cfg),
+				diffdb.WithThreshold(th),
 				diffdb.WithDebug(options.debug),
 			)
 		},

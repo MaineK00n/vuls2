@@ -1,5 +1,5 @@
 // Package thresholdflag registers the threshold flags shared by the diff db
-// and diff detection commands and turns them into a threshold.Config.
+// and diff detection commands and turns them into a threshold.Threshold.
 //
 // Two flag families exist and are mutually exclusive on one command line:
 //
@@ -56,23 +56,23 @@ func Register(fs *pflag.FlagSet, axes []threshold.Axis, defaults threshold.Rates
 	return f
 }
 
-// Config builds the threshold configuration from whichever flag family was
+// Threshold builds the threshold from whichever flag family was
 // used. fs is consulted for which flags appeared on the command line: a
 // flag counts as used as soon as it appears, even with an empty value, so
 // the rule stays simple to state. Using both families is an error whose
 // message spells out the per-axis equivalent of the legacy flags.
-func (f *Flags) Config(fs *pflag.FlagSet) (threshold.Config, error) {
+func (f *Flags) Threshold(fs *pflag.FlagSet) (threshold.Threshold, error) {
 	legacyUsed := fs.Changed("change-rate-threshold") || fs.Changed("change-rate-threshold-override")
 	axisUsed := fs.Changed("rate-threshold") || fs.Changed("rate-threshold-override")
 
 	switch {
 	case legacyUsed && axisUsed:
-		return threshold.Config{}, errors.Errorf("unexpected flags. expected: either the per-axis flags (--rate-threshold, --rate-threshold-override) or the legacy flags (--change-rate-threshold, --change-rate-threshold-override), actual: both. --change-rate-threshold X is equivalent to --rate-threshold %s; --change-rate-threshold-override k=R is equivalent to --rate-threshold-override %s",
+		return threshold.Threshold{}, errors.Errorf("unexpected flags. expected: either the per-axis flags (--rate-threshold, --rate-threshold-override) or the legacy flags (--change-rate-threshold, --change-rate-threshold-override), actual: both. --change-rate-threshold X is equivalent to --rate-threshold %s; --change-rate-threshold-override k=R is equivalent to --rate-threshold-override %s",
 			f.legacyEquivalent("X"), f.legacyOverrideEquivalent("k", "R"))
 	case legacyUsed:
 		ov, err := override.Parse(f.legacyOverrides)
 		if err != nil {
-			return threshold.Config{}, errors.Wrap(err, "parse change-rate-threshold-override")
+			return threshold.Threshold{}, errors.Wrap(err, "parse change-rate-threshold-override")
 		}
 		return threshold.Legacy(f.axes, f.legacyThreshold, ov), nil
 	default:
@@ -82,20 +82,20 @@ func (f *Flags) Config(fs *pflag.FlagSet) (threshold.Config, error) {
 		// result over the built-in defaults so unnamed axes keep theirs.
 		def, err := override.ParseDefaults(f.thresholds, f.axes)
 		if err != nil {
-			return threshold.Config{}, errors.Wrap(err, "parse rate-threshold")
+			return threshold.Threshold{}, errors.Wrap(err, "parse rate-threshold")
 		}
 		ov, err := override.ParseAxes(f.overrides, f.axes)
 		if err != nil {
-			return threshold.Config{}, errors.Wrap(err, "parse rate-threshold-override")
+			return threshold.Threshold{}, errors.Wrap(err, "parse rate-threshold-override")
 		}
-		cfg := threshold.Config{Axes: f.axes, Default: make(threshold.Rates, len(f.axes)), Overrides: ov}
+		th := threshold.Threshold{Axes: f.axes, Default: make(threshold.Rates, len(f.axes)), Overrides: ov}
 		for _, a := range f.axes {
-			cfg.Default[a] = f.defaults[a]
+			th.Default[a] = f.defaults[a]
 			if v, ok := def[a]; ok {
-				cfg.Default[a] = v
+				th.Default[a] = v
 			}
 		}
-		return cfg, nil
+		return th, nil
 	}
 }
 

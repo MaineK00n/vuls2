@@ -10,7 +10,7 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
-func TestConfig(t *testing.T) {
+func TestThreshold(t *testing.T) {
 	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	two := []threshold.Axis{threshold.Added, threshold.Removed}
 	// The commands' built-in defaults, as pkg/diff/db and pkg/diff/detection
@@ -21,7 +21,7 @@ func TestConfig(t *testing.T) {
 		name    string
 		axes    []threshold.Axis
 		argv    []string
-		want    threshold.Config
+		want    threshold.Threshold
 		wantErr bool
 	}{
 		{
@@ -29,7 +29,7 @@ func TestConfig(t *testing.T) {
 			name: "defaults",
 			axes: all,
 			argv: nil,
-			want: threshold.Config{Axes: all, Default: allDefaults},
+			want: threshold.Threshold{Axes: all, Default: allDefaults},
 		},
 		{
 			// Named axes replace their built-in default; added keeps 30.
@@ -40,7 +40,7 @@ func TestConfig(t *testing.T) {
 				"--rate-threshold-override", "ubuntu:26.04=added:80",
 				"--rate-threshold-override", "cpe/cisco-json=removed:25,microsoft/microsoft-msuc=added:35",
 			},
-			want: threshold.Config{
+			want: threshold.Threshold{
 				Axes:    all,
 				Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 5, threshold.Removed: 0},
 				Overrides: map[threshold.Axis]map[string]float64{
@@ -53,7 +53,7 @@ func TestConfig(t *testing.T) {
 			name: "comma-separated entries",
 			axes: all,
 			argv: []string{"--rate-threshold", "added:50,changed:10,removed:5"},
-			want: threshold.Config{Axes: all, Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5}},
+			want: threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5}},
 		},
 		{
 			// Only the declared axes are accepted.
@@ -80,19 +80,19 @@ func TestConfig(t *testing.T) {
 			name: "empty --rate-threshold keeps defaults",
 			axes: all,
 			argv: []string{"--rate-threshold", ""},
-			want: threshold.Config{Axes: all, Default: allDefaults},
+			want: threshold.Threshold{Axes: all, Default: allDefaults},
 		},
 		{
 			name: "two-axis defaults",
 			axes: two,
 			argv: nil,
-			want: threshold.Config{Axes: two, Default: twoDefaults},
+			want: threshold.Threshold{Axes: two, Default: twoDefaults},
 		},
 		{
 			name: "two-axis flag overrides a default",
 			axes: two,
 			argv: []string{"--rate-threshold", "removed:1"},
-			want: threshold.Config{Axes: two, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1}},
+			want: threshold.Threshold{Axes: two, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1}},
 		},
 		{
 			// Legacy flags map onto every axis, overriding the built-in
@@ -100,7 +100,7 @@ func TestConfig(t *testing.T) {
 			name: "legacy flags map onto every axis",
 			axes: all,
 			argv: []string{"--change-rate-threshold", "10", "--change-rate-threshold-override", "ubuntu:26.04=30,cpe/cisco-json=25"},
-			want: threshold.Config{
+			want: threshold.Threshold{
 				Axes:    all,
 				Default: threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
 				Overrides: map[threshold.Axis]map[string]float64{
@@ -114,7 +114,7 @@ func TestConfig(t *testing.T) {
 			name: "legacy override alone",
 			axes: two,
 			argv: []string{"--change-rate-threshold-override", "debian_13=15"},
-			want: threshold.Config{
+			want: threshold.Threshold{
 				Axes:    two,
 				Default: threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
 				Overrides: map[threshold.Axis]map[string]float64{
@@ -148,7 +148,7 @@ func TestConfig(t *testing.T) {
 			name: "empty per-axis override list",
 			axes: all,
 			argv: []string{"--rate-threshold-override", ""},
-			want: threshold.Config{Axes: all, Default: allDefaults},
+			want: threshold.Threshold{Axes: all, Default: allDefaults},
 		},
 		{
 			name:    "malformed per-axis override",
@@ -177,18 +177,18 @@ func TestConfig(t *testing.T) {
 				}
 				t.Fatalf("Parse() error = %v", err)
 			}
-			got, err := f.Config(fs)
+			got, err := f.Threshold(fs)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("Config() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("Threshold() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("Config() mismatch (-want +got):\n%s", diff)
+				t.Errorf("Threshold() mismatch (-want +got):\n%s", diff)
 			}
 			if err := got.Validate(); err != nil {
-				t.Errorf("Config() produced an invalid config: %v", err)
+				t.Errorf("Threshold() produced an invalid threshold: %v", err)
 			}
 		})
 	}

@@ -17,13 +17,13 @@ func TestLegacy(t *testing.T) {
 		axes      []threshold.Axis
 		def       float64
 		overrides map[string]float64
-		want      threshold.Config
+		want      threshold.Threshold
 	}{
 		{
 			name: "default on every axis, no overrides",
 			axes: all,
 			def:  10,
-			want: threshold.Config{
+			want: threshold.Threshold{
 				Axes:      all,
 				Default:   threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
 				Overrides: map[threshold.Axis]map[string]float64{},
@@ -34,7 +34,7 @@ func TestLegacy(t *testing.T) {
 			axes:      []threshold.Axis{threshold.Added, threshold.Removed},
 			def:       5,
 			overrides: map[string]float64{"debian_13": 15, "cpe_jvn/jvn-feed-rss": 25},
-			want: threshold.Config{
+			want: threshold.Threshold{
 				Axes:    []threshold.Axis{threshold.Added, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 5, threshold.Removed: 5},
 				Overrides: map[threshold.Axis]map[string]float64{
@@ -62,15 +62,15 @@ func TestLegacy(t *testing.T) {
 	}
 }
 
-func TestConfigValidate(t *testing.T) {
+func TestThresholdValidate(t *testing.T) {
 	tests := []struct {
 		name    string
-		cfg     threshold.Config
+		th      threshold.Threshold
 		wantErr bool
 	}{
 		{
 			name: "valid",
-			cfg: threshold.Config{
+			th: threshold.Threshold{
 				Axes:      all,
 				Default:   threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
 				Overrides: map[threshold.Axis]map[string]float64{threshold.Removed: {"cpe/cisco-json": 25}},
@@ -78,51 +78,51 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name:    "no axes",
-			cfg:     threshold.Config{},
+			th:      threshold.Threshold{},
 			wantErr: true,
 		},
 		{
 			name:    "default on undeclared axis",
-			cfg:     threshold.Config{Axes: []threshold.Axis{threshold.Added}, Default: threshold.Rates{threshold.Changed: 1}},
+			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Default: threshold.Rates{threshold.Changed: 1}},
 			wantErr: true,
 		},
 		{
 			name:    "override on undeclared axis",
-			cfg:     threshold.Config{Axes: []threshold.Axis{threshold.Added}, Overrides: map[threshold.Axis]map[string]float64{threshold.Changed: {"k": 1}}},
+			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Overrides: map[threshold.Axis]map[string]float64{threshold.Changed: {"k": 1}}},
 			wantErr: true,
 		},
 		{
 			name:    "negative default",
-			cfg:     threshold.Config{Axes: all, Default: threshold.Rates{threshold.Added: -1}},
+			th:      threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: -1}},
 			wantErr: true,
 		},
 		{
 			name:    "NaN default",
-			cfg:     threshold.Config{Axes: all, Default: threshold.Rates{threshold.Added: math.NaN()}},
+			th:      threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: math.NaN()}},
 			wantErr: true,
 		},
 		{
 			name:    "Inf override",
-			cfg:     threshold.Config{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"k": math.Inf(1)}}},
+			th:      threshold.Threshold{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"k": math.Inf(1)}}},
 			wantErr: true,
 		},
 		{
 			name:    "empty override key",
-			cfg:     threshold.Config{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"": 1}}},
+			th:      threshold.Threshold{Axes: all, Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"": 1}}},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.cfg.Validate(); (err != nil) != tt.wantErr {
+			if err := tt.th.Validate(); (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestConfigResolve(t *testing.T) {
-	cfg := threshold.Config{
+func TestThresholdResolve(t *testing.T) {
+	th := threshold.Threshold{
 		Axes:    all,
 		Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10}, // removed left unset → 0
 		Overrides: map[threshold.Axis]map[string]float64{
@@ -153,7 +153,7 @@ func TestConfigResolve(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, cfg.Resolve(tt.keys...)); diff != "" {
+			if diff := cmp.Diff(tt.want, th.Resolve(tt.keys...)); diff != "" {
 				t.Errorf("Resolve() mismatch (-want +got):\n%s", diff)
 			}
 		})

@@ -243,15 +243,15 @@ func rates(added, removed float64) threshold.Rates {
 
 // uniform is a config with the same threshold on both axes, the shape the
 // legacy single flag produces.
-func uniform(t float64) threshold.Config {
-	return threshold.Config{Axes: detection.Axes, Default: rates(t, t)}
+func uniform(t float64) threshold.Threshold {
+	return threshold.Threshold{Axes: detection.Axes, Default: rates(t, t)}
 }
 
 func TestDiffDetection(t *testing.T) {
 	type args struct {
 		name string
 		ids  detection.CVEIDs
-		cfg  threshold.Config
+		th   threshold.Threshold
 	}
 	tests := []struct {
 		name string
@@ -266,7 +266,7 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				cfg: uniform(10),
+				th: uniform(10),
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -295,7 +295,7 @@ func TestDiffDetection(t *testing.T) {
 					Target: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
 				},
-				cfg: uniform(25),
+				th: uniform(25),
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -324,7 +324,7 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
 					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
 				},
-				cfg: uniform(10),
+				th: uniform(10),
 			},
 			want: detection.FileDiff{
 				Name: "ubuntu_22.04",
@@ -353,7 +353,7 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
 					Target:   map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"}},
 				},
-				cfg: threshold.Config{Axes: detection.Axes, Default: rates(30, 0)},
+				th: threshold.Threshold{Axes: detection.Axes, Default: rates(30, 0)},
 			},
 			want: detection.FileDiff{
 				Name: "debian_13",
@@ -389,7 +389,7 @@ func TestDiffDetection(t *testing.T) {
 						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					},
 				},
-				cfg: uniform(10),
+				th: uniform(10),
 			},
 			want: detection.FileDiff{
 				Name: "cpe_cisco",
@@ -430,7 +430,7 @@ func TestDiffDetection(t *testing.T) {
 						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 				},
-				cfg: threshold.Config{
+				th: threshold.Threshold{
 					Axes:    detection.Axes,
 					Default: rates(10, 10),
 					Overrides: map[threshold.Axis]map[string]float64{
@@ -473,7 +473,7 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				cfg: uniform(10),
+				th: uniform(10),
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -495,7 +495,7 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				name: "redhat_9",
 				ids:  detection.CVEIDs{},
-				cfg:  uniform(10),
+				th:   uniform(10),
 			},
 			want: detection.FileDiff{
 				Name:    "redhat_9",
@@ -513,7 +513,7 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002"}},
 					Target:   map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
 				},
-				cfg: threshold.Config{
+				th: threshold.Threshold{
 					Axes:      detection.Axes,
 					Default:   rates(10, 10),
 					Overrides: map[threshold.Axis]map[string]float64{threshold.Added: {"debian_13": 80}},
@@ -539,7 +539,7 @@ func TestDiffDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.cfg)
+			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.th)
 			// Sources carries no order guarantee (the report sorts for
 			// presentation), so compare it order-insensitively.
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
@@ -908,8 +908,8 @@ func TestDiff(t *testing.T) {
 
 	// production mirrors the vuls-data-db defaults: additions tolerated up
 	// to 30%, removals up to 5%.
-	production := threshold.Config{Axes: detection.Axes, Default: rates(30, 5)}
-	withOverrides := func(ov map[threshold.Axis]map[string]float64) threshold.Config {
+	production := threshold.Threshold{Axes: detection.Axes, Default: rates(30, 5)}
+	withOverrides := func(ov map[threshold.Axis]map[string]float64) threshold.Threshold {
 		c := production
 		c.Overrides = ov
 		return c
@@ -930,7 +930,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThresholds(production)},
+				opts:       []detection.Option{detection.WithThreshold(production)},
 			},
 			wantErr: true,
 		},
@@ -939,7 +939,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThresholds(uniform(100))},
+				opts:       []detection.Option{detection.WithThreshold(uniform(100))},
 			},
 			wantErr: false,
 		},
@@ -959,7 +959,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThresholds(threshold.Config{Axes: detection.Axes, Default: rates(100, 5)})},
+				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: rates(100, 5)})},
 			},
 			wantErr: true,
 		},
@@ -968,7 +968,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetectErr,
-				opts:       []detection.Option{detection.WithThresholds(production)},
+				opts:       []detection.Option{detection.WithThreshold(production)},
 			},
 			wantErr: true,
 		},
@@ -977,7 +977,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        emptyDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThresholds(production)},
+				opts:       []detection.Option{detection.WithThreshold(production)},
 			},
 			wantErr: true,
 		},
@@ -991,7 +991,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Removed: {"ubuntu_2204": 70},
 				}))},
 			},
@@ -1003,7 +1003,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Removed: {"ubuntu_2204/ubuntu-oval": 70},
 				}))},
 			},
@@ -1015,7 +1015,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Added: {"ubuntu_2204": 70},
 				}))},
 			},
@@ -1029,7 +1029,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Removed: {"ubuntu_2204": 10, "ubuntu_2204/ubuntu-oval": 70},
 				}))},
 			},
@@ -1043,7 +1043,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Removed: {"ubuntu_2204": 70, "ubuntu_2204/ubuntu-oval": 10},
 				}))},
 			},
@@ -1056,7 +1056,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(threshold.Config{
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
 					Axes:      detection.Axes,
 					Default:   rates(100, 100), // both files pass at default
 					Overrides: map[threshold.Axis]map[string]float64{threshold.Removed: {"unknown_99": 1}},
@@ -1072,7 +1072,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect, // 66.7% removed
-				opts: []detection.Option{detection.WithThresholds(threshold.Config{
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
 					Axes:    []threshold.Axis{threshold.Added},
 					Default: threshold.Rates{threshold.Added: 100},
 				})},
@@ -1086,7 +1086,7 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts: []detection.Option{detection.WithThresholds(withOverrides(map[threshold.Axis]map[string]float64{
+				opts: []detection.Option{detection.WithThreshold(withOverrides(map[threshold.Axis]map[string]float64{
 					threshold.Changed: {"ubuntu_2204": 70},
 				}))},
 			},

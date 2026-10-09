@@ -40,9 +40,9 @@ var Axes = []threshold.Axis{threshold.Added, threshold.Changed, threshold.Remove
 var Defaults = threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}
 
 type options struct {
-	// thresholds is the per-axis configuration (WithThresholds); nil means
+	// threshold is the per-axis threshold set (WithThreshold); nil means
 	// Defaults.
-	thresholds *threshold.Config
+	threshold *threshold.Threshold
 
 	writer io.Writer
 	debug  bool
@@ -52,21 +52,21 @@ type Option interface {
 	apply(*options)
 }
 
-type thresholdsOption threshold.Config
+type thresholdOption threshold.Threshold
 
-func (o thresholdsOption) apply(opts *options) {
-	opts.thresholds = new(threshold.Config(o))
+func (o thresholdOption) apply(opts *options) {
+	opts.threshold = new(threshold.Threshold(o))
 }
 
-// WithThresholds supplies the per-axis thresholds. Override keys are either
+// WithThreshold supplies the per-axis thresholds. Override keys are either
 // an ecosystem identifier (e.g. "ubuntu:26.04"), which applies to every
 // source in that ecosystem, or "<ecosystem>/<source ID>" (e.g.
 // "cpe/cisco-json"), which applies to a single source and takes precedence
 // over the ecosystem-wide key. Values are percentages. An axis or key with
-// no override falls back to the config's default for that axis. Without
-// this option the diff judges on Defaults.
-func WithThresholds(c threshold.Config) Option {
-	return thresholdsOption(c)
+// no override falls back to the threshold's default for that axis.
+// Without this option the diff judges on Defaults.
+func WithThreshold(t threshold.Threshold) Option {
+	return thresholdOption(t)
 }
 
 type writerOption struct{ w io.Writer }
@@ -172,7 +172,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 		opt.apply(o)
 	}
 
-	cfg, err := o.config()
+	th, err := o.effectiveThreshold()
 	if err != nil {
 		return errors.Wrap(err, "resolve thresholds")
 	}
@@ -195,7 +195,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 	defer targetDB.Close()
 
-	results, err := computeDiffs(baselineDB, targetDB, cfg)
+	results, err := computeDiffs(baselineDB, targetDB, th)
 	if err != nil {
 		return errors.Wrap(err, "compute diffs")
 	}
@@ -214,26 +214,26 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	return nil
 }
 
-// config resolves the threshold configuration: the per-axis config when
-// given, else Defaults. A config whose Axes differ from this command's
-// Axes is rejected — the judged axes are fixed by the command, not by the
-// caller, so a config that omits an axis cannot silently disable its
-// check.
-func (o *options) config() (threshold.Config, error) {
-	cfg := threshold.Config{Axes: Axes, Default: Defaults}
-	if o.thresholds != nil {
-		cfg = *o.thresholds
+// effectiveThreshold returns the threshold to judge on: the one given via
+// WithThreshold, else Defaults. A threshold whose Axes differ from this
+// command's Axes is rejected — the judged axes are fixed by the command, not
+// by the caller, so a threshold that omits an axis cannot silently disable
+// its check.
+func (o *options) effectiveThreshold() (threshold.Threshold, error) {
+	th := threshold.Threshold{Axes: Axes, Default: Defaults}
+	if o.threshold != nil {
+		th = *o.threshold
 	}
-	if !slices.Equal(cfg.Axes, Axes) {
-		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)
+	if !slices.Equal(th.Axes, Axes) {
+		return threshold.Threshold{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, th.Axes)
 	}
-	if err := cfg.Validate(); err != nil {
-		return threshold.Config{}, errors.Wrap(err, "validate thresholds")
+	if err := th.Validate(); err != nil {
+		return threshold.Threshold{}, errors.Wrap(err, "validate thresholds")
 	}
-	return cfg, nil
+	return th, nil
 }
 
-func computeDiffs(baselineDB, targetDB *bolt.DB, cfg threshold.Config) ([]EcosystemDiff, error) {
+func computeDiffs(baselineDB, targetDB *bolt.DB, th threshold.Threshold) ([]EcosystemDiff, error) {
 	baselineEcos, err := getEcosystems(baselineDB)
 	if err != nil {
 		return nil, errors.Wrap(err, "get baseline ecosystems")
@@ -257,7 +257,7 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, cfg threshold.Config) ([]Ecosys
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, cfg)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, th)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -310,10 +310,10 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Per-source thresholds are
-// resolved per axis from cfg ("<ecosystem>/<source>" > "<ecosystem>" >
-// default) and judged on this package's Axes; cfg.Axes is expected to
+// resolved per axis from th ("<ecosystem>/<source>" > "<ecosystem>" >
+// default) and judged on this package's Axes; th.Axes is expected to
 // equal Axes (DiffBoltDB enforces it).
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, cfg threshold.Config) (EcosystemDiff, error) {
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, th threshold.Threshold) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
 	skipped := make(map[sourceTypes.SourceID]int)
@@ -362,7 +362,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		sd.SourceID = sid
 		sd.DetectionRates = rates(sd.BaselineCriterions, sd.AddedCriterions, sd.ChangedCriterions, sd.RemovedCriterions)
 		sd.KBRates = rates(sd.BaselineKBKeys, len(sd.AddedKBs), len(sd.ChangedKBs), len(sd.RemovedKBs))
-		sd.Thresholds = cfg.Resolve(fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
+		sd.Thresholds = th.Resolve(fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
 		sd.Pass = len(threshold.Exceeded(Axes, sd.DetectionRates, sd.Thresholds)) == 0 &&
 			len(threshold.Exceeded(Axes, sd.KBRates, sd.Thresholds)) == 0
 		diff.Sources = append(diff.Sources, sd)
