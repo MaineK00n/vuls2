@@ -11,9 +11,8 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
-var all = []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
-
 func TestLegacy(t *testing.T) {
+	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name      string
 		axes      []threshold.Axis
@@ -65,6 +64,7 @@ func TestLegacy(t *testing.T) {
 }
 
 func TestThresholdValidate(t *testing.T) {
+	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name    string
 		th      threshold.Threshold
@@ -125,7 +125,7 @@ func TestThresholdValidate(t *testing.T) {
 
 func TestThresholdResolve(t *testing.T) {
 	th := threshold.Threshold{
-		Axes:    all,
+		Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 		Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10}, // removed left unset → 0
 		Overrides: map[string]threshold.Rates{
 			"cpe":            {threshold.Added: 50, threshold.Removed: 20},
@@ -189,7 +189,7 @@ func TestExceeded(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, threshold.Exceeded(all, tt.rates, tt.thresholds)); diff != "" {
+			if diff := cmp.Diff(tt.want, threshold.Exceeded([]threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, tt.rates, tt.thresholds)); diff != "" {
 				t.Errorf("Exceeded() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -276,7 +276,7 @@ func TestFormat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := threshold.Format(all, tt.rates, tt.thresholds); got != tt.want {
+			if got := threshold.Format([]threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, tt.rates, tt.thresholds); got != tt.want {
 				t.Errorf("Format() = %q, want %q", got, tt.want)
 			}
 		})
@@ -302,7 +302,7 @@ func TestFormatThresholds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := threshold.FormatThresholds(all, tt.thresholds); got != tt.want {
+			if got := threshold.FormatThresholds([]threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, tt.thresholds); got != tt.want {
 				t.Errorf("FormatThresholds() = %q, want %q", got, tt.want)
 			}
 		})
@@ -321,7 +321,7 @@ func TestMax(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := threshold.Max(all, tt.rates); got != tt.want {
+			if got := threshold.Max([]threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, tt.rates); got != tt.want {
 				t.Errorf("Max() = %v, want %v", got, tt.want)
 			}
 		})
