@@ -958,7 +958,10 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: rates(100, 5)})},
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: rates(100, 5),
+				})},
 			},
 			wantErr: true,
 		},

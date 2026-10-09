@@ -719,7 +719,10 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-added"},
-				opts:             []db.Option{db.WithThreshold(threshold.Threshold{Axes: db.Axes, Default: rates(100, 0, 0)})},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: rates(100, 0, 0),
+				})},
 			},
 			wantErr: false,
 		},
@@ -728,7 +731,10 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
-				opts:             []db.Option{db.WithThreshold(threshold.Threshold{Axes: db.Axes, Default: rates(100, 0, 0)})},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: rates(100, 0, 0),
+				})},
 			},
 			wantErr: true,
 		},

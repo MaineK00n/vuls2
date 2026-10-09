@@ -12,7 +12,6 @@ import (
 )
 
 func TestLegacy(t *testing.T) {
-	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name      string
 		axes      []threshold.Axis
@@ -22,10 +21,10 @@ func TestLegacy(t *testing.T) {
 	}{
 		{
 			name: "default on every axis, no overrides",
-			axes: all,
+			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			def:  10,
 			want: threshold.Threshold{
-				Axes:      all,
+				Axes:      []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 				Default:   threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
 				Overrides: map[string]threshold.Rates{},
 			},
@@ -64,7 +63,6 @@ func TestLegacy(t *testing.T) {
 }
 
 func TestThresholdValidate(t *testing.T) {
-	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name    string
 		th      threshold.Threshold
@@ -73,7 +71,7 @@ func TestThresholdValidate(t *testing.T) {
 		{
 			name: "valid",
 			th: threshold.Threshold{
-				Axes:      all,
+				Axes:      []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 				Default:   threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
 				Overrides: map[string]threshold.Rates{"cpe/cisco-json": {threshold.Removed: 25}},
 			},
@@ -84,33 +82,51 @@ func TestThresholdValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "default on undeclared axis",
-			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Default: threshold.Rates{threshold.Changed: 1}},
+			name: "default on undeclared axis",
+			th: threshold.Threshold{
+				Axes:    []threshold.Axis{threshold.Added},
+				Default: threshold.Rates{threshold.Changed: 1},
+			},
 			wantErr: true,
 		},
 		{
-			name:    "override on undeclared axis",
-			th:      threshold.Threshold{Axes: []threshold.Axis{threshold.Added}, Overrides: map[string]threshold.Rates{"k": {threshold.Changed: 1}}},
+			name: "override on undeclared axis",
+			th: threshold.Threshold{
+				Axes:      []threshold.Axis{threshold.Added},
+				Overrides: map[string]threshold.Rates{"k": {threshold.Changed: 1}},
+			},
 			wantErr: true,
 		},
 		{
-			name:    "negative default",
-			th:      threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: -1}},
+			name: "negative default",
+			th: threshold.Threshold{
+				Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
+				Default: threshold.Rates{threshold.Added: -1},
+			},
 			wantErr: true,
 		},
 		{
-			name:    "NaN default",
-			th:      threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: math.NaN()}},
+			name: "NaN default",
+			th: threshold.Threshold{
+				Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
+				Default: threshold.Rates{threshold.Added: math.NaN()},
+			},
 			wantErr: true,
 		},
 		{
-			name:    "Inf override",
-			th:      threshold.Threshold{Axes: all, Overrides: map[string]threshold.Rates{"k": {threshold.Added: math.Inf(1)}}},
+			name: "Inf override",
+			th: threshold.Threshold{
+				Axes:      []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
+				Overrides: map[string]threshold.Rates{"k": {threshold.Added: math.Inf(1)}},
+			},
 			wantErr: true,
 		},
 		{
-			name:    "empty override key",
-			th:      threshold.Threshold{Axes: all, Overrides: map[string]threshold.Rates{"": {threshold.Added: 1}}},
+			name: "empty override key",
+			th: threshold.Threshold{
+				Axes:      []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
+				Overrides: map[string]threshold.Rates{"": {threshold.Added: 1}},
+			},
 			wantErr: true,
 		},
 	}

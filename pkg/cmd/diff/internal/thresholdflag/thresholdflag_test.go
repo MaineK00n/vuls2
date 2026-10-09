@@ -54,7 +54,10 @@ func TestThreshold(t *testing.T) {
 			name: "comma-separated entries",
 			axes: all,
 			argv: []string{"--rate-threshold", "added:50,changed:10,removed:5"},
-			want: threshold.Threshold{Axes: all, Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5}},
+			want: threshold.Threshold{
+				Axes:    all,
+				Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5},
+			},
 		},
 		{
 			// Only the declared axes are accepted.
@@ -93,7 +96,10 @@ func TestThreshold(t *testing.T) {
 			name: "two-axis flag overrides a default",
 			axes: two,
 			argv: []string{"--rate-threshold", "removed:1"},
-			want: threshold.Threshold{Axes: two, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1}},
+			want: threshold.Threshold{
+				Axes:    two,
+				Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1},
+			},
 		},
 		{
 			// Legacy flags map onto every axis, overriding the built-in
