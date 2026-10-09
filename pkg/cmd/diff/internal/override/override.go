@@ -42,9 +42,9 @@ func Parse(entries []string) (map[string]float64, error) {
 		if k == "" {
 			return nil, errors.Errorf("unexpected override key. expected: non-empty, actual: %q (entry: %q)", k, e)
 		}
-		f, err := parseRate(strings.TrimSpace(v), e)
+		f, err := parseRate(strings.TrimSpace(v))
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "parse rate. entry: %q", e)
 		}
 		if _, dup := m[k]; dup {
 			slog.Warn("duplicate override key, last wins", "key", k, "rate", f)
@@ -85,9 +85,9 @@ func ParseAxes(entries []string, axes []threshold.Axis) (map[string]threshold.Ra
 		if !slices.Contains(axes, a) {
 			return nil, errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
 		}
-		f, err := parseRate(strings.TrimSpace(rs), e)
+		f, err := parseRate(strings.TrimSpace(rs))
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "parse rate. entry: %q", e)
 		}
 		if m[k] == nil {
 			m[k] = make(threshold.Rates, len(axes))
@@ -123,9 +123,9 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 		if !slices.Contains(axes, a) {
 			return nil, errors.Errorf("unexpected threshold axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
 		}
-		f, err := parseRate(strings.TrimSpace(rs), e)
+		f, err := parseRate(strings.TrimSpace(rs))
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "parse rate. entry: %q", e)
 		}
 		if _, dup := r[a]; dup {
 			slog.Warn("duplicate threshold axis, last wins", "axis", a, "rate", f)
@@ -141,16 +141,16 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 // threshold`, so a NaN threshold makes every comparison false and every
 // diff PASSes however large the change; +Inf likewise PASSes everything),
 // so they are refused up front.
-func parseRate(v, entry string) (float64, error) {
+func parseRate(v string) (float64, error) {
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return 0, errors.Wrapf(err, "unexpected rate. expected: numeric, actual: %q (entry: %q)", v, entry)
+		return 0, errors.Wrapf(err, "unexpected rate. expected: numeric, actual: %q", v)
 	}
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		return 0, errors.Errorf("unexpected rate. expected: finite, actual: %v (entry: %q)", f, entry)
+		return 0, errors.Errorf("unexpected rate. expected: finite, actual: %v", f)
 	}
 	if f < 0 {
-		return 0, errors.Errorf("unexpected rate. expected: >= 0, actual: %v (entry: %q)", f, entry)
+		return 0, errors.Errorf("unexpected rate. expected: >= 0, actual: %v", f)
 	}
 	return f, nil
 }
