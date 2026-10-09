@@ -103,7 +103,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	}) {
 		if _, err := fmt.Fprintf(w, `## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
 `); err != nil {
 			return false, errors.Wrap(err, "write detection header")
@@ -114,7 +114,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			}
 			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d |\n",
 				r.Ecosystem, r.SourceID, r.BaselineKeys, r.TargetKeys,
-				len(r.Added), len(r.Removed), len(r.Changed),
+				len(r.Added), len(r.Changed), len(r.Removed),
 				r.BaselineCriterions, r.TargetCriterions, r.MatchedCriterions,
 				r.AddedCriterions, r.ChangedCriterions, r.RemovedCriterions); err != nil {
 				return false, errors.Wrap(err, "write detection row")
@@ -130,8 +130,8 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	}) {
 		if _, err := fmt.Fprintf(w, `## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Matched KBs | Added | Changed | Removed |
+|-----------|--------|------------------|----------------|-------------|-------|---------|---------|
 `); err != nil {
 			return false, errors.Wrap(err, "write kb header")
 		}
@@ -140,9 +140,8 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d |\n",
-				r.Ecosystem, r.SourceID, r.BaselineKBKeys, r.TargetKBKeys,
-				len(r.AddedKBs), len(r.RemovedKBs), len(r.ChangedKBs),
-				r.MatchedKBs); err != nil {
+				r.Ecosystem, r.SourceID, r.BaselineKBKeys, r.TargetKBKeys, r.MatchedKBs,
+				len(r.AddedKBs), len(r.ChangedKBs), len(r.RemovedKBs)); err != nil {
 				return false, errors.Wrap(err, "write kb row")
 			}
 		}
@@ -175,11 +174,11 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 				ids   []string
 			}{
 				{"Added Root IDs", r.Added},
-				{"Removed Root IDs", r.Removed},
 				{"Changed Root IDs", r.Changed},
+				{"Removed Root IDs", r.Removed},
 				{"Added KB IDs", r.AddedKBs},
-				{"Removed KB IDs", r.RemovedKBs},
 				{"Changed KB IDs", r.ChangedKBs},
+				{"Removed KB IDs", r.RemovedKBs},
 			} {
 				// Sort a clone: the slices are shared with the caller's
 				// diffs, and rendering must not mutate its input.

@@ -1554,24 +1554,24 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
-| ubuntu:22.04 | ubuntu-oval | 800 | 200 | 0 | 3 | 1 | 4000 | 2000 | 1000 | 0 | 1000 | 2000 |
+| ubuntu:22.04 | ubuntu-oval | 800 | 200 | 0 | 1 | 3 | 4000 | 2000 | 1000 | 0 | 1000 | 2000 |
 | redhat:9 | redhat-ovalv2 | 100 | 100 | 0 | 0 | 0 | 500 | 500 | 500 | 0 | 0 | 0 |
 
 ## Details (FAIL sources)
 
 ### ubuntu:22.04 / ubuntu-oval (detection changed 25.0% > 10.0%, detection removed 50.0% > 10.0%)
 
+#### Changed Root IDs (1)
+
+- CVE-2024-0004
+
 #### Removed Root IDs (3)
 
 - CVE-2024-0001
 - CVE-2024-0002
 - CVE-2024-0003
-
-#### Changed Root IDs (1)
-
-- CVE-2024-0004
 
 `,
 		},
@@ -1630,9 +1630,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
-| cpe | cisco-json | 50 | 50 | 0 | 0 | 1 | 100 | 100 | 70 | 0 | 30 | 0 |
+| cpe | cisco-json | 50 | 50 | 0 | 1 | 0 | 100 | 100 | 70 | 0 | 30 | 0 |
 | cpe | nvd-feed-cve-v2 | 300000 | 300000 | 0 | 0 | 0 | 300000 | 300000 | 299700 | 0 | 300 | 0 |
 
 ## Details (FAIL sources)
@@ -1686,7 +1686,7 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
 | alma:8 | alma-errata | 50 | 52 | 2 | 0 | 0 | 200 | 250 | 200 | 50 | 0 | 0 |
 
@@ -1730,9 +1730,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
-| microsoft | microsoft-cvrf | 10 | 10 | 1 | 1 | 2 | 7 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Matched KBs | Added | Changed | Removed |
+|-----------|--------|------------------|----------------|-------------|-------|---------|---------|
+| microsoft | microsoft-cvrf | 10 | 10 | 7 | 1 | 2 | 1 |
 
 ## Details (FAIL sources)
 
@@ -1742,14 +1742,14 @@ func TestGenerateReport(t *testing.T) {
 
 - KB5003
 
-#### Removed KB IDs (1)
-
-- KB4000
-
 #### Changed KB IDs (2)
 
 - KB5001
 - KB5002
+
+#### Removed KB IDs (1)
+
+- KB4000
 
 `,
 		},
@@ -1807,15 +1807,15 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
 | alma:8 | alma-errata | 10 | 10 | 0 | 0 | 0 | 50 | 50 | 50 | 0 | 0 | 0 |
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
-| microsoft | microsoft-cvrf | 5 | 5 | 0 | 0 | 0 | 5 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Matched KBs | Added | Changed | Removed |
+|-----------|--------|------------------|----------------|-------------|-------|---------|---------|
+| microsoft | microsoft-cvrf | 5 | 5 | 5 | 0 | 0 | 0 |
 
 `,
 		},
@@ -1866,15 +1866,15 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
 | mixed:1 | mixed-source | 100 | 100 | 0 | 0 | 0 | 10000 | 10050 | 9950 | 50 | 50 | 0 |
 
 ## KB
 
-| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Added | Removed | Changed | Matched KBs |
-|-----------|--------|------------------|----------------|-------|---------|---------|-------------|
-| mixed:1 | mixed-source | 5 | 5 | 0 | 0 | 2 | 3 |
+| Ecosystem | Source | Baseline KB Keys | Target KB Keys | Matched KBs | Added | Changed | Removed |
+|-----------|--------|------------------|----------------|-------------|-------|---------|---------|
+| mixed:1 | mixed-source | 5 | 5 | 3 | 0 | 2 | 0 |
 
 ## Details (FAIL sources)
 
@@ -1947,9 +1947,9 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
-| ubuntu:26.04 | ubuntu-oval | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 400 | 0 | 100 | 0 |
+| ubuntu:26.04 | ubuntu-oval | 100 | 100 | 0 | 1 | 0 | 500 | 500 | 400 | 0 | 100 | 0 |
 | redhat:9 | redhat-ovalv2 | 50 | 50 | 0 | 0 | 0 | 200 | 200 | 200 | 0 | 0 | 0 |
 
 `,
@@ -2017,10 +2017,10 @@ func TestGenerateReport(t *testing.T) {
 
 ## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Changed | Removed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
 |-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
-| beta:2 | src-beta | 50 | 50 | 0 | 0 | 1 | 200 | 200 | 195 | 0 | 5 | 0 |
-| alpha:1 | src-alpha | 100 | 100 | 0 | 0 | 1 | 500 | 500 | 200 | 0 | 300 | 0 |
+| beta:2 | src-beta | 50 | 50 | 0 | 1 | 0 | 200 | 200 | 195 | 0 | 5 | 0 |
+| alpha:1 | src-alpha | 100 | 100 | 0 | 1 | 0 | 500 | 500 | 200 | 0 | 300 | 0 |
 
 ## Details (FAIL sources)
 

@@ -108,8 +108,8 @@ type SourceDiff struct {
 	BaselineKeys       int      // root IDs whose baseline value contains this source
 	TargetKeys         int      // root IDs whose target value contains this source
 	Added              []string // root IDs where this source appears only in target
-	Removed            []string // root IDs where this source appears only in baseline
 	Changed            []string // root IDs in both but with different detection data for this source
+	Removed            []string // root IDs where this source appears only in baseline
 	BaselineCriterions int      // total leaf criterion count for this source across all baseline root IDs
 	TargetCriterions   int      // total leaf criterion count for this source across all target root IDs
 	MatchedCriterions  int      // criterions structurally identical in both (Sort + Compare == 0)
@@ -128,10 +128,10 @@ type SourceDiff struct {
 	// only key counts are kept.
 	BaselineKBKeys int      // KB IDs whose baseline value contains this source
 	TargetKBKeys   int      // KB IDs whose target value contains this source
-	AddedKBs       []string // KB IDs where this source appears only in target
-	RemovedKBs     []string // KB IDs where this source appears only in baseline
-	ChangedKBs     []string // KB IDs in both but with different KB data for this source
 	MatchedKBs     int      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
+	AddedKBs       []string // KB IDs where this source appears only in target
+	ChangedKBs     []string // KB IDs in both but with different KB data for this source
+	RemovedKBs     []string // KB IDs where this source appears only in baseline
 
 	// Per-bucket change rates, one per axis in Axes, each as a percentage
 	// of the bucket's baseline unit count. The KB bucket's units are its
