@@ -144,13 +144,13 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 func parseRate(v, entry string) (float64, error) {
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return 0, errors.Wrapf(err, "unexpected override rate. expected: numeric, actual: %q (entry: %q)", v, entry)
+		return 0, errors.Wrapf(err, "unexpected rate. expected: numeric, actual: %q (entry: %q)", v, entry)
 	}
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		return 0, errors.Errorf("unexpected override rate. expected: finite, actual: %v (entry: %q)", f, entry)
+		return 0, errors.Errorf("unexpected rate. expected: finite, actual: %v (entry: %q)", f, entry)
 	}
 	if f < 0 {
-		return 0, errors.Errorf("unexpected override rate. expected: >= 0, actual: %v (entry: %q)", f, entry)
+		return 0, errors.Errorf("unexpected rate. expected: >= 0, actual: %v (entry: %q)", f, entry)
 	}
 	return f, nil
 }
