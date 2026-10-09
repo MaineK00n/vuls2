@@ -222,9 +222,15 @@ func TestFormatExceeded(t *testing.T) {
 		want            string
 	}{
 		{name: "distinct at one decimal", rate: 12.34, threshold: 10, want: "12.3% > 10.0%"},
-		{name: "needs two decimals", rate: 100.0 / 999 * 100, threshold: 10, want: "10.01% > 10.00%"},
+		{name: "needs two decimals", rate: 100.0 / 999 * 100, threshold: 10, want: "10.01% > 10.0%"},
 		{name: "zero threshold", rate: 2.5, threshold: 0, want: "2.5% > 0.0%"},
-		{name: "beyond six decimals falls back to %g", rate: 10 + 1e-9, threshold: 10, want: "10.000000001% > 10%"},
+		{name: "beyond six decimals falls back to %g", rate: 10 + 1e-9, threshold: 10, want: "10.000000001% > 10.0%"},
+		// A threshold with more than one decimal keeps its digits, and the
+		// rate is printed at no less precision, so 10.061 over 10.06 never
+		// reads as "10.061% > 10.1%".
+		{name: "decimal threshold keeps its digits", rate: 10.061, threshold: 10.06, want: "10.061% > 10.06%"},
+		{name: "rate rounding down to a decimal threshold grows", rate: 10.0604, threshold: 10.06, want: "10.0604% > 10.06%"},
+		{name: "one-decimal threshold renders uniformly", rate: 13, threshold: 12.5, want: "13.0% > 12.5%"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -249,6 +255,9 @@ func TestFormat(t *testing.T) {
 		t.Errorf("Format() = %q, want %q", got, want)
 	}
 	if got, want := threshold.FormatThresholds(all, thresholds), "30.0% / 10.0% / 5.0%"; got != want {
+		t.Errorf("FormatThresholds() = %q, want %q", got, want)
+	}
+	if got, want := threshold.FormatThresholds(all, threshold.Rates{threshold.Added: 10.06, threshold.Changed: 12.5, threshold.Removed: 0}), "10.06% / 12.5% / 0.0%"; got != want {
 		t.Errorf("FormatThresholds() = %q, want %q", got, want)
 	}
 	if got, want := threshold.Max(all, rates), 12.34; got != want {

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -168,8 +170,7 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 		}
 		cell := fmt.Sprintf("%.1f%%", rates[a])
 		if rates[a] > thresholds[a] {
-			r, _ := formatDistinct(rates[a], thresholds[a])
-			cell = "**" + r + "%**"
+			cell = "**" + formatExceededRate(rates[a], thresholds[a]) + "%**"
 		}
 		s += cell
 	}
@@ -177,28 +178,44 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 }
 
 // FormatExceeded renders "rate% > threshold%" for an exceeded axis with
-// just enough decimals for the two numbers to read as different: at one
-// decimal 10.010% over a 10% threshold would print as "10.0% > 10.0%", a
-// false inequality.
+// just enough decimals for the inequality to read as true: at one decimal
+// 10.010% over a 10% threshold would print as "10.0% > 10.0%".
 func FormatExceeded(rate, threshold float64) string {
-	r, t := formatDistinct(rate, threshold)
-	return r + "% > " + t + "%"
+	return formatExceededRate(rate, threshold) + "% > " + formatThreshold(threshold) + "%"
 }
 
-// formatDistinct formats two values at the smallest precision (from one
-// decimal up to six) at which they render differently, falling back to %g
-// when even six decimals do not separate them. Equal values render equal.
-func formatDistinct(a, b float64) (string, string) {
-	for p := 1; p <= 6; p++ {
-		as, bs := fmt.Sprintf("%.*f", p, a), fmt.Sprintf("%.*f", p, b)
-		if as != bs {
-			return as, bs
+// formatThreshold renders a threshold exactly: an operator-supplied value
+// such as 10.06 keeps every significant decimal, so the printed threshold
+// is never rounded past the rate it is compared with; values with at most
+// one decimal render as "%.1f" ("10.0", "12.5") for a uniform column.
+func formatThreshold(t float64) string {
+	s := strconv.FormatFloat(t, 'f', -1, 64)
+	if _, frac, _ := strings.Cut(s, "."); len(frac) <= 1 {
+		return fmt.Sprintf("%.1f", t)
+	}
+	return s
+}
+
+// formatExceededRate renders a rate known to exceed its threshold with the
+// smallest precision — at least one decimal and at least the threshold's
+// own — at which the printed value is still numerically above the printed
+// threshold, so the report never shows a rate that looks at or below the
+// threshold it failed. Precision grows up to six decimals, past which the
+// rate is printed with %g.
+func formatExceededRate(rate, threshold float64) string {
+	ts := formatThreshold(threshold)
+	tv, _ := strconv.ParseFloat(ts, 64)
+	p := 1
+	if _, frac, _ := strings.Cut(ts, "."); len(frac) > p {
+		p = len(frac)
+	}
+	for ; p <= 6; p++ {
+		rs := fmt.Sprintf("%.*f", p, rate)
+		if rv, _ := strconv.ParseFloat(rs, 64); rv > tv {
+			return rs
 		}
 	}
-	if a == b {
-		return fmt.Sprintf("%.1f", a), fmt.Sprintf("%.1f", b)
-	}
-	return fmt.Sprintf("%g", a), fmt.Sprintf("%g", b)
+	return fmt.Sprintf("%g", rate)
 }
 
 // FormatThresholds renders thresholds in axes order as "a% / b% / c%".
@@ -208,7 +225,7 @@ func FormatThresholds(axes []Axis, thresholds Rates) string {
 		if i > 0 {
 			s += " / "
 		}
-		s += fmt.Sprintf("%.1f%%", thresholds[a])
+		s += formatThreshold(thresholds[a]) + "%"
 	}
 	return s
 }
