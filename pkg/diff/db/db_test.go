@@ -93,14 +93,6 @@ func TestGetEcosystems(t *testing.T) {
 	}
 }
 
-// rates builds a Rates literal in Axes order (added, changed, removed).
-func rates(added, changed, removed float64) threshold.Rates {
-	return threshold.Rates{threshold.Added: added, threshold.Changed: changed, threshold.Removed: removed}
-}
-
-// strict is the all-zero threshold: any change on any axis fails.
-var strict = threshold.Threshold{Axes: db.Axes, Default: rates(0, 0, 0)}
-
 func TestDiffEcosystem(t *testing.T) {
 	type args struct {
 		baselineFixture string
@@ -119,7 +111,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/baseline",
 				targetFixture:   "testdata/fixtures/target-same",
 				ecosystem:       "alma:8",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "alma:8",
@@ -131,9 +123,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 6,
 						TargetCriterions:   6,
 						MatchedCriterions:  6,
-						DetectionRates:     rates(0, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:               true,
 					},
 				},
@@ -149,7 +141,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/baseline",
 				targetFixture:   "testdata/fixtures/target-replaced",
 				ecosystem:       "alma:8",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "alma:8",
@@ -164,9 +156,9 @@ func TestDiffEcosystem(t *testing.T) {
 						TargetCriterions:   6,
 						AddedCriterions:    6,
 						RemovedCriterions:  6,
-						DetectionRates:     rates(100, 0, 100),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 100},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -180,7 +172,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/baseline",
 				targetFixture:   "testdata/fixtures/target-changed",
 				ecosystem:       "alma:8",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "alma:8",
@@ -194,9 +186,9 @@ func TestDiffEcosystem(t *testing.T) {
 						TargetCriterions:   6,
 						MatchedCriterions:  5,
 						ChangedCriterions:  1,
-						DetectionRates:     rates(0, float64(1)/float64(6)*100, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: float64(1) / float64(6) * 100, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -207,7 +199,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/baseline",
 				targetFixture:   "", // empty; set to t.TempDir() in run loop
 				ecosystem:       "alma:8",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "alma:8",
@@ -218,9 +210,9 @@ func TestDiffEcosystem(t *testing.T) {
 						Removed:            []string{"ALSA-2024:0113"},
 						BaselineCriterions: 6,
 						RemovedCriterions:  6,
-						DetectionRates:     rates(0, 0, 100),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 100},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -231,7 +223,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/baseline",
 				targetFixture:   "testdata/fixtures/target-added",
 				ecosystem:       "alma:8",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "alma:8",
@@ -245,9 +237,9 @@ func TestDiffEcosystem(t *testing.T) {
 						TargetCriterions:   12,
 						MatchedCriterions:  6,
 						AddedCriterions:    6,
-						DetectionRates:     rates(100, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -262,7 +254,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/change-baseline",
 				targetFixture:   "testdata/fixtures/change-target",
 				ecosystem:       "test:change",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "test:change",
@@ -277,9 +269,9 @@ func TestDiffEcosystem(t *testing.T) {
 						MatchedCriterions:  0,
 						ChangedCriterions:  2,
 						RemovedCriterions:  4,
-						DetectionRates:     rates(0, float64(2)/float64(6)*100, float64(4)/float64(6)*100),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: float64(2) / float64(6) * 100, threshold.Removed: float64(4) / float64(6) * 100},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -287,13 +279,13 @@ func TestDiffEcosystem(t *testing.T) {
 		{
 			// Two sources share one root ID; only the changed one may fail,
 			// the unchanged one must pass, and a source newly appearing in
-			// target is strict-failed.
+			// target is threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}}-failed.
 			name: "multi-source: only changed source fails",
 			args: args{
 				baselineFixture: "testdata/fixtures/multi-source-baseline",
 				targetFixture:   "testdata/fixtures/multi-source-target",
 				ecosystem:       "test:multi",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "test:multi",
@@ -305,9 +297,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						MatchedCriterions:  1,
-						DetectionRates:     rates(0, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:               true,
 					},
 					{
@@ -318,9 +310,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						ChangedCriterions:  1,
-						DetectionRates:     rates(0, 100, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 100, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 					{
 						SourceID:         "test-source-3",
@@ -328,9 +320,9 @@ func TestDiffEcosystem(t *testing.T) {
 						Added:            []string{"ROOT-0001"},
 						TargetCriterions: 1,
 						AddedCriterions:  1,
-						DetectionRates:   rates(100, 0, 0),
-						KBRates:          rates(0, 0, 0),
-						Thresholds:       rates(0, 0, 0),
+						DetectionRates:   threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:          threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:       threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -346,7 +338,7 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "test:multi",
 				th: threshold.Threshold{
 					Axes:    db.Axes,
-					Default: rates(0, 0, 0),
+					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					Overrides: map[string]threshold.Rates{
 						"test:multi/test-source-2": {threshold.Changed: 250},
 						"test:multi/test-source-3": {threshold.Added: 150},
@@ -363,9 +355,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						MatchedCriterions:  1,
-						DetectionRates:     rates(0, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:               true,
 					},
 					{
@@ -376,9 +368,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						ChangedCriterions:  1,
-						DetectionRates:     rates(0, 100, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 250, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 100, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 250, threshold.Removed: 0},
 						Pass:               true,
 					},
 					{
@@ -387,9 +379,9 @@ func TestDiffEcosystem(t *testing.T) {
 						Added:            []string{"ROOT-0001"},
 						TargetCriterions: 1,
 						AddedCriterions:  1,
-						DetectionRates:   rates(100, 0, 0),
-						KBRates:          rates(0, 0, 0),
-						Thresholds:       rates(150, 0, 0),
+						DetectionRates:   threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:          threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:       threshold.Rates{threshold.Added: 150, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:             true,
 					},
 				},
@@ -407,7 +399,7 @@ func TestDiffEcosystem(t *testing.T) {
 				ecosystem:       "test:multi",
 				th: threshold.Threshold{
 					Axes:    db.Axes,
-					Default: rates(0, 0, 0),
+					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					Overrides: map[string]threshold.Rates{
 						"test:multi/test-source-2": {threshold.Added: 250},
 						"test:multi/test-source-3": {threshold.Added: 150},
@@ -424,9 +416,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						MatchedCriterions:  1,
-						DetectionRates:     rates(0, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:               true,
 					},
 					{
@@ -437,9 +429,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						ChangedCriterions:  1,
-						DetectionRates:     rates(0, 100, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(250, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 100, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 250, threshold.Changed: 0, threshold.Removed: 0},
 					},
 					{
 						SourceID:         "test-source-3",
@@ -447,9 +439,9 @@ func TestDiffEcosystem(t *testing.T) {
 						Added:            []string{"ROOT-0001"},
 						TargetCriterions: 1,
 						AddedCriterions:  1,
-						DetectionRates:   rates(100, 0, 0),
-						KBRates:          rates(0, 0, 0),
-						Thresholds:       rates(150, 0, 0),
+						DetectionRates:   threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:          threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:       threshold.Rates{threshold.Added: 150, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:             true,
 					},
 				},
@@ -465,7 +457,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/zero-unit-baseline",
 				targetFixture:   "testdata/fixtures/zero-unit-target",
 				ecosystem:       "test:zero",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "test:zero",
@@ -477,9 +469,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineCriterions: 1,
 						TargetCriterions:   1,
 						MatchedCriterions:  1,
-						DetectionRates:     rates(0, 0, 0),
-						KBRates:            rates(0, 0, 0),
-						Thresholds:         rates(0, 0, 0),
+						DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:         threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:               true,
 					},
 				},
@@ -492,7 +484,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/kb-baseline",
 				targetFixture:   "testdata/fixtures/kb-target-same",
 				ecosystem:       "microsoft",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "microsoft",
@@ -502,9 +494,9 @@ func TestDiffEcosystem(t *testing.T) {
 						BaselineKBKeys: 2,
 						TargetKBKeys:   2,
 						MatchedKBs:     2,
-						DetectionRates: rates(0, 0, 0),
-						KBRates:        rates(0, 0, 0),
-						Thresholds:     rates(0, 0, 0),
+						DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:        threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 						Pass:           true,
 					},
 				},
@@ -517,7 +509,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/kb-baseline",
 				targetFixture:   "testdata/fixtures/kb-target-added",
 				ecosystem:       "microsoft",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "microsoft",
@@ -528,9 +520,9 @@ func TestDiffEcosystem(t *testing.T) {
 						TargetKBKeys:   3,
 						AddedKBs:       []string{"KB5001222"},
 						MatchedKBs:     2,
-						DetectionRates: rates(0, 0, 0),
-						KBRates:        rates(50, 0, 0),
-						Thresholds:     rates(0, 0, 0),
+						DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:        threshold.Rates{threshold.Added: 50, threshold.Changed: 0, threshold.Removed: 0},
+						Thresholds:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -543,7 +535,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/kb-baseline",
 				targetFixture:   "testdata/fixtures/kb-target-changed",
 				ecosystem:       "microsoft",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "microsoft",
@@ -554,9 +546,9 @@ func TestDiffEcosystem(t *testing.T) {
 						TargetKBKeys:   2,
 						ChangedKBs:     []string{"KB5001111"},
 						MatchedKBs:     1,
-						DetectionRates: rates(0, 0, 0),
-						KBRates:        rates(0, 50, 0),
-						Thresholds:     rates(0, 0, 0),
+						DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:        threshold.Rates{threshold.Added: 0, threshold.Changed: 50, threshold.Removed: 0},
+						Thresholds:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -567,7 +559,7 @@ func TestDiffEcosystem(t *testing.T) {
 				baselineFixture: "testdata/fixtures/kb-baseline",
 				targetFixture:   "", // empty; set to t.TempDir() in run loop
 				ecosystem:       "microsoft",
-				th:              strict,
+				th:              threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}},
 			},
 			want: db.EcosystemDiff{
 				Ecosystem: "microsoft",
@@ -576,9 +568,9 @@ func TestDiffEcosystem(t *testing.T) {
 						SourceID:       "microsoft-cvrf",
 						BaselineKBKeys: 2,
 						RemovedKBs:     []string{"KB5001000", "KB5001111"},
-						DetectionRates: rates(0, 0, 0),
-						KBRates:        rates(0, 0, 100),
-						Thresholds:     rates(0, 0, 0),
+						DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+						KBRates:        threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 100},
+						Thresholds:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					},
 				},
 			},
@@ -641,15 +633,8 @@ func TestDiffEcosystem(t *testing.T) {
 }
 
 func TestDiffBoltDB(t *testing.T) {
-	// production mirrors the vuls-data-db defaults: additions tolerated up
+	// threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}} mirrors the vuls-data-db defaults: additions tolerated up
 	// to 30%, changes and removals up to 10%.
-	production := threshold.Threshold{Axes: db.Axes, Default: rates(30, 10, 10)}
-	withOverrides := func(ov map[string]threshold.Rates) threshold.Threshold {
-		c := production
-		c.Overrides = ov
-		return c
-	}
-
 	type args struct {
 		baselineFixtures []string
 		targetFixtures   []string
@@ -668,7 +653,7 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
-				opts:             []db.Option{db.WithThreshold(production)},
+				opts:             []db.Option{db.WithThreshold(threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}})},
 			},
 			wantErr: true,
 		},
@@ -677,7 +662,7 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts:             []db.Option{db.WithThreshold(production)},
+				opts:             []db.Option{db.WithThreshold(threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}})},
 			},
 			wantErr: false,
 		},
@@ -706,14 +691,14 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},                                      // alma:8
 				targetFixtures:   []string{"testdata/fixtures/baseline", "testdata/fixtures/change-baseline"}, // alma:8 + test:change
-				opts:             []db.Option{db.WithThreshold(strict)},
+				opts:             []db.Option{db.WithThreshold(threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}})},
 			},
 			wantErr: false,
 		},
 		{
 			// The point of the split: baseline → target-added doubles the
 			// criterions (added 100%) without removing any, which the
-			// production threshold tolerates only because the added axis is
+			// threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}} threshold tolerates only because the added axis is
 			// judged on its own.
 			name: "additions pass while removals of the same size fail",
 			args: args{
@@ -721,7 +706,7 @@ func TestDiffBoltDB(t *testing.T) {
 				targetFixtures:   []string{"testdata/fixtures/target-added"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
 					Axes:    db.Axes,
-					Default: rates(100, 0, 0),
+					Default: threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
 				})},
 			},
 			wantErr: false,
@@ -733,21 +718,25 @@ func TestDiffBoltDB(t *testing.T) {
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
 					Axes:    db.Axes,
-					Default: rates(100, 0, 0),
+					Default: threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
 				})},
 			},
 			wantErr: true,
 		},
 		{
 			// target-replaced gives alma:8/alma-errata 100% added and 100%
-			// removed; with the production defaults this normally fails.
+			// removed; with the threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}} defaults this normally fails.
 			name: "ecosystem override lifts its sources above threshold",
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"alma:8": {threshold.Added: 250, threshold.Removed: 250},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"alma:8": {threshold.Added: 250, threshold.Removed: 250},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -757,9 +746,13 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"alma:8": {threshold.Added: 250, threshold.Removed: 50},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"alma:8": {threshold.Added: 250, threshold.Removed: 50},
+					},
+				})},
 			},
 			wantErr: true,
 		},
@@ -769,9 +762,13 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"alma:8": {threshold.Added: 250},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"alma:8": {threshold.Added: 250},
+					},
+				})},
 			},
 			wantErr: true,
 		},
@@ -782,9 +779,13 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"unknown:99": {threshold.Removed: 50},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"unknown:99": {threshold.Removed: 50},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -796,9 +797,13 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"test:multi": {threshold.Added: 250, threshold.Changed: 250},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"test:multi": {threshold.Added: 250, threshold.Changed: 250},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -809,10 +814,14 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"test:multi/test-source-2": {threshold.Changed: 250},
-					"test:multi/test-source-3": {threshold.Added: 150},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"test:multi/test-source-2": {threshold.Changed: 250},
+						"test:multi/test-source-3": {threshold.Added: 150},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -821,15 +830,19 @@ func TestDiffBoltDB(t *testing.T) {
 			// overrides alone (50) would fail test-source-2 (100% changed) and
 			// test-source-3 (100% added), but their source-specific overrides
 			// win and lift both above their rates.
-			name: "source override rescues from strict ecosystem override",
+			name: "source override rescues from threshold.Threshold{Axes: db.Axes, Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0}} ecosystem override",
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"test:multi":               {threshold.Added: 50, threshold.Changed: 50},
-					"test:multi/test-source-2": {threshold.Changed: 250},
-					"test:multi/test-source-3": {threshold.Added: 150},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"test:multi":               {threshold.Added: 50, threshold.Changed: 50},
+						"test:multi/test-source-2": {threshold.Changed: 250},
+						"test:multi/test-source-3": {threshold.Added: 150},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -841,10 +854,14 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"test:multi":               {threshold.Added: 300, threshold.Changed: 300},
-					"test:multi/test-source-2": {threshold.Changed: 50},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"test:multi":               {threshold.Added: 300, threshold.Changed: 300},
+						"test:multi/test-source-2": {threshold.Changed: 50},
+					},
+				})},
 			},
 			wantErr: true,
 		},
@@ -870,9 +887,13 @@ func TestDiffBoltDB(t *testing.T) {
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts: []db.Option{db.WithThreshold(withOverrides(map[string]threshold.Rates{
-					"alma:8": {"renamed": 50},
-				}))},
+				opts: []db.Option{db.WithThreshold(threshold.Threshold{
+					Axes:    db.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"alma:8": {"renamed": 50},
+					},
+				})},
 			},
 			wantErr: true,
 		},
@@ -1513,9 +1534,9 @@ func TestGenerateReport(t *testing.T) {
 								BaselineCriterions: 500,
 								TargetCriterions:   500,
 								MatchedCriterions:  500,
-								DetectionRates:     rates(0, 0, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1535,9 +1556,9 @@ func TestGenerateReport(t *testing.T) {
 								RemovedCriterions:  2000,
 								Removed:            []string{"CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"},
 								Changed:            []string{"CVE-2024-0004"},
-								DetectionRates:     rates(0, 25, 50),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 25, threshold.Removed: 50},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               false,
 							},
 						},
@@ -1598,9 +1619,9 @@ func TestGenerateReport(t *testing.T) {
 								MatchedCriterions:  70,
 								ChangedCriterions:  30,
 								Changed:            []string{"CVE-2024-1000"},
-								DetectionRates:     rates(0, 30, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 30, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               false,
 							},
 							{
@@ -1611,9 +1632,9 @@ func TestGenerateReport(t *testing.T) {
 								TargetCriterions:   300000,
 								MatchedCriterions:  299700,
 								ChangedCriterions:  300,
-								DetectionRates:     rates(0, 0.1, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0.1, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1668,9 +1689,9 @@ func TestGenerateReport(t *testing.T) {
 								TargetCriterions:   250,
 								MatchedCriterions:  200,
 								AddedCriterions:    50,
-								DetectionRates:     rates(25, 0, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 25, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1712,9 +1733,9 @@ func TestGenerateReport(t *testing.T) {
 								ChangedKBs:     []string{"KB5001", "KB5002"},
 								AddedKBs:       []string{"KB5003"},
 								RemovedKBs:     []string{"KB4000"},
-								DetectionRates: rates(0, 0, 0),
-								KBRates:        rates(10, 20, 10),
-								Thresholds:     rates(30, 10, 10),
+								DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:        threshold.Rates{threshold.Added: 10, threshold.Changed: 20, threshold.Removed: 10},
+								Thresholds:     threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:           false,
 							},
 						},
@@ -1772,9 +1793,9 @@ func TestGenerateReport(t *testing.T) {
 								BaselineCriterions: 50,
 								TargetCriterions:   50,
 								MatchedCriterions:  50,
-								DetectionRates:     rates(0, 0, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1788,9 +1809,9 @@ func TestGenerateReport(t *testing.T) {
 								BaselineKBKeys: 5,
 								TargetKBKeys:   5,
 								MatchedKBs:     5,
-								DetectionRates: rates(0, 0, 0),
-								KBRates:        rates(0, 0, 0),
-								Thresholds:     rates(30, 10, 10),
+								DetectionRates: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:        threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:     threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:           true,
 							},
 						},
@@ -1848,9 +1869,9 @@ func TestGenerateReport(t *testing.T) {
 								TargetKBKeys:       5,
 								MatchedKBs:         3,
 								ChangedKBs:         []string{"KB1", "KB2"},
-								DetectionRates:     rates(0.5, 0.5, 0),
-								KBRates:            rates(0, 40, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0.5, threshold.Changed: 0.5, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 40, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               false,
 							},
 						},
@@ -1910,9 +1931,9 @@ func TestGenerateReport(t *testing.T) {
 								MatchedCriterions:  400,
 								ChangedCriterions:  100,
 								Changed:            []string{"CVE-2026-9999"},
-								DetectionRates:     rates(0, 20, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 50, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 20, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 50, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1928,9 +1949,9 @@ func TestGenerateReport(t *testing.T) {
 								BaselineCriterions: 200,
 								TargetCriterions:   200,
 								MatchedCriterions:  200,
-								DetectionRates:     rates(0, 0, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 10, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1978,9 +1999,9 @@ func TestGenerateReport(t *testing.T) {
 								MatchedCriterions:  200,
 								ChangedCriterions:  300,
 								Changed:            []string{"CVE-2026-AAAA"},
-								DetectionRates:     rates(0, 60, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 150, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 60, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 150, threshold.Removed: 10},
 								Pass:               true,
 							},
 						},
@@ -1998,9 +2019,9 @@ func TestGenerateReport(t *testing.T) {
 								MatchedCriterions:  195,
 								ChangedCriterions:  5,
 								Changed:            []string{"CVE-2026-BBBB"},
-								DetectionRates:     rates(0, 2.5, 0),
-								KBRates:            rates(0, 0, 0),
-								Thresholds:         rates(30, 0, 10),
+								DetectionRates:     threshold.Rates{threshold.Added: 0, threshold.Changed: 2.5, threshold.Removed: 0},
+								KBRates:            threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
+								Thresholds:         threshold.Rates{threshold.Added: 30, threshold.Changed: 0, threshold.Removed: 10},
 								Pass:               false,
 							},
 						},
