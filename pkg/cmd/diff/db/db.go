@@ -60,7 +60,8 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes, diffdb.Defaults, "(ecosystem, data source)", "<ecosystem> (all sources in the ecosystem, e.g. ubuntu:26.04) or <ecosystem>/<source> (single source, e.g. cpe/cisco-json, wins over the ecosystem key)")
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes, diffdb.Defaults, "(ecosystem, data source)",
+		"<ecosystem> (all sources in the ecosystem, e.g. ubuntu:26.04) or <ecosystem>/<source> (single source, e.g. cpe/cisco-json, wins over the ecosystem key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

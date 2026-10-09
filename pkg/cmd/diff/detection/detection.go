@@ -93,7 +93,8 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdetection.Axes, diffdetection.Defaults, "(scan result file, data source)", "<file-basename> (all data sources in the file, e.g. debian_13) or <file-basename>/<source> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key)")
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdetection.Axes, diffdetection.Defaults, "(scan result file, data source)",
+		"<file-basename> (all data sources in the file, e.g. debian_13) or <file-basename>/<source> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
