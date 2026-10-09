@@ -280,7 +280,7 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, cfg threshold.Config) ([]Ecosys
 	return results, nil
 }
 
-// rates computes a bucket's per-axis change rates from its unit counts.
+// rates computes per-axis change rates (added, changed, removed) against baseline.
 func rates(baseline, added, changed, removed int) threshold.Rates {
 	return threshold.Rates{
 		threshold.Added:   threshold.Rate(baseline, added),
