@@ -9,7 +9,10 @@
 //     a target key in front);
 //   - legacy: `--change-rate-threshold` and
 //     `--change-rate-threshold-override <key>=<rate>`, kept for callers of
-//     the pre-axis CLI; the single value applies to every axis alike.
+//     the pre-axis CLI; the single value applies to every axis alike. Both
+//     are marked deprecated with pflag: hidden from --help, and using one
+//     prints a notice on stderr at parse time. They go away once the known
+//     callers have migrated.
 package thresholdflag
 
 import (
@@ -49,10 +52,18 @@ func Register(fs *pflag.FlagSet, axes []threshold.Axis, defaults threshold.Rates
 		fmt.Sprintf("override of one axis' threshold for one target; format: <key>=<axis>:<rate> where key is %s and axis is one of %s (repeatable; comma-separated entries also accepted)",
 			keyDesc, axisList(axes)))
 
+	// The legacy family stays parseable but is hidden from --help, and
+	// pflag announces the deprecation on stderr whenever one is used, so
+	// callers still on it see the notice in their CI logs. It is removed
+	// once the two known callers (vulsio/vuls-data-db and one more CI
+	// consumer) have moved to the per-axis flags.
 	fs.Float64Var(&f.legacyThreshold, "change-rate-threshold", 0,
-		fmt.Sprintf("DEPRECATED: use --rate-threshold. Single change rate (%%) threshold per %s applied to every axis (%s) alike; cannot be combined with the per-axis flags", targetDesc, axisList(axes)))
+		fmt.Sprintf("single change rate (%%) threshold per %s applied to every axis (%s) alike", targetDesc, axisList(axes)))
+	_ = fs.MarkDeprecated("change-rate-threshold",
+		fmt.Sprintf("use --rate-threshold <axis>:<rate>; the single value is applied to every axis (%s) independently, which is looser than the former combined rate. The flag is removed once the known callers have migrated", axisList(axes)))
 	fs.StringSliceVar(&f.legacyOverrides, "change-rate-threshold-override", nil,
-		fmt.Sprintf("DEPRECATED: use --rate-threshold-override. Override of --change-rate-threshold; format: <key>=<rate> where key is %s, applied to every axis alike (repeatable; comma-separated entries also accepted); cannot be combined with the per-axis flags", keyDesc))
+		fmt.Sprintf("override of --change-rate-threshold; format: <key>=<rate> where key is %s, applied to every axis alike", keyDesc))
+	_ = fs.MarkDeprecated("change-rate-threshold-override", "use --rate-threshold-override <key>=<axis>:<rate>. The flag is removed once the known callers have migrated")
 	return f
 }
 

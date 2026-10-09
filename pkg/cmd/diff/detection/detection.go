@@ -60,14 +60,6 @@ func NewCmd() *cobra.Command {
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
 		    --rate-threshold-override 'debian_13=added:50,cpe_jvn/jvn-feed-rss=removed:25'
-
-		# legacy single-threshold form (deprecated): one value applied to
-		# added and removed alike; cannot be mixed with the flags above
-		$ vuls diff detection \
-		    ./scan-results \
-		    ./baseline.db ./vuls0 \
-		    ./target.db ./vuls0 \
-		    --change-rate-threshold 5
 		`),
 		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {

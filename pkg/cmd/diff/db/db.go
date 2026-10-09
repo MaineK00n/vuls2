@@ -41,10 +41,6 @@ func NewCmd() *cobra.Command {
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
 		    --rate-threshold-override 'ubuntu:26.04=added:80,cpe/cisco-json=removed:25'
-
-		# legacy single-threshold form (deprecated): one value applied to
-		# added, changed and removed alike; cannot be mixed with the flags above
-		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
 		`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
