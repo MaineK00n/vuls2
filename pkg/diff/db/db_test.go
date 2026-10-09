@@ -98,7 +98,7 @@ func rates(added, changed, removed float64) threshold.Rates {
 	return threshold.Rates{threshold.Added: added, threshold.Changed: changed, threshold.Removed: removed}
 }
 
-// strict is the all-zero threshold config: any change on any axis fails.
+// strict is the all-zero threshold: any change on any axis fails.
 var strict = threshold.Threshold{Axes: db.Axes, Default: rates(0, 0, 0)}
 
 func TestDiffEcosystem(t *testing.T) {
@@ -713,7 +713,7 @@ func TestDiffBoltDB(t *testing.T) {
 		{
 			// The point of the split: baseline → target-added doubles the
 			// criterions (added 100%) without removing any, which the
-			// production config tolerates only because the added axis is
+			// production threshold tolerates only because the added axis is
 			// judged on its own.
 			name: "additions pass while removals of the same size fail",
 			args: args{
@@ -724,7 +724,7 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "removals fail under the same config",
+			name: "removals fail under the same threshold",
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
@@ -843,10 +843,10 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// A config that declares fewer axes than the command judges is
+			// A threshold that declares fewer axes than the command judges is
 			// rejected: the judged axes are fixed by the command, so a
 			// caller cannot disable the removed check by omitting it.
-			name: "config with missing axes is an error",
+			name: "threshold with missing axes is an error",
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"}, // 50% removed

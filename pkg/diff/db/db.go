@@ -228,7 +228,7 @@ func (o *options) effectiveThreshold() (threshold.Threshold, error) {
 		return threshold.Threshold{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, th.Axes)
 	}
 	if err := th.Validate(); err != nil {
-		return threshold.Threshold{}, errors.Wrap(err, "validate thresholds")
+		return threshold.Threshold{}, errors.Wrap(err, "validate threshold")
 	}
 	return th, nil
 }

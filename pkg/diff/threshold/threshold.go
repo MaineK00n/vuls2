@@ -68,7 +68,7 @@ func Legacy(axes []Axis, def float64, overrides map[string]float64) Threshold {
 }
 
 // Validate checks that Default and Overrides only mention declared axes
-// and only carry finite, non-negative rates.
+// and only carry finite, non-negative values.
 func (t Threshold) Validate() error {
 	if len(t.Axes) == 0 {
 		return errors.New("unexpected axes. expected: non-empty, actual: empty")
@@ -97,10 +97,10 @@ func (t Threshold) Validate() error {
 	return nil
 }
 
-// validateValue rejects a NaN / ±Inf / negative threshold value. The judgement is
-// `rate > threshold`, so a NaN threshold makes every comparison false and
-// lets every diff PASS however large the change; +Inf likewise PASSes
-// everything; a negative threshold can never be met.
+// validateValue rejects a NaN / ±Inf / negative threshold value. The
+// judgement is `rate > threshold`, so a NaN threshold makes every
+// comparison false and lets every diff PASS however large the change;
+// +Inf likewise PASSes everything; a negative threshold can never be met.
 func validateValue(f float64) error {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return errors.Errorf("unexpected value. expected: finite, actual: %v", f)

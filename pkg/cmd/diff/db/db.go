@@ -50,7 +50,7 @@ func NewCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			th, err := options.thresholds.Threshold(cmd.Flags())
 			if err != nil {
-				return errors.Wrap(err, "resolve thresholds")
+				return errors.Wrap(err, "parse threshold flags")
 			}
 			return diffdb.DiffBoltDB(
 				args[0], args[1],

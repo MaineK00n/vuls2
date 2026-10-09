@@ -241,7 +241,7 @@ func rates(added, removed float64) threshold.Rates {
 	return threshold.Rates{threshold.Added: added, threshold.Removed: removed}
 }
 
-// uniform is a config with the same threshold on both axes, the shape the
+// uniform is a threshold with the same value on both axes, the shape the
 // legacy single flag produces.
 func uniform(t float64) threshold.Threshold {
 	return threshold.Threshold{Axes: detection.Axes, Default: rates(t, t)}
@@ -984,7 +984,7 @@ func TestDiff(t *testing.T) {
 			// Locks override forwarding from Diff into diffDetection. The
 			// "ubuntu_2204=removed:70" override lifts every source in that
 			// file above its removed rate so the whole Diff returns nil. If
-			// Diff stops forwarding the config, the override has no effect
+			// Diff stops forwarding the threshold, the override has no effect
 			// and ubuntu_2204 fails again.
 			name: "file override forwarded through to per-source resolution",
 			args: args{
@@ -1066,10 +1066,10 @@ func TestDiff(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// A config that declares fewer axes than the command judges is
+			// A threshold that declares fewer axes than the command judges is
 			// rejected: the judged axes are fixed by the command, so a
 			// caller cannot disable the removed check by omitting it.
-			name: "config with missing axes is an error",
+			name: "threshold with missing axes is an error",
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect, // 66.7% removed
