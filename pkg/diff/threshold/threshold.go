@@ -159,18 +159,20 @@ func Rate(baseline, n int) float64 {
 
 // Format renders rates in axes order as "a% / b% / c%", wrapping in bold
 // the ones above their threshold so a FAIL row shows which axis tripped.
-// An exceeded rate is printed with enough decimals to read as different
-// from its (one-decimal) threshold, so 10.04% over 10% renders as
-// "**10.04%**" rather than a "**10.0%**" that looks equal to "10.0%".
+// Each rate is printed with enough decimals to agree with the judgement
+// against its rendered threshold (see formatRate), so 10.04% over 10%
+// renders as "**10.04%**" rather than a "**10.0%**" that looks equal to
+// "10.0%", and 10.05% under 10.051% renders as "10.050%" rather than a
+// "10.1%" that looks above it.
 func Format(axes []Axis, rates, thresholds Rates) string {
 	s := ""
 	for i, a := range axes {
 		if i > 0 {
 			s += " / "
 		}
-		cell := fmt.Sprintf("%.1f%%", rates[a])
+		cell := formatRate(rates[a], thresholds[a]) + "%"
 		if rates[a] > thresholds[a] {
-			cell = "**" + formatExceededRate(rates[a], thresholds[a]) + "%**"
+			cell = "**" + cell + "**"
 		}
 		s += cell
 	}
@@ -181,7 +183,7 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 // just enough decimals for the inequality to read as true: at one decimal
 // 10.010% over a 10% threshold would print as "10.0% > 10.0%".
 func FormatExceeded(rate, threshold float64) string {
-	return formatExceededRate(rate, threshold) + "% > " + formatThreshold(threshold) + "%"
+	return formatRate(rate, threshold) + "% > " + formatThreshold(threshold) + "%"
 }
 
 // formatThreshold renders a threshold exactly: an operator-supplied value
@@ -196,22 +198,25 @@ func formatThreshold(t float64) string {
 	return s
 }
 
-// formatExceededRate renders a rate known to exceed its threshold with the
-// smallest precision — at least one decimal and at least the threshold's
-// own — at which the printed value is still numerically above the printed
-// threshold, so the report never shows a rate that looks at or below the
-// threshold it failed. Precision grows up to six decimals, past which the
-// rate is printed with %g.
-func formatExceededRate(rate, threshold float64) string {
+// formatRate renders a rate with the smallest precision — at least one
+// decimal and at least the threshold's own — at which the printed value
+// sits on the same side of the printed threshold as the judgement: above
+// it when the rate exceeds the threshold, at or below it otherwise. The
+// report thus never shows a failing rate that looks at or below its
+// threshold, nor a passing rate that looks above it. Precision grows up to
+// six decimals, past which the rate is printed with %g.
+func formatRate(rate, threshold float64) string {
 	ts := formatThreshold(threshold)
 	tv, _ := strconv.ParseFloat(ts, 64)
+	exceeded := rate > threshold
 	p := 1
 	if _, frac, _ := strings.Cut(ts, "."); len(frac) > p {
 		p = len(frac)
 	}
 	for ; p <= 6; p++ {
 		rs := fmt.Sprintf("%.*f", p, rate)
-		if rv, _ := strconv.ParseFloat(rs, 64); rv > tv {
+		rv, _ := strconv.ParseFloat(rs, 64)
+		if (rv > tv) == exceeded {
 			return rs
 		}
 	}

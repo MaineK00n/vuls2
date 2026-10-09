@@ -254,6 +254,14 @@ func TestFormat(t *testing.T) {
 	if got, want := threshold.Format(all, near, nearT), "**10.04%** / 10.0% / 0.0%"; got != want {
 		t.Errorf("Format() = %q, want %q", got, want)
 	}
+	// A passing rate that one-decimal rounding would lift above its
+	// rendered threshold also gets more decimals: 10.05 under 10.051 must
+	// not print as "10.1%" beside "10.051%".
+	under := threshold.Rates{threshold.Added: threshold.Rate(2000, 201), threshold.Changed: 10.04, threshold.Removed: 0}
+	underT := threshold.Rates{threshold.Added: 10.051, threshold.Changed: 10.05, threshold.Removed: 0}
+	if got, want := threshold.Format(all, under, underT), "10.050% / 10.04% / 0.0%"; got != want {
+		t.Errorf("Format() = %q, want %q", got, want)
+	}
 	if got, want := threshold.FormatThresholds(all, thresholds), "30.0% / 10.0% / 5.0%"; got != want {
 		t.Errorf("FormatThresholds() = %q, want %q", got, want)
 	}
