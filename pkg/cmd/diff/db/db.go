@@ -24,8 +24,12 @@ func NewCmd() *cobra.Command {
 		# 30%, or changes or removes more than 10%, of its units
 		$ vuls diff db ./baseline.db ./target.db
 
-		# tighten removals for every (ecosystem, source) pair
-		$ vuls diff db ./baseline.db ./target.db --removed-rate-threshold 5
+		# tighten removals for every (ecosystem, source) pair; axes not
+		# named keep their default
+		$ vuls diff db ./baseline.db ./target.db --rate-threshold removed:5
+
+		# set every axis explicitly (comma-separated or repeated)
+		$ vuls diff db ./baseline.db ./target.db --rate-threshold added:50,changed:10,removed:5
 
 		# relax additions for ubuntu:26.04 (new-distro backfill) and removals
 		# for a single source; <ecosystem>/<source> takes precedence over

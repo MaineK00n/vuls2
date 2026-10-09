@@ -30,12 +30,13 @@ func NewCmd() *cobra.Command {
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0
 
-		# tighten removals for every (file, source) pair
+		# tighten removals for every (file, source) pair; axes not named
+		# keep their default
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
-		    --removed-rate-threshold 1
+		    --rate-threshold removed:1
 
 		# relax additions for debian_13 (new CVEs landing) without weakening
 		# the removal default

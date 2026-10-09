@@ -262,3 +262,49 @@ func TestParseAxes(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDefaults(t *testing.T) {
+	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
+	tests := []struct {
+		name    string
+		entries []string
+		axes    []threshold.Axis
+		want    threshold.Rates
+		wantErr bool
+	}{
+		{name: "nil entries", entries: nil, axes: all, want: nil},
+		{name: "single axis", entries: []string{"removed:5"}, axes: all, want: threshold.Rates{threshold.Removed: 5}},
+		{
+			name:    "every axis",
+			entries: []string{"added:50", "changed:10", "removed:5"},
+			axes:    all,
+			want:    threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5},
+		},
+		{name: "whitespace tolerated", entries: []string{" removed : 5 "}, axes: all, want: threshold.Rates{threshold.Removed: 5}},
+		{name: "duplicate axis last wins", entries: []string{"removed:5", "removed:1"}, axes: all, want: threshold.Rates{threshold.Removed: 1}},
+		{name: "explicit zero kept", entries: []string{"removed:0"}, axes: all, want: threshold.Rates{threshold.Removed: 0}},
+		{name: "missing separator", entries: []string{"removed"}, axes: all, wantErr: true},
+		{name: "bare rate", entries: []string{"10"}, axes: all, wantErr: true},
+		{name: "override form refused", entries: []string{"debian_13=added:50"}, axes: all, wantErr: true},
+		{name: "empty axis", entries: []string{":5"}, axes: all, wantErr: true},
+		{name: "unknown axis", entries: []string{"deleted:5"}, axes: all, wantErr: true},
+		{name: "axis not judged by this command", entries: []string{"changed:5"}, axes: []threshold.Axis{threshold.Added, threshold.Removed}, wantErr: true},
+		{name: "non-numeric rate", entries: []string{"removed:abc"}, axes: all, wantErr: true},
+		{name: "negative rate", entries: []string{"removed:-5"}, axes: all, wantErr: true},
+		{name: "NaN rate", entries: []string{"removed:NaN"}, axes: all, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := override.ParseDefaults(tt.entries, tt.axes)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseDefaults() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("ParseDefaults() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

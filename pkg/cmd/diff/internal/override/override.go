@@ -2,12 +2,14 @@
 // into maps. Shared between the diff db and diff detection commands so both
 // accept the same input syntax.
 //
-// Two syntaxes exist:
+// Three syntaxes exist:
 //
 //   - `<key>=<rate>` for the legacy `--change-rate-threshold-override` flag
 //     (Parse), where the rate applies to every axis alike;
 //   - `<key>=<axis>:<rate>` for `--rate-threshold-override` (ParseAxes),
-//     where the rate applies to the named axis only.
+//     where the rate applies to the named axis only;
+//   - `<axis>:<rate>` for `--rate-threshold` (ParseDefaults), the same
+//     entry without a key: the default of the named axis.
 package override
 
 import (
@@ -95,6 +97,41 @@ func ParseAxes(entries []string, axes []threshold.Axis) (map[threshold.Axis]map[
 		m[a][k] = f
 	}
 	return m, nil
+}
+
+// ParseDefaults converts a slice of "<axis>:<rate>" entries — the default
+// threshold of each named axis — into Rates. Axes not mentioned are absent
+// from the result so the caller can keep its built-in default for them.
+// The rules match ParseAxes: axes lists the accepted axes, whitespace is
+// tolerated, a duplicate axis warns and the last value wins. An entry
+// carrying a "=" is refused with a hint, since that is the override form.
+func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	r := make(threshold.Rates, len(axes))
+	for _, e := range entries {
+		if strings.Contains(e, "=") {
+			return nil, errors.Errorf("unexpected threshold entry. expected: %q (a per-target override belongs to --rate-threshold-override), actual: %q", "<axis>:<rate>", e)
+		}
+		as, rs, ok := strings.Cut(e, ":")
+		if !ok {
+			return nil, errors.Errorf("unexpected threshold entry. expected: %q, actual: %q", "<axis>:<rate>", e)
+		}
+		a := threshold.Axis(strings.TrimSpace(as))
+		if !containsAxis(axes, a) {
+			return nil, errors.Errorf("unexpected threshold axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
+		}
+		f, err := parseRate(strings.TrimSpace(rs), e)
+		if err != nil {
+			return nil, err
+		}
+		if _, dup := r[a]; dup {
+			slog.Warn("duplicate threshold axis, last wins", "axis", a, "rate", f)
+		}
+		r[a] = f
+	}
+	return r, nil
 }
 
 func containsAxis(axes []threshold.Axis, a threshold.Axis) bool {

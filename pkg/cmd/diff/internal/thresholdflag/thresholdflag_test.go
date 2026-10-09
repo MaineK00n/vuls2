@@ -32,10 +32,11 @@ func TestConfig(t *testing.T) {
 			want: threshold.Config{Axes: all, Default: allDefaults},
 		},
 		{
+			// Named axes replace their built-in default; added keeps 30.
 			name: "per-axis flags",
 			axes: all,
 			argv: []string{
-				"--changed-rate-threshold", "5", "--removed-rate-threshold", "0",
+				"--rate-threshold", "changed:5", "--rate-threshold", "removed:0",
 				"--rate-threshold-override", "ubuntu:26.04=added:80",
 				"--rate-threshold-override", "cpe/cisco-json=removed:25,microsoft/microsoft-msuc=added:35",
 			},
@@ -49,11 +50,37 @@ func TestConfig(t *testing.T) {
 			},
 		},
 		{
-			// Only the declared axes get a flag.
-			name:    "changed flag absent on a two-axis command",
+			name: "comma-separated entries",
+			axes: all,
+			argv: []string{"--rate-threshold", "added:50,changed:10,removed:5"},
+			want: threshold.Config{Axes: all, Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5}},
+		},
+		{
+			// Only the declared axes are accepted.
+			name:    "changed axis rejected on a two-axis command",
 			axes:    two,
-			argv:    []string{"--changed-rate-threshold", "10"},
+			argv:    []string{"--rate-threshold", "changed:10"},
 			wantErr: true,
+		},
+		{
+			name:    "override form rejected in --rate-threshold",
+			axes:    all,
+			argv:    []string{"--rate-threshold", "ubuntu:26.04=added:50"},
+			wantErr: true,
+		},
+		{
+			name:    "bare rate rejected in --rate-threshold",
+			axes:    all,
+			argv:    []string{"--rate-threshold", "10"},
+			wantErr: true,
+		},
+		{
+			// An empty value means "no entries": every axis keeps its
+			// built-in default.
+			name: "empty --rate-threshold keeps defaults",
+			axes: all,
+			argv: []string{"--rate-threshold", ""},
+			want: threshold.Config{Axes: all, Default: allDefaults},
 		},
 		{
 			name: "two-axis defaults",
@@ -64,7 +91,7 @@ func TestConfig(t *testing.T) {
 		{
 			name: "two-axis flag overrides a default",
 			axes: two,
-			argv: []string{"--removed-rate-threshold", "1"},
+			argv: []string{"--rate-threshold", "removed:1"},
 			want: threshold.Config{Axes: two, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1}},
 		},
 		{
@@ -99,7 +126,7 @@ func TestConfig(t *testing.T) {
 		{
 			name:    "legacy threshold with per-axis threshold",
 			axes:    all,
-			argv:    []string{"--change-rate-threshold", "10", "--removed-rate-threshold", "10"},
+			argv:    []string{"--change-rate-threshold", "10", "--rate-threshold", "removed:10"},
 			wantErr: true,
 		},
 		{
@@ -112,7 +139,7 @@ func TestConfig(t *testing.T) {
 			// Appearing counts as used even when the value is empty.
 			name:    "empty legacy override with per-axis threshold",
 			axes:    all,
-			argv:    []string{"--change-rate-threshold-override", "", "--removed-rate-threshold", "10"},
+			argv:    []string{"--change-rate-threshold-override", "", "--rate-threshold", "removed:10"},
 			wantErr: true,
 		},
 		{
