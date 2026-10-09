@@ -944,6 +944,16 @@ func TestDiff(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// No threshold option at all judges on Defaults (added 30 /
+			// removed 5): ubuntu_2204's 66.7% removal fails.
+			name: "no options use Defaults",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+			},
+			wantErr: true,
+		},
+		{
 			// A generous added threshold alone does not excuse removals.
 			name: "added threshold does not cover removals",
 			args: args{

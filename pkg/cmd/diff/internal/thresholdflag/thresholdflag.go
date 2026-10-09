@@ -33,23 +33,15 @@ type Flags struct {
 	legacyOverrides []string
 }
 
-// Defaults are the built-in per-axis thresholds (%): additions are the
-// routine pattern of vulnerability data and get a generous default;
-// changes and removals are tolerated only when asked for explicitly.
-var Defaults = threshold.Rates{
-	threshold.Added:   30,
-	threshold.Changed: 0,
-	threshold.Removed: 0,
-}
-
-// Register adds the flags for axes to fs. targetDesc names the judged pair
-// (e.g. "(ecosystem, data source)") and keyDesc describes the override key
-// vocabulary; both are spliced into the help text.
-func Register(fs *pflag.FlagSet, axes []threshold.Axis, targetDesc, keyDesc string) *Flags {
+// Register adds the flags for axes to fs, with defaults as the built-in
+// threshold of each axis (the command's Defaults). targetDesc names the
+// judged pair (e.g. "(ecosystem, data source)") and keyDesc describes the
+// override key vocabulary; both are spliced into the help text.
+func Register(fs *pflag.FlagSet, axes []threshold.Axis, defaults threshold.Rates, targetDesc, keyDesc string) *Flags {
 	f := &Flags{axes: axes, defaults: make(map[threshold.Axis]*float64, len(axes))}
 	for _, a := range axes {
 		v := new(float64)
-		*v = Defaults[a]
+		*v = defaults[a]
 		f.defaults[a] = v
 		fs.Float64Var(v, string(a)+"-rate-threshold", *v,
 			fmt.Sprintf("%s rate (%%) threshold per %s; exit non-zero if exceeded", a, targetDesc))

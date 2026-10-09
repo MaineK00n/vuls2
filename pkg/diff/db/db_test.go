@@ -681,6 +681,25 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// No threshold option at all judges on Defaults (added 30 /
+			// changed 10 / removed 10): identical DBs pass, a doubled
+			// ecosystem (added 100%) fails.
+			name: "no options use Defaults (pass)",
+			args: args{
+				baselineFixtures: []string{"testdata/fixtures/baseline"},
+				targetFixtures:   []string{"testdata/fixtures/target-same"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "no options use Defaults (fail)",
+			args: args{
+				baselineFixtures: []string{"testdata/fixtures/baseline"},
+				targetFixtures:   []string{"testdata/fixtures/target-added"},
+			},
+			wantErr: true,
+		},
+		{
 			// Target-only ecosystems are excluded from change rate calculation (baseline-only policy).
 			name: "pass target-only ecosystem ignored",
 			args: args{

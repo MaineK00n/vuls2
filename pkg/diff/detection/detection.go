@@ -26,6 +26,12 @@ import (
 // no changed axis: a CVE is either detected on both sides or on one.
 var Axes = []threshold.Axis{threshold.Added, threshold.Removed}
 
+// Defaults are the built-in per-axis thresholds (%) applied when no
+// threshold option is given: additions are the routine pattern of
+// vulnerability data and get a generous default; removals keep the value
+// the single-threshold guard ran with.
+var Defaults = threshold.Rates{threshold.Added: 30, threshold.Removed: 5}
+
 type options struct {
 	// thresholds is the per-axis configuration (WithThresholds).
 	thresholds *threshold.Config
@@ -216,7 +222,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 // config resolves the threshold configuration from the options: the
 // per-axis config when given, else the legacy single threshold mapped onto
-// every axis, else all-zero defaults. Mixing both styles is an error, and
+// every axis, else Defaults. Mixing both styles is an error, and
 // so is a config whose Axes differ from this command's Axes — the judged
 // axes are fixed by the command, not by the caller, so a config that omits
 // an axis cannot silently disable its check.
@@ -227,8 +233,10 @@ func (o *options) config() (threshold.Config, error) {
 		return threshold.Config{}, errors.New("unexpected threshold options. expected: either WithThresholds or WithChangeRateThreshold/WithChangeRateThresholdOverrides, actual: both")
 	case o.thresholds != nil:
 		cfg = *o.thresholds
-	default:
+	case o.legacySet:
 		cfg = threshold.Legacy(Axes, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	default:
+		cfg = threshold.Config{Axes: Axes, Default: Defaults}
 	}
 	if !slices.Equal(cfg.Axes, Axes) {
 		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)

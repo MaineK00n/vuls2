@@ -20,25 +20,22 @@ func NewCmd() *cobra.Command {
 		Use:   "db <baseline-db> <target-db>",
 		Short: "compare detection data directly between two vuls DBs",
 		Example: heredoc.Doc(`
-		# tolerate up to 30% additions (the default) but fail when any data
-		# source in any ecosystem changes or removes more than 10% of its units
-		$ vuls diff db ./baseline.db ./target.db \
-		    --changed-rate-threshold 10 \
-		    --removed-rate-threshold 10
+		# defaults: fail when any data source in any ecosystem adds more than
+		# 30%, or changes or removes more than 10%, of its units
+		$ vuls diff db ./baseline.db ./target.db
+
+		# tighten removals for every (ecosystem, source) pair
+		$ vuls diff db ./baseline.db ./target.db --removed-rate-threshold 5
 
 		# relax additions for ubuntu:26.04 (new-distro backfill) and removals
 		# for a single source; <ecosystem>/<source> takes precedence over
 		# <ecosystem>, and each override touches only the axis it names
 		$ vuls diff db ./baseline.db ./target.db \
-		    --changed-rate-threshold 10 \
-		    --removed-rate-threshold 10 \
 		    --rate-threshold-override ubuntu:26.04=added:80 \
 		    --rate-threshold-override cpe/cisco-json=removed:25
 
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
-		    --changed-rate-threshold 10 \
-		    --removed-rate-threshold 10 \
 		    --rate-threshold-override 'ubuntu:26.04=added:80,cpe/cisco-json=removed:25'
 
 		# legacy single-threshold form (deprecated): one value applied to
@@ -59,7 +56,7 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes,
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes, diffdb.Defaults,
 		"(ecosystem, data source)",
 		"<ecosystem> (all sources in the ecosystem, e.g. ubuntu:26.04) or <ecosystem>/<source> (single source, e.g. cpe/cisco-json, wins over the ecosystem key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
