@@ -165,25 +165,22 @@ func Rate(baseline, n int) float64 {
 // "10.0%", and 10.05% under 10.051% renders as "10.050%" rather than a
 // "10.1%" that looks above it.
 func Format(axes []Axis, rates, thresholds Rates) string {
-	s := ""
-	for i, a := range axes {
-		if i > 0 {
-			s += " / "
-		}
-		cell := formatRate(rates[a], thresholds[a]) + "%"
+	cells := make([]string, 0, len(axes))
+	for _, a := range axes {
+		cell := fmt.Sprintf("%s%%", formatRate(rates[a], thresholds[a]))
 		if rates[a] > thresholds[a] {
-			cell = "**" + cell + "**"
+			cell = fmt.Sprintf("**%s**", cell)
 		}
-		s += cell
+		cells = append(cells, cell)
 	}
-	return s
+	return strings.Join(cells, " / ")
 }
 
 // FormatExceeded renders "rate% > threshold%" for an exceeded axis with
 // just enough decimals for the inequality to read as true: at one decimal
 // 10.010% over a 10% threshold would print as "10.0% > 10.0%".
 func FormatExceeded(rate, threshold float64) string {
-	return formatRate(rate, threshold) + "% > " + formatThreshold(threshold) + "%"
+	return fmt.Sprintf("%s%% > %s%%", formatRate(rate, threshold), formatThreshold(threshold))
 }
 
 // formatThreshold renders a threshold exactly: an operator-supplied value
@@ -225,14 +222,11 @@ func formatRate(rate, threshold float64) string {
 
 // FormatThresholds renders thresholds in axes order as "a% / b% / c%".
 func FormatThresholds(axes []Axis, thresholds Rates) string {
-	s := ""
-	for i, a := range axes {
-		if i > 0 {
-			s += " / "
-		}
-		s += formatThreshold(thresholds[a]) + "%"
+	cells := make([]string, 0, len(axes))
+	for _, a := range axes {
+		cells = append(cells, fmt.Sprintf("%s%%", formatThreshold(thresholds[a])))
 	}
-	return s
+	return strings.Join(cells, " / ")
 }
 
 // Max returns the largest rate over axes (0 when none).

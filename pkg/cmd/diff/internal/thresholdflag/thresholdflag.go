@@ -43,7 +43,7 @@ func Register(fs *pflag.FlagSet, axes []threshold.Axis, defaults threshold.Rates
 		v := new(float64)
 		*v = defaults[a]
 		f.defaults[a] = v
-		fs.Float64Var(v, string(a)+"-rate-threshold", *v,
+		fs.Float64Var(v, flagName(a), *v,
 			fmt.Sprintf("%s rate (%%) threshold per %s; exit non-zero if exceeded", a, targetDesc))
 	}
 	fs.StringSliceVar(&f.overrides, "rate-threshold-override", nil,
@@ -66,7 +66,7 @@ func (f *Flags) Config(fs *pflag.FlagSet) (threshold.Config, error) {
 	legacyUsed := fs.Changed("change-rate-threshold") || fs.Changed("change-rate-threshold-override")
 	axisUsed := fs.Changed("rate-threshold-override")
 	for _, a := range f.axes {
-		axisUsed = axisUsed || fs.Changed(string(a)+"-rate-threshold")
+		axisUsed = axisUsed || fs.Changed(flagName(a))
 	}
 
 	switch {
@@ -106,6 +106,12 @@ func (f *Flags) legacyOverrideEquivalent(k, r string) string {
 		parts = append(parts, fmt.Sprintf("%s=%s:%s", k, a, r))
 	}
 	return strings.Join(parts, ",")
+}
+
+// flagName is the per-axis default threshold flag, e.g.
+// "--removed-rate-threshold".
+func flagName(a threshold.Axis) string {
+	return fmt.Sprintf("%s-rate-threshold", a)
 }
 
 func axisList(axes []threshold.Axis) string {
