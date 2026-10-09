@@ -108,9 +108,10 @@ func containsAxis(axes []threshold.Axis, a threshold.Axis) bool {
 
 // parseRate parses a percentage, refusing non-numeric, non-finite and
 // negative values. strconv.ParseFloat happily accepts "NaN" / "Inf"; both
-// produce surprising downstream behavior (NaN: every comparison false,
-// every diff FAILs even when within threshold; Inf: every diff PASSes
-// regardless of rate), so they are refused up front.
+// produce surprising downstream behavior (the judgement is `rate >
+// threshold`, so a NaN threshold makes every comparison false and every
+// diff PASSes however large the change; +Inf likewise PASSes everything),
+// so they are refused up front.
 func parseRate(v, entry string) (float64, error) {
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {

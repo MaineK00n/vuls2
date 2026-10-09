@@ -873,6 +873,21 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// A config that declares fewer axes than the command judges is
+			// rejected: the judged axes are fixed by the command, so a
+			// caller cannot disable the removed check by omitting it.
+			name: "config with missing axes is an error",
+			args: args{
+				baselineFixtures: []string{"testdata/fixtures/target-added"},
+				targetFixtures:   []string{"testdata/fixtures/baseline"}, // 50% removed
+				opts: []db.Option{db.WithThresholds(threshold.Config{
+					Axes:    []threshold.Axis{threshold.Added},
+					Default: threshold.Rates{threshold.Added: 100},
+				})},
+			},
+			wantErr: true,
+		},
+		{
 			// An override on an axis this command does not judge is a
 			// configuration error, not silently ignored.
 			name: "override on unknown axis is an error",

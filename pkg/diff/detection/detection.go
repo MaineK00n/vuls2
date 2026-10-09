@@ -216,7 +216,10 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 // config resolves the threshold configuration from the options: the
 // per-axis config when given, else the legacy single threshold mapped onto
-// every axis, else all-zero defaults. Mixing both styles is an error.
+// every axis, else all-zero defaults. Mixing both styles is an error, and
+// so is a config whose Axes differ from this command's Axes — the judged
+// axes are fixed by the command, not by the caller, so a config that omits
+// an axis cannot silently disable its check.
 func (o *options) config() (threshold.Config, error) {
 	var cfg threshold.Config
 	switch {
@@ -226,6 +229,9 @@ func (o *options) config() (threshold.Config, error) {
 		cfg = *o.thresholds
 	default:
 		cfg = threshold.Legacy(Axes, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	}
+	if !slices.Equal(cfg.Axes, Axes) {
+		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)
 	}
 	if err := cfg.Validate(); err != nil {
 		return threshold.Config{}, errors.Wrap(err, "validate thresholds")
@@ -473,8 +479,9 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 
 // diffDetection builds the FileDiff of one scan result file from its raw
 // per-source CVE ID collections. Per-source thresholds are resolved per
-// axis from cfg ("<file>/<source>" > "<file>" > default). Parallels
-// `diffEcosystem` on the db side.
+// axis from cfg ("<file>/<source>" > "<file>" > default) and judged on this
+// package's Axes; cfg.Axes is expected to equal Axes (Diff enforces it).
+// Parallels `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
 // score, affected packages, CVSS, exploit/KEV metadata, etc.) is not diffed.
@@ -508,7 +515,7 @@ func diffDetection(name string, ids cveIDs, cfg threshold.Config) FileDiff {
 			threshold.Removed: threshold.Rate(len(sd.BaselineIDs), len(sd.Removed)),
 		}
 		sd.Thresholds = cfg.Resolve(fmt.Sprintf("%s/%s", name, sid), name)
-		sd.Pass = len(threshold.Exceeded(cfg.Axes, sd.Rates, sd.Thresholds)) == 0
+		sd.Pass = len(threshold.Exceeded(Axes, sd.Rates, sd.Thresholds)) == 0
 		d.Sources = append(d.Sources, sd)
 	}
 	d.Pass = !slices.ContainsFunc(d.Sources, func(sd SourceDiff) bool { return !sd.Pass })

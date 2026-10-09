@@ -1101,6 +1101,21 @@ func TestDiff(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// A config that declares fewer axes than the command judges is
+			// rejected: the judged axes are fixed by the command, so a
+			// caller cannot disable the removed check by omitting it.
+			name: "config with missing axes is an error",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect, // 66.7% removed
+				opts: []detection.Option{detection.WithThresholds(threshold.Config{
+					Axes:    []threshold.Axis{threshold.Added},
+					Default: threshold.Rates{threshold.Added: 100},
+				})},
+			},
+			wantErr: true,
+		},
+		{
 			// detection has no changed axis; an override on it is a
 			// configuration error, not silently ignored.
 			name: "override on the changed axis is an error",

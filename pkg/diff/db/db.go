@@ -245,7 +245,10 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 
 // config resolves the threshold configuration from the options: the
 // per-axis config when given, else the legacy single threshold mapped onto
-// every axis, else all-zero defaults. Mixing both styles is an error.
+// every axis, else all-zero defaults. Mixing both styles is an error, and
+// so is a config whose Axes differ from this command's Axes — the judged
+// axes are fixed by the command, not by the caller, so a config that omits
+// an axis cannot silently disable its check.
 func (o *options) config() (threshold.Config, error) {
 	var cfg threshold.Config
 	switch {
@@ -255,6 +258,9 @@ func (o *options) config() (threshold.Config, error) {
 		cfg = *o.thresholds
 	default:
 		cfg = threshold.Legacy(Axes, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	}
+	if !slices.Equal(cfg.Axes, Axes) {
+		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)
 	}
 	if err := cfg.Validate(); err != nil {
 		return threshold.Config{}, errors.Wrap(err, "validate thresholds")
@@ -340,7 +346,8 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Per-source thresholds are
 // resolved per axis from cfg ("<ecosystem>/<source>" > "<ecosystem>" >
-// default).
+// default) and judged on this package's Axes; cfg.Axes is expected to
+// equal Axes (DiffBoltDB enforces it).
 func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, cfg threshold.Config) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
@@ -391,8 +398,8 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		sd.DetectionRates = rates(sd.BaselineCriterions, sd.AddedCriterions, sd.ChangedCriterions, sd.RemovedCriterions)
 		sd.KBRates = rates(sd.BaselineKBKeys, len(sd.AddedKBs), len(sd.ChangedKBs), len(sd.RemovedKBs))
 		sd.Thresholds = cfg.Resolve(fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
-		sd.Pass = len(threshold.Exceeded(cfg.Axes, sd.DetectionRates, sd.Thresholds)) == 0 &&
-			len(threshold.Exceeded(cfg.Axes, sd.KBRates, sd.Thresholds)) == 0
+		sd.Pass = len(threshold.Exceeded(Axes, sd.DetectionRates, sd.Thresholds)) == 0 &&
+			len(threshold.Exceeded(Axes, sd.KBRates, sd.Thresholds)) == 0
 		diff.Sources = append(diff.Sources, sd)
 	}
 	diff.Pass = !slices.ContainsFunc(diff.Sources, func(s SourceDiff) bool { return !s.Pass })

@@ -94,9 +94,10 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// checkRate rejects NaN / ±Inf / negative rates. NaN makes every comparison
-// false (every diff FAILs even within threshold), Inf makes every diff PASS
-// regardless of rate, and a negative threshold can never be met.
+// checkRate rejects NaN / ±Inf / negative rates. The judgement is
+// `rate > threshold`, so a NaN threshold makes every comparison false and
+// lets every diff PASS however large the change; +Inf likewise PASSes
+// everything; a negative threshold can never be met.
 func checkRate(f float64) error {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return errors.Errorf("unexpected rate. expected: finite, actual: %v", f)
