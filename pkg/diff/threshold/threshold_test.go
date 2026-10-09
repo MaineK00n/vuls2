@@ -244,33 +244,86 @@ func TestFormatExceeded(t *testing.T) {
 }
 
 func TestFormat(t *testing.T) {
-	rates := threshold.Rates{threshold.Added: 12.34, threshold.Changed: 0, threshold.Removed: 10}
-	thresholds := threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 5}
-	if got, want := threshold.Format(all, rates, thresholds), "12.3% / 0.0% / **10.0%**"; got != want {
-		t.Errorf("Format() = %q, want %q", got, want)
+	tests := []struct {
+		name       string
+		rates      threshold.Rates
+		thresholds threshold.Rates
+		want       string
+	}{
+		{
+			name:       "exceeded cell in bold",
+			rates:      threshold.Rates{threshold.Added: 12.34, threshold.Changed: 0, threshold.Removed: 10},
+			thresholds: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 5},
+			want:       "12.3% / 0.0% / **10.0%**",
+		},
+		{
+			// An exceeded rate that rounds to its threshold at one decimal
+			// gets more decimals; the non-exceeded cells keep one.
+			name:       "exceeded rate near threshold grows",
+			rates:      threshold.Rates{threshold.Added: 10.04, threshold.Changed: 9.96, threshold.Removed: 0},
+			thresholds: threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 0},
+			want:       "**10.04%** / 10.0% / 0.0%",
+		},
+		{
+			// A passing rate that one-decimal rounding would lift above its
+			// rendered threshold also gets more decimals: 10.05 under 10.051
+			// must not print as "10.1%" beside "10.051%".
+			name:       "passing rate near threshold grows",
+			rates:      threshold.Rates{threshold.Added: threshold.Rate(2000, 201), threshold.Changed: 10.04, threshold.Removed: 0},
+			thresholds: threshold.Rates{threshold.Added: 10.051, threshold.Changed: 10.05, threshold.Removed: 0},
+			want:       "10.050% / 10.04% / 0.0%",
+		},
 	}
-	// An exceeded rate that rounds to its threshold at one decimal gets
-	// more decimals; the non-exceeded cells keep one.
-	near := threshold.Rates{threshold.Added: 10.04, threshold.Changed: 9.96, threshold.Removed: 0}
-	nearT := threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 0}
-	if got, want := threshold.Format(all, near, nearT), "**10.04%** / 10.0% / 0.0%"; got != want {
-		t.Errorf("Format() = %q, want %q", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := threshold.Format(all, tt.rates, tt.thresholds); got != tt.want {
+				t.Errorf("Format() = %q, want %q", got, tt.want)
+			}
+		})
 	}
-	// A passing rate that one-decimal rounding would lift above its
-	// rendered threshold also gets more decimals: 10.05 under 10.051 must
-	// not print as "10.1%" beside "10.051%".
-	under := threshold.Rates{threshold.Added: threshold.Rate(2000, 201), threshold.Changed: 10.04, threshold.Removed: 0}
-	underT := threshold.Rates{threshold.Added: 10.051, threshold.Changed: 10.05, threshold.Removed: 0}
-	if got, want := threshold.Format(all, under, underT), "10.050% / 10.04% / 0.0%"; got != want {
-		t.Errorf("Format() = %q, want %q", got, want)
+}
+
+func TestFormatThresholds(t *testing.T) {
+	tests := []struct {
+		name       string
+		thresholds threshold.Rates
+		want       string
+	}{
+		{
+			name:       "whole numbers at one decimal",
+			thresholds: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 5},
+			want:       "30.0% / 10.0% / 5.0%",
+		},
+		{
+			name:       "decimal threshold keeps its digits",
+			thresholds: threshold.Rates{threshold.Added: 10.06, threshold.Changed: 12.5, threshold.Removed: 0},
+			want:       "10.06% / 12.5% / 0.0%",
+		},
 	}
-	if got, want := threshold.FormatThresholds(all, thresholds), "30.0% / 10.0% / 5.0%"; got != want {
-		t.Errorf("FormatThresholds() = %q, want %q", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := threshold.FormatThresholds(all, tt.thresholds); got != tt.want {
+				t.Errorf("FormatThresholds() = %q, want %q", got, tt.want)
+			}
+		})
 	}
-	if got, want := threshold.FormatThresholds(all, threshold.Rates{threshold.Added: 10.06, threshold.Changed: 12.5, threshold.Removed: 0}), "10.06% / 12.5% / 0.0%"; got != want {
-		t.Errorf("FormatThresholds() = %q, want %q", got, want)
+}
+
+func TestMax(t *testing.T) {
+	tests := []struct {
+		name  string
+		rates threshold.Rates
+		want  float64
+	}{
+		{name: "largest over axes", rates: threshold.Rates{threshold.Added: 12.34, threshold.Changed: 0, threshold.Removed: 10}, want: 12.34},
+		{name: "unset axes count as 0", rates: threshold.Rates{threshold.Changed: 3}, want: 3},
+		{name: "nil is 0", rates: nil, want: 0},
 	}
-	if got, want := threshold.Max(all, rates), 12.34; got != want {
-		t.Errorf("Max() = %v, want %v", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := threshold.Max(all, tt.rates); got != tt.want {
+				t.Errorf("Max() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
