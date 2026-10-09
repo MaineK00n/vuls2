@@ -127,7 +127,6 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseAxes(t *testing.T) {
-	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name    string
 		entries []string
@@ -138,13 +137,13 @@ func TestParseAxes(t *testing.T) {
 		{
 			name:    "nil entries",
 			entries: nil,
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    nil,
 		},
 		{
 			name:    "single entry",
 			entries: []string{"ubuntu:26.04=added:50"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    map[string]threshold.Rates{"ubuntu:26.04": {threshold.Added: 50}},
 		},
 		{
@@ -152,7 +151,7 @@ func TestParseAxes(t *testing.T) {
 			// so the axis separator inside the value is unambiguous.
 			name:    "keys with colon and slash, several axes",
 			entries: []string{"ubuntu:26.04=added:50", "cpe/cisco-json=removed:20", "cpe/cisco-json=changed:15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want: map[string]threshold.Rates{
 				"ubuntu:26.04":   {threshold.Added: 50},
 				"cpe/cisco-json": {threshold.Changed: 15, threshold.Removed: 20},
@@ -161,19 +160,19 @@ func TestParseAxes(t *testing.T) {
 		{
 			name:    "whitespace tolerated",
 			entries: []string{"  debian_13 = added : 15 "},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    map[string]threshold.Rates{"debian_13": {threshold.Added: 15}},
 		},
 		{
 			name:    "duplicate key and axis last wins",
 			entries: []string{"debian_13=added:10", "debian_13=added:25"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    map[string]threshold.Rates{"debian_13": {threshold.Added: 25}},
 		},
 		{
 			name:    "explicit zero kept",
 			entries: []string{"strict=removed:0"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    map[string]threshold.Rates{"strict": {threshold.Removed: 0}},
 		},
 		{
@@ -181,37 +180,37 @@ func TestParseAxes(t *testing.T) {
 			// name the axis it relaxes.
 			name:    "missing axis",
 			entries: []string{"debian_13=15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "missing separator",
 			entries: []string{"debian_13"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "empty key",
 			entries: []string{"=added:15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "empty axis",
 			entries: []string{"debian_13=:15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "unknown axis",
 			entries: []string{"debian_13=deleted:15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "axis is case-sensitive",
 			entries: []string{"debian_13=Added:15"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
@@ -224,25 +223,25 @@ func TestParseAxes(t *testing.T) {
 		{
 			name:    "non-numeric rate",
 			entries: []string{"debian_13=added:abc"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "negative rate",
 			entries: []string{"debian_13=added:-5"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "NaN rate",
 			entries: []string{"debian_13=added:NaN"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 		{
 			name:    "Inf rate",
 			entries: []string{"debian_13=added:Inf"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			wantErr: true,
 		},
 	}
@@ -263,7 +262,6 @@ func TestParseAxes(t *testing.T) {
 }
 
 func TestParseDefaults(t *testing.T) {
-	all := []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
 	tests := []struct {
 		name    string
 		entries []string
@@ -271,26 +269,26 @@ func TestParseDefaults(t *testing.T) {
 		want    threshold.Rates
 		wantErr bool
 	}{
-		{name: "nil entries", entries: nil, axes: all, want: nil},
-		{name: "single axis", entries: []string{"removed:5"}, axes: all, want: threshold.Rates{threshold.Removed: 5}},
+		{name: "nil entries", entries: nil, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, want: nil},
+		{name: "single axis", entries: []string{"removed:5"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, want: threshold.Rates{threshold.Removed: 5}},
 		{
 			name:    "every axis",
 			entries: []string{"added:50", "changed:10", "removed:5"},
-			axes:    all,
+			axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			want:    threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5},
 		},
-		{name: "whitespace tolerated", entries: []string{" removed : 5 "}, axes: all, want: threshold.Rates{threshold.Removed: 5}},
-		{name: "duplicate axis last wins", entries: []string{"removed:5", "removed:1"}, axes: all, want: threshold.Rates{threshold.Removed: 1}},
-		{name: "explicit zero kept", entries: []string{"removed:0"}, axes: all, want: threshold.Rates{threshold.Removed: 0}},
-		{name: "missing separator", entries: []string{"removed"}, axes: all, wantErr: true},
-		{name: "bare rate", entries: []string{"10"}, axes: all, wantErr: true},
-		{name: "override form refused", entries: []string{"debian_13=added:50"}, axes: all, wantErr: true},
-		{name: "empty axis", entries: []string{":5"}, axes: all, wantErr: true},
-		{name: "unknown axis", entries: []string{"deleted:5"}, axes: all, wantErr: true},
+		{name: "whitespace tolerated", entries: []string{" removed : 5 "}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, want: threshold.Rates{threshold.Removed: 5}},
+		{name: "duplicate axis last wins", entries: []string{"removed:5", "removed:1"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, want: threshold.Rates{threshold.Removed: 1}},
+		{name: "explicit zero kept", entries: []string{"removed:0"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, want: threshold.Rates{threshold.Removed: 0}},
+		{name: "missing separator", entries: []string{"removed"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "bare rate", entries: []string{"10"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "override form refused", entries: []string{"debian_13=added:50"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "empty axis", entries: []string{":5"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "unknown axis", entries: []string{"deleted:5"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
 		{name: "axis not judged by this command", entries: []string{"changed:5"}, axes: []threshold.Axis{threshold.Added, threshold.Removed}, wantErr: true},
-		{name: "non-numeric rate", entries: []string{"removed:abc"}, axes: all, wantErr: true},
-		{name: "negative rate", entries: []string{"removed:-5"}, axes: all, wantErr: true},
-		{name: "NaN rate", entries: []string{"removed:NaN"}, axes: all, wantErr: true},
+		{name: "non-numeric rate", entries: []string{"removed:abc"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "negative rate", entries: []string{"removed:-5"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
+		{name: "NaN rate", entries: []string{"removed:NaN"}, axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
