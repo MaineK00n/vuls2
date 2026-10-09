@@ -40,15 +40,9 @@ var Axes = []threshold.Axis{threshold.Added, threshold.Changed, threshold.Remove
 var Defaults = threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}
 
 type options struct {
-	// thresholds is the per-axis configuration (WithThresholds).
+	// thresholds is the per-axis configuration (WithThresholds); nil means
+	// Defaults.
 	thresholds *threshold.Config
-
-	// Legacy single-threshold inputs (WithChangeRateThreshold /
-	// WithChangeRateThresholdOverrides); legacySet records that either was
-	// supplied so DiffBoltDB can refuse mixing them with WithThresholds.
-	changeRateThreshold          float64
-	changeRateThresholdOverrides map[string]float64
-	legacySet                    bool
 
 	writer io.Writer
 	debug  bool
@@ -70,40 +64,12 @@ func (o thresholdsOption) apply(opts *options) {
 // source in that ecosystem, or "<ecosystem>/<source ID>" (e.g.
 // "cpe/cisco-json"), which applies to a single source and takes precedence
 // over the ecosystem-wide key. Values are percentages. An axis or key with
-// no override falls back to the config's default for that axis. Cannot be
-// combined with WithChangeRateThreshold / WithChangeRateThresholdOverrides.
+// no override falls back to the config's default for that axis. Without
+// this option the diff judges on Defaults.
 func WithThresholds(c threshold.Config) Option {
 	return thresholdsOption(c)
 }
 
-type changeRateThresholdOption float64
-
-func (o changeRateThresholdOption) apply(opts *options) {
-	opts.changeRateThreshold = float64(o)
-	opts.legacySet = true
-}
-
-// WithChangeRateThreshold supplies the legacy single threshold, applied to
-// every axis alike (see threshold.Legacy). Prefer WithThresholds; this is
-// kept for callers of the pre-axis API and cannot be combined with it.
-func WithChangeRateThreshold(r float64) Option {
-	return changeRateThresholdOption(r)
-}
-
-type changeRateThresholdOverridesOption map[string]float64
-
-func (o changeRateThresholdOverridesOption) apply(opts *options) {
-	opts.changeRateThresholdOverrides = map[string]float64(o)
-	opts.legacySet = true
-}
-
-// WithChangeRateThresholdOverrides supplies legacy overrides of the single
-// threshold, each applied to every axis alike. Keys follow the same
-// vocabulary as WithThresholds. Prefer WithThresholds; this is kept for
-// callers of the pre-axis API and cannot be combined with it.
-func WithChangeRateThresholdOverrides(m map[string]float64) Option {
-	return changeRateThresholdOverridesOption(m)
-}
 
 type writerOption struct{ w io.Writer }
 
@@ -249,23 +215,15 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	return nil
 }
 
-// config resolves the threshold configuration from the options: the
-// per-axis config when given, else the legacy single threshold mapped onto
-// every axis, else Defaults. Mixing both styles is an error, and
-// so is a config whose Axes differ from this command's Axes — the judged
-// axes are fixed by the command, not by the caller, so a config that omits
-// an axis cannot silently disable its check.
+// config resolves the threshold configuration: the per-axis config when
+// given, else Defaults. A config whose Axes differ from this command's
+// Axes is rejected — the judged axes are fixed by the command, not by the
+// caller, so a config that omits an axis cannot silently disable its
+// check.
 func (o *options) config() (threshold.Config, error) {
-	var cfg threshold.Config
-	switch {
-	case o.thresholds != nil && o.legacySet:
-		return threshold.Config{}, errors.New("unexpected threshold options. expected: either WithThresholds or WithChangeRateThreshold/WithChangeRateThresholdOverrides, actual: both")
-	case o.thresholds != nil:
+	cfg := threshold.Config{Axes: Axes, Default: Defaults}
+	if o.thresholds != nil {
 		cfg = *o.thresholds
-	case o.legacySet:
-		cfg = threshold.Legacy(Axes, o.changeRateThreshold, o.changeRateThresholdOverrides)
-	default:
-		cfg = threshold.Config{Axes: Axes, Default: Defaults}
 	}
 	if !slices.Equal(cfg.Axes, Axes) {
 		return threshold.Config{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, cfg.Axes)

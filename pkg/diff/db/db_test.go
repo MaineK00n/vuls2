@@ -844,54 +844,6 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// The legacy single threshold applies to every axis alike:
-			// target-replaced (100% added, 100% removed) passes at 250 and
-			// fails at 10, exactly as the pre-axis judgement did.
-			name: "legacy threshold maps onto every axis (pass)",
-			args: args{
-				baselineFixtures: []string{"testdata/fixtures/baseline"},
-				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts:             []db.Option{db.WithChangeRateThreshold(250)},
-			},
-			wantErr: false,
-		},
-		{
-			name: "legacy threshold maps onto every axis (fail)",
-			args: args{
-				baselineFixtures: []string{"testdata/fixtures/baseline"},
-				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts:             []db.Option{db.WithChangeRateThreshold(10)},
-			},
-			wantErr: true,
-		},
-		{
-			// Legacy overrides likewise apply to every axis of their target.
-			name: "legacy override maps onto every axis",
-			args: args{
-				baselineFixtures: []string{"testdata/fixtures/baseline"},
-				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
-				opts: []db.Option{
-					db.WithChangeRateThreshold(10),
-					db.WithChangeRateThresholdOverrides(map[string]float64{"alma:8": 250}),
-				},
-			},
-			wantErr: false,
-		},
-		{
-			// The two option families cannot be mixed, whichever order they
-			// come in.
-			name: "mixing legacy and per-axis options is an error",
-			args: args{
-				baselineFixtures: []string{"testdata/fixtures/baseline"},
-				targetFixtures:   []string{"testdata/fixtures/target-same"},
-				opts: []db.Option{
-					db.WithThresholds(production),
-					db.WithChangeRateThreshold(250),
-				},
-			},
-			wantErr: true,
-		},
-		{
 			// A config that declares fewer axes than the command judges is
 			// rejected: the judged axes are fixed by the command, so a
 			// caller cannot disable the removed check by omitting it.

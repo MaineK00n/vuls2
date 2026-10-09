@@ -1065,52 +1065,6 @@ func TestDiff(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// The legacy single threshold applies to both axes alike:
-			// 66.7% removed passes at 70 and fails at 10, exactly as the
-			// pre-axis judgement did.
-			name: "legacy threshold maps onto every axis (pass)",
-			args: args{
-				dir:        scanDir,
-				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithChangeRateThreshold(70)},
-			},
-			wantErr: false,
-		},
-		{
-			name: "legacy threshold maps onto every axis (fail)",
-			args: args{
-				dir:        scanDir,
-				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithChangeRateThreshold(10)},
-			},
-			wantErr: true,
-		},
-		{
-			name: "legacy override maps onto every axis",
-			args: args{
-				dir:        scanDir,
-				detectFunc: fakeDetect,
-				opts: []detection.Option{
-					detection.WithChangeRateThreshold(10),
-					detection.WithChangeRateThresholdOverrides(map[string]float64{"ubuntu_2204": 70}),
-				},
-			},
-			wantErr: false,
-		},
-		{
-			// The two option families cannot be mixed.
-			name: "mixing legacy and per-axis options is an error",
-			args: args{
-				dir:        scanDir,
-				detectFunc: fakeDetect,
-				opts: []detection.Option{
-					detection.WithChangeRateThreshold(100),
-					detection.WithThresholds(uniform(100)),
-				},
-			},
-			wantErr: true,
-		},
-		{
 			// A config that declares fewer axes than the command judges is
 			// rejected: the judged axes are fixed by the command, so a
 			// caller cannot disable the removed check by omitting it.
