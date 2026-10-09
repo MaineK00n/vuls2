@@ -27,7 +27,7 @@ func TestThreshold(t *testing.T) {
 			name: "defaults",
 			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			argv: nil,
-			want: threshold.Threshold{Axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, Default: allDefaults},
+			want: threshold.Threshold{Default: allDefaults},
 		},
 		{
 			// Named axes replace their built-in default; added keeps 30.
@@ -39,7 +39,6 @@ func TestThreshold(t *testing.T) {
 				"--rate-threshold-override", "cpe/cisco-json=removed:25,microsoft/microsoft-msuc=added:35",
 			},
 			want: threshold.Threshold{
-				Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 5, threshold.Removed: 0},
 				Overrides: map[string]threshold.Rates{
 					"ubuntu:26.04":             {threshold.Added: 80},
@@ -53,7 +52,6 @@ func TestThreshold(t *testing.T) {
 			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			argv: []string{"--rate-threshold", "added:50,changed:10,removed:5"},
 			want: threshold.Threshold{
-				Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 50, threshold.Changed: 10, threshold.Removed: 5},
 			},
 		},
@@ -82,20 +80,19 @@ func TestThreshold(t *testing.T) {
 			name: "empty --rate-threshold keeps defaults",
 			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			argv: []string{"--rate-threshold", ""},
-			want: threshold.Threshold{Axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, Default: allDefaults},
+			want: threshold.Threshold{Default: allDefaults},
 		},
 		{
 			name: "two-axis defaults",
 			axes: []threshold.Axis{threshold.Added, threshold.Removed},
 			argv: nil,
-			want: threshold.Threshold{Axes: []threshold.Axis{threshold.Added, threshold.Removed}, Default: twoDefaults},
+			want: threshold.Threshold{Default: twoDefaults},
 		},
 		{
 			name: "two-axis flag overrides a default",
 			axes: []threshold.Axis{threshold.Added, threshold.Removed},
 			argv: []string{"--rate-threshold", "removed:1"},
 			want: threshold.Threshold{
-				Axes:    []threshold.Axis{threshold.Added, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 1},
 			},
 		},
@@ -106,7 +103,6 @@ func TestThreshold(t *testing.T) {
 			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			argv: []string{"--change-rate-threshold", "10", "--change-rate-threshold-override", "ubuntu:26.04=30,cpe/cisco-json=25"},
 			want: threshold.Threshold{
-				Axes:    []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 10},
 				Overrides: map[string]threshold.Rates{
 					"ubuntu:26.04":   {threshold.Added: 30, threshold.Changed: 30, threshold.Removed: 30},
@@ -119,7 +115,6 @@ func TestThreshold(t *testing.T) {
 			axes: []threshold.Axis{threshold.Added, threshold.Removed},
 			argv: []string{"--change-rate-threshold-override", "debian_13=15"},
 			want: threshold.Threshold{
-				Axes:    []threshold.Axis{threshold.Added, threshold.Removed},
 				Default: threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
 				Overrides: map[string]threshold.Rates{
 					"debian_13": {threshold.Added: 15, threshold.Removed: 15},
@@ -151,7 +146,7 @@ func TestThreshold(t *testing.T) {
 			name: "empty per-axis override list",
 			axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed},
 			argv: []string{"--rate-threshold-override", ""},
-			want: threshold.Threshold{Axes: []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}, Default: allDefaults},
+			want: threshold.Threshold{Default: allDefaults},
 		},
 		{
 			name:    "malformed per-axis override",
@@ -190,7 +185,7 @@ func TestThreshold(t *testing.T) {
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("Threshold() mismatch (-want +got):\n%s", diff)
 			}
-			if err := got.Validate(); err != nil {
+			if err := got.Validate(tt.axes); err != nil {
 				t.Errorf("Threshold() produced an invalid threshold: %v", err)
 			}
 		})

@@ -184,19 +184,16 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 }
 
 // effectiveThreshold returns the threshold to judge on: the one given via
-// WithThreshold, else Defaults. A threshold whose Axes differ from this
-// command's Axes is rejected — the judged axes are fixed by the command, not
-// by the caller, so a threshold that omits an axis cannot silently disable
-// its check.
+// WithThreshold, else Defaults. The judged axes are this package's Axes,
+// not something the threshold declares: an axis missing from its Default
+// resolves to 0 (strictest), so omitting one cannot disable its check,
+// and an axis this command does not judge is rejected by Validate.
 func (o *options) effectiveThreshold() (threshold.Threshold, error) {
-	th := threshold.Threshold{Axes: Axes, Default: Defaults}
+	th := threshold.Threshold{Default: Defaults}
 	if o.threshold != nil {
 		th = *o.threshold
 	}
-	if !slices.Equal(th.Axes, Axes) {
-		return threshold.Threshold{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, th.Axes)
-	}
-	if err := th.Validate(); err != nil {
+	if err := th.Validate(Axes); err != nil {
 		return threshold.Threshold{}, errors.Wrap(err, "validate threshold")
 	}
 	return th, nil
@@ -443,7 +440,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // diffDetection builds the FileDiff of one scan result file from its raw
 // per-source CVE ID collections. Per-source thresholds are resolved per
 // axis from th ("<file>/<source>" > "<file>" > default) and judged on this
-// package's Axes; th.Axes is expected to equal Axes (Diff enforces it).
+// package's Axes.
 // Parallels `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
@@ -477,7 +474,7 @@ func diffDetection(name string, ids cveIDs, th threshold.Threshold) FileDiff {
 			threshold.Added:   threshold.Rate(len(sd.BaselineIDs), len(sd.Added)),
 			threshold.Removed: threshold.Rate(len(sd.BaselineIDs), len(sd.Removed)),
 		}
-		sd.Thresholds = th.Resolve(fmt.Sprintf("%s/%s", name, sid), name)
+		sd.Thresholds = th.Resolve(Axes, fmt.Sprintf("%s/%s", name, sid), name)
 		sd.Pass = len(threshold.Exceeded(Axes, sd.Rates, sd.Thresholds)) == 0
 		d.Sources = append(d.Sources, sd)
 	}

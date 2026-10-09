@@ -215,19 +215,16 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 }
 
 // effectiveThreshold returns the threshold to judge on: the one given via
-// WithThreshold, else Defaults. A threshold whose Axes differ from this
-// command's Axes is rejected — the judged axes are fixed by the command, not
-// by the caller, so a threshold that omits an axis cannot silently disable
-// its check.
+// WithThreshold, else Defaults. The judged axes are this package's Axes,
+// not something the threshold declares: an axis missing from its Default
+// resolves to 0 (strictest), so omitting one cannot disable its check,
+// and an axis this command does not judge is rejected by Validate.
 func (o *options) effectiveThreshold() (threshold.Threshold, error) {
-	th := threshold.Threshold{Axes: Axes, Default: Defaults}
+	th := threshold.Threshold{Default: Defaults}
 	if o.threshold != nil {
 		th = *o.threshold
 	}
-	if !slices.Equal(th.Axes, Axes) {
-		return threshold.Threshold{}, errors.Errorf("unexpected threshold axes. expected: %v, actual: %v", Axes, th.Axes)
-	}
-	if err := th.Validate(); err != nil {
+	if err := th.Validate(Axes); err != nil {
 		return threshold.Threshold{}, errors.Wrap(err, "validate threshold")
 	}
 	return th, nil
@@ -311,8 +308,7 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Per-source thresholds are
 // resolved per axis from th ("<ecosystem>/<source>" > "<ecosystem>" >
-// default) and judged on this package's Axes; th.Axes is expected to
-// equal Axes (DiffBoltDB enforces it).
+// default) and judged on this package's Axes.
 func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, th threshold.Threshold) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
@@ -362,7 +358,7 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 		sd.SourceID = sid
 		sd.DetectionRates = rates(sd.BaselineCriterions, sd.AddedCriterions, sd.ChangedCriterions, sd.RemovedCriterions)
 		sd.KBRates = rates(sd.BaselineKBKeys, len(sd.AddedKBs), len(sd.ChangedKBs), len(sd.RemovedKBs))
-		sd.Thresholds = th.Resolve(fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
+		sd.Thresholds = th.Resolve(Axes, fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
 		sd.Pass = len(threshold.Exceeded(Axes, sd.DetectionRates, sd.Thresholds)) == 0 &&
 			len(threshold.Exceeded(Axes, sd.KBRates, sd.Thresholds)) == 0
 		diff.Sources = append(diff.Sources, sd)

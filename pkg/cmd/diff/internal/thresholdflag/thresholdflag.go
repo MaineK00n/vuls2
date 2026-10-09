@@ -99,7 +99,7 @@ func (f *Flags) Threshold(fs *pflag.FlagSet) (threshold.Threshold, error) {
 		if err != nil {
 			return threshold.Threshold{}, errors.Wrap(err, "parse rate-threshold-override")
 		}
-		th := threshold.Threshold{Axes: f.axes, Default: make(threshold.Rates, len(f.axes)), Overrides: ov}
+		th := threshold.Threshold{Default: make(threshold.Rates, len(f.axes)), Overrides: ov}
 		for _, a := range f.axes {
 			th.Default[a] = f.defaults[a]
 			if v, ok := def[a]; ok {

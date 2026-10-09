@@ -112,7 +112,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/target-same",
 				ecosystem:       "alma:8",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -145,7 +144,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/target-replaced",
 				ecosystem:       "alma:8",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -179,7 +177,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/target-changed",
 				ecosystem:       "alma:8",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -209,7 +206,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "", // empty; set to t.TempDir() in run loop
 				ecosystem:       "alma:8",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -236,7 +232,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/target-added",
 				ecosystem:       "alma:8",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -270,7 +265,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/change-target",
 				ecosystem:       "test:change",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -304,7 +298,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/multi-source-target",
 				ecosystem:       "test:multi",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -358,7 +351,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/multi-source-target",
 				ecosystem:       "test:multi",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					Overrides: map[string]threshold.Rates{
 						"test:multi/test-source-2": {threshold.Changed: 250},
@@ -419,7 +411,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/multi-source-target",
 				ecosystem:       "test:multi",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 					Overrides: map[string]threshold.Rates{
 						"test:multi/test-source-2": {threshold.Added: 250},
@@ -479,7 +470,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/zero-unit-target",
 				ecosystem:       "test:zero",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -509,7 +499,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/kb-target-same",
 				ecosystem:       "microsoft",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -537,7 +526,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/kb-target-added",
 				ecosystem:       "microsoft",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -566,7 +554,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "testdata/fixtures/kb-target-changed",
 				ecosystem:       "microsoft",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -593,7 +580,6 @@ func TestDiffEcosystem(t *testing.T) {
 				targetFixture:   "", // empty; set to t.TempDir() in run loop
 				ecosystem:       "microsoft",
 				th: threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				},
 			},
@@ -691,7 +677,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 				})},
 			},
@@ -703,7 +688,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 				})},
 			},
@@ -735,7 +719,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},                                      // alma:8
 				targetFixtures:   []string{"testdata/fixtures/baseline", "testdata/fixtures/change-baseline"}, // alma:8 + test:change
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 0, threshold.Changed: 0, threshold.Removed: 0},
 				})},
 			},
@@ -751,7 +734,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-added"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
 				})},
 			},
@@ -763,7 +745,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 100, threshold.Changed: 0, threshold.Removed: 0},
 				})},
 			},
@@ -777,7 +758,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"alma:8": {threshold.Added: 250, threshold.Removed: 250},
@@ -793,7 +773,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"alma:8": {threshold.Added: 250, threshold.Removed: 50},
@@ -809,7 +788,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-replaced"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"alma:8": {threshold.Added: 250},
@@ -826,7 +804,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"unknown:99": {threshold.Removed: 50},
@@ -844,7 +821,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"test:multi": {threshold.Added: 250, threshold.Changed: 250},
@@ -861,7 +837,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"test:multi/test-source-2": {threshold.Changed: 250},
@@ -881,7 +856,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"test:multi":               {threshold.Added: 50, threshold.Changed: 50},
@@ -901,7 +875,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/multi-source-baseline"},
 				targetFixtures:   []string{"testdata/fixtures/multi-source-target"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"test:multi":               {threshold.Added: 300, threshold.Changed: 300},
@@ -912,15 +885,14 @@ func TestDiffBoltDB(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// A threshold that declares fewer axes than the command judges is
-			// rejected: the judged axes are fixed by the command, so a
-			// caller cannot disable the removed check by omitting it.
-			name: "threshold with missing axes is an error",
+			// The judged axes are fixed by the command, not by the threshold:
+			// a Default that omits the removed axis judges it at 0, so the
+			// 50% removal still fails instead of going unchecked.
+			name: "threshold without the removed axis judges it at 0",
 			args: args{
 				baselineFixtures: []string{"testdata/fixtures/target-added"},
 				targetFixtures:   []string{"testdata/fixtures/baseline"}, // 50% removed
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    []threshold.Axis{threshold.Added},
 					Default: threshold.Rates{threshold.Added: 100},
 				})},
 			},
@@ -934,7 +906,6 @@ func TestDiffBoltDB(t *testing.T) {
 				baselineFixtures: []string{"testdata/fixtures/baseline"},
 				targetFixtures:   []string{"testdata/fixtures/target-same"},
 				opts: []db.Option{db.WithThreshold(threshold.Threshold{
-					Axes:    db.Axes,
 					Default: threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10},
 					Overrides: map[string]threshold.Rates{
 						"alma:8": {"renamed": 50},

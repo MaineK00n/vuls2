@@ -31,11 +31,11 @@ const (
 // Rates maps an axis to a percentage: either a change rate or a threshold.
 type Rates map[Axis]float64
 
-// Threshold is the per-axis threshold set of one diff command.
+// Threshold is the per-axis threshold set of one diff command. The axes a
+// command judges are not part of it: the command passes them to Validate
+// and Resolve, so a Threshold can only tighten or loosen those axes, never
+// drop one.
 type Threshold struct {
-	// Axes the command judges, in report order. Default and Overrides may
-	// only mention these.
-	Axes []Axis
 	// Default threshold per axis. A missing axis means 0 (no change
 	// tolerated on it).
 	Default Rates
@@ -52,7 +52,7 @@ type Threshold struct {
 // most the legacy combined rate, so the mapping is never stricter than the
 // legacy judgement.
 func Legacy(axes []Axis, def float64, overrides map[string]float64) Threshold {
-	t := Threshold{Axes: axes, Default: make(Rates, len(axes)), Overrides: make(map[string]Rates, len(overrides))}
+	t := Threshold{Default: make(Rates, len(axes)), Overrides: make(map[string]Rates, len(overrides))}
 	for _, a := range axes {
 		t.Default[a] = def
 	}
@@ -66,15 +66,15 @@ func Legacy(axes []Axis, def float64, overrides map[string]float64) Threshold {
 	return t
 }
 
-// Validate checks that Default and Overrides only mention declared axes
-// and only carry finite, non-negative values.
-func (t Threshold) Validate() error {
-	if len(t.Axes) == 0 {
+// Validate checks that Default and Overrides only mention axes (the ones
+// the command judges) and only carry finite, non-negative values.
+func (t Threshold) Validate(axes []Axis) error {
+	if len(axes) == 0 {
 		return errors.New("unexpected axes. expected: non-empty, actual: empty")
 	}
 	for a, v := range t.Default {
-		if !slices.Contains(t.Axes, a) {
-			return errors.Errorf("unexpected default axis. expected: one of %v, actual: %q", t.Axes, a)
+		if !slices.Contains(axes, a) {
+			return errors.Errorf("unexpected default axis. expected: one of %v, actual: %q", axes, a)
 		}
 		if err := validateValue(v); err != nil {
 			return errors.Wrapf(err, "validate default of %s axis", a)
@@ -85,8 +85,8 @@ func (t Threshold) Validate() error {
 			return errors.Errorf("unexpected override key. expected: non-empty, actual: %q", k)
 		}
 		for a, v := range r {
-			if !slices.Contains(t.Axes, a) {
-				return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (key: %q)", t.Axes, a, k)
+			if !slices.Contains(axes, a) {
+				return errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (key: %q)", axes, a, k)
 			}
 			if err := validateValue(v); err != nil {
 				return errors.Wrapf(err, "validate override of %s axis for %q", a, k)
@@ -110,13 +110,13 @@ func validateValue(f float64) error {
 	return nil
 }
 
-// Resolve returns the threshold of every axis for one target. keys are the
-// override keys to try, narrowest first (e.g. "cpe/cisco-json", then
-// "cpe"); the first hit wins per axis, and an axis with no hit falls back to
-// Default (0 when absent). The result carries every axis in t.Axes.
-func (t Threshold) Resolve(keys ...string) Rates {
-	r := make(Rates, len(t.Axes))
-	for _, a := range t.Axes {
+// Resolve returns the threshold of every axis in axes for one target. keys
+// are the override keys to try, narrowest first (e.g. "cpe/cisco-json",
+// then "cpe"); the first hit wins per axis, and an axis with no hit falls
+// back to Default (0 when absent). The result carries every axis in axes.
+func (t Threshold) Resolve(axes []Axis, keys ...string) Rates {
+	r := make(Rates, len(axes))
+	for _, a := range axes {
 		r[a] = t.Default[a]
 		for _, k := range keys {
 			if v, ok := t.Overrides[k][a]; ok {
