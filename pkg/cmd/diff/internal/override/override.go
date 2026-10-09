@@ -15,6 +15,7 @@ package override
 import (
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -81,7 +82,7 @@ func ParseAxes(entries []string, axes []threshold.Axis) (map[string]threshold.Ra
 			return nil, errors.Errorf("unexpected override value. expected: %q, actual: %q (entry: %q)", "<axis>:<rate>", v, e)
 		}
 		a := threshold.Axis(strings.TrimSpace(as))
-		if !containsAxis(axes, a) {
+		if !slices.Contains(axes, a) {
 			return nil, errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
 		}
 		f, err := parseRate(strings.TrimSpace(rs), e)
@@ -119,7 +120,7 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 			return nil, errors.Errorf("unexpected threshold entry. expected: %q, actual: %q", "<axis>:<rate>", e)
 		}
 		a := threshold.Axis(strings.TrimSpace(as))
-		if !containsAxis(axes, a) {
+		if !slices.Contains(axes, a) {
 			return nil, errors.Errorf("unexpected threshold axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
 		}
 		f, err := parseRate(strings.TrimSpace(rs), e)
@@ -132,15 +133,6 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 		r[a] = f
 	}
 	return r, nil
-}
-
-func containsAxis(axes []threshold.Axis, a threshold.Axis) bool {
-	for _, x := range axes {
-		if x == a {
-			return true
-		}
-	}
-	return false
 }
 
 // parseRate parses a percentage, refusing non-numeric, non-finite and
