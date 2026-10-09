@@ -5,62 +5,59 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
+	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/thresholdflag"
 	diffdb "github.com/MaineK00n/vuls2/pkg/diff/db"
 )
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		changeRateThreshold          float64
-		changeRateThresholdOverrides []string
-		debug                        bool
+		thresholds *thresholdflag.Flags
+		debug      bool
 	}{
-		changeRateThreshold: 0,
-		debug:               false,
+		debug: false,
 	}
 	cmd := &cobra.Command{
 		Use:   "db <baseline-db> <target-db>",
 		Short: "compare detection data directly between two vuls DBs",
 		Example: heredoc.Doc(`
-		# fail when any data source in any ecosystem drifts more than 10%
-		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
+		# defaults: fail when any data source in any ecosystem adds more than
+		# 30%, or changes or removes more than 10%, of its units
+		$ vuls diff db ./baseline.db ./target.db
 
-		# relax ubuntu:26.04 (new-distro churn) and fedora:45 individually,
-		# keep every other ecosystem at the 10% default
-		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override ubuntu:26.04=25 \
-		    --change-rate-threshold-override fedora:45=15
+		# tighten removals for every (ecosystem, source) pair; axes not
+		# named keep their default
+		$ vuls diff db ./baseline.db ./target.db --rate-threshold removed:5
 
-		# relax a single data source within an ecosystem;
-		# <ecosystem>/<source> takes precedence over <ecosystem>
+		# set every axis explicitly (comma-separated or repeated)
+		$ vuls diff db ./baseline.db ./target.db --rate-threshold added:50,changed:10,removed:5
+
+		# relax additions for ubuntu:26.04 (new-distro backfill) and removals
+		# for a single source; <ecosystem>/<source> takes precedence over
+		# <ecosystem>, and each override touches only the axis it names
 		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override cpe/cisco-json=30
+		    --rate-threshold-override ubuntu:26.04=added:80 \
+		    --rate-threshold-override cpe/cisco-json=removed:25
 
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
+		    --rate-threshold-override 'ubuntu:26.04=added:80,cpe/cisco-json=removed:25'
 		`),
 		Args: cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			overrides, err := override.Parse(options.changeRateThresholdOverrides)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			th, err := options.thresholds.Threshold(cmd.Flags())
 			if err != nil {
-				return errors.Wrap(err, "parse change-rate-threshold-override")
+				return errors.Wrap(err, "parse threshold flags")
 			}
 			return diffdb.DiffBoltDB(
 				args[0], args[1],
-				diffdb.WithChangeRateThreshold(options.changeRateThreshold),
-				diffdb.WithChangeRateThresholdOverrides(overrides),
+				diffdb.WithThreshold(th),
 				diffdb.WithDebug(options.debug),
 			)
 		},
 	}
 
-	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (ecosystem, data source); exit non-zero if exceeded")
-	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
-		"override of the threshold; format: <ecosystem>=<rate> (all sources in the ecosystem) or <ecosystem>/<source>=<rate> (single source, wins over the ecosystem key) (repeatable; comma-separated entries also accepted)")
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes, diffdb.Defaults, "(ecosystem, data source)",
+		"<ecosystem> (all sources in the ecosystem, e.g. ubuntu:26.04) or <ecosystem>/<source> (single source, e.g. cpe/cisco-json, wins over the ecosystem key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

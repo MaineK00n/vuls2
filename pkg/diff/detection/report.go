@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
 // placeholderSourceID marks the row emitted for a file compared without any
@@ -40,9 +43,10 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 		}
 	}
 
-	// Sort: FAIL first, then by rate desc, then by name asc, source asc.
-	// Per-target threshold can hide a high-rate row behind PASS, so surfacing
-	// FAIL rows first keeps triage focused on what actually blocks promotion.
+	// Sort: FAIL first, then by the max rate over every axis desc, then by
+	// name asc, source asc. Per-target thresholds can hide a high-rate row
+	// behind PASS, so surfacing FAIL rows first keeps triage focused on what
+	// actually blocks promotion.
 	slices.SortFunc(rows, func(a, b reportRow) int {
 		return cmp.Or(
 			func() int {
@@ -55,7 +59,7 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 					return 0
 				}
 			}(),
-			cmp.Compare(b.ChangeRate, a.ChangeRate),
+			cmp.Compare(threshold.Max(Axes, b.Rates), threshold.Max(Axes, a.Rates)),
 			cmp.Compare(a.Name, b.Name),
 			cmp.Compare(a.SourceID, b.SourceID),
 		)
@@ -68,15 +72,18 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 
 **Result**: %s
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
 `, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, r := range rows {
-		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %.1f%% | %s | %s |\n",
-			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed), r.ChangeRate,
+		// Rates above their threshold are rendered in bold so a FAIL row
+		// shows which axis tripped without reading Details.
+		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %s | %s | %s |\n",
+			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed),
+			threshold.Format(Axes, r.Rates, r.Thresholds),
 			thresholdCell(r.SourceDiff), resultLabel(r.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
 		}
@@ -99,7 +106,10 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, r := range failRows {
-			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Name, r.SourceID, r.ChangeRate); err != nil {
+			// The headline names every axis that tripped, with its rate
+			// and threshold, so the reason is visible without scanning the
+			// Summary row.
+			if _, err := fmt.Fprintf(w, "### %s / %s (%s)\n\n", r.Name, r.SourceID, exceededLabel(r.SourceDiff)); err != nil {
 				return false, errors.Wrapf(err, "write file header %s/%s", r.Name, r.SourceID)
 			}
 			// Sort clones: the slices are shared with the caller's diffs,
@@ -131,7 +141,18 @@ func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	return fmt.Sprintf("%.1f%%", sd.Threshold)
+	return threshold.FormatThresholds(Axes, sd.Thresholds)
+}
+
+// exceededLabel lists every axis above its threshold as
+// "removed 75.0% > 10.0%", comma-separated, for the Details headline of a
+// FAIL source.
+func exceededLabel(sd SourceDiff) string {
+	var parts []string
+	for _, a := range threshold.Exceeded(Axes, sd.Rates, sd.Thresholds) {
+		parts = append(parts, fmt.Sprintf("%s %s", a, threshold.FormatExceeded(sd.Rates[a], sd.Thresholds[a])))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func resultLabel(pass bool) string {

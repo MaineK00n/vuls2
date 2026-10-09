@@ -13,6 +13,7 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 
 	"github.com/MaineK00n/vuls2/pkg/diff/detection"
+	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
 func TestSubtract(t *testing.T) {
@@ -237,10 +238,9 @@ func TestCollectSources(t *testing.T) {
 
 func TestDiffDetection(t *testing.T) {
 	type args struct {
-		name      string
-		ids       detection.CVEIDs
-		threshold float64
-		overrides map[string]float64
+		name string
+		ids  detection.CVEIDs
+		th   threshold.Threshold
 	}
 	tests := []struct {
 		name string
@@ -255,7 +255,9 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				threshold: 10,
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -264,8 +266,8 @@ func TestDiffDetection(t *testing.T) {
 						SourceID:    "redhat-csaf",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  0,
-						Threshold:   10,
+						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        true,
 					},
 				},
@@ -273,6 +275,8 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
+			// One ID swapped out of ten: 10% added and 10% removed, each
+			// judged on its own axis.
 			name: "small change within limit",
 			args: args{
 				name: "redhat_9",
@@ -282,7 +286,9 @@ func TestDiffDetection(t *testing.T) {
 					Target: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
 				},
-				threshold: 25,
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 25, threshold.Removed: 25},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -295,8 +301,8 @@ func TestDiffDetection(t *testing.T) {
 							"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"},
 						Added:      []string{"CVE-2026-0011"},
 						Removed:    []string{"CVE-2026-0010"},
-						ChangeRate: 20,
-						Threshold:  25,
+						Rates:      threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+						Thresholds: threshold.Rates{threshold.Added: 25, threshold.Removed: 25},
 						Pass:       true,
 					},
 				},
@@ -311,7 +317,9 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
 					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
 				},
-				threshold: 10,
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "ubuntu_22.04",
@@ -321,8 +329,40 @@ func TestDiffDetection(t *testing.T) {
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						TargetIDs:   []string{"CVE-2026-0001"},
 						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						ChangeRate:  75,
-						Threshold:   10,
+						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 75},
+						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+						Pass:        false,
+					},
+				},
+				Pass: false,
+			},
+		},
+		{
+			// The point of the split: a generous added threshold lets a
+			// backfill through while the strict removed threshold still
+			// catches a single lost CVE.
+			name: "additions tolerated while removals stay strict",
+			args: args{
+				name: "debian_13",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
+					Target:   map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"}},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "debian_13",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "debian-security-tracker-api",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"},
+						Added:       []string{"CVE-2026-0005"},
+						Removed:     []string{"CVE-2026-0004"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 25},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
 						Pass:        false,
 					},
 				},
@@ -346,7 +386,9 @@ func TestDiffDetection(t *testing.T) {
 						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					},
 				},
-				threshold: 10,
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "cpe_cisco",
@@ -355,16 +397,16 @@ func TestDiffDetection(t *testing.T) {
 						SourceID:    "cisco-json",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  100,
-						Threshold:   10,
+						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 100},
+						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        false,
 					},
 					{
 						SourceID:    "nvd-feed-cve-v2",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						ChangeRate:  0,
-						Threshold:   10,
+						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        true,
 					},
 				},
@@ -372,8 +414,8 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			// A per-source threshold lifts exactly that source while the
-			// other stays on the default.
+			// A per-source, per-axis override lifts exactly that source's
+			// axis while everything else stays on the default.
 			name: "per-source threshold lifts only its source",
 			args: args{
 				name: "cpe_jvn",
@@ -387,8 +429,12 @@ func TestDiffDetection(t *testing.T) {
 						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 				},
-				threshold: 10,
-				overrides: map[string]float64{"cpe_jvn/jvn-feed-rss": 150},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{
+						"cpe_jvn/jvn-feed-rss": {threshold.Added: 150, threshold.Removed: 50},
+					},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "cpe_jvn",
@@ -399,16 +445,16 @@ func TestDiffDetection(t *testing.T) {
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0003"},
 						Added:       []string{"CVE-2026-0003"},
 						Removed:     []string{"CVE-2026-0002"},
-						ChangeRate:  100,
-						Threshold:   150,
+						Rates:       threshold.Rates{threshold.Added: 50, threshold.Removed: 50},
+						Thresholds:  threshold.Rates{threshold.Added: 150, threshold.Removed: 50},
 						Pass:        true,
 					},
 					{
 						SourceID:    "nvd-feed-cve-v2",
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate:  0,
-						Threshold:   10,
+						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        true,
 					},
 				},
@@ -416,14 +462,17 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			name: "source only in target triggers 100% change",
+			// With an empty baseline, additions are reported as 100%.
+			name: "source only in target triggers 100% added",
 			args: args{
 				name: "redhat_9",
 				ids: detection.CVEIDs{
 					Baseline: map[sourceTypes.SourceID][]string{},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				threshold: 10,
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -432,8 +481,8 @@ func TestDiffDetection(t *testing.T) {
 						SourceID:   "redhat-csaf",
 						TargetIDs:  []string{"CVE-2026-0001", "CVE-2026-0002"},
 						Added:      []string{"CVE-2026-0001", "CVE-2026-0002"},
-						ChangeRate: 100,
-						Threshold:  10,
+						Rates:      threshold.Rates{threshold.Added: 100, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:       false,
 					},
 				},
@@ -443,9 +492,11 @@ func TestDiffDetection(t *testing.T) {
 		{
 			name: "both empty pass with no sources",
 			args: args{
-				name:      "redhat_9",
-				ids:       detection.CVEIDs{},
-				threshold: 10,
+				name: "redhat_9",
+				ids:  detection.CVEIDs{},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name:    "redhat_9",
@@ -454,8 +505,8 @@ func TestDiffDetection(t *testing.T) {
 			},
 		},
 		{
-			// Caller-resolved override-style threshold (higher than default)
-			// is applied verbatim and lifts the row above its rate.
+			// A file-wide override on the added axis lifts a moderate
+			// backfill above its rate.
 			name: "high threshold lets a moderate rate pass",
 			args: args{
 				name: "debian_13",
@@ -463,7 +514,10 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002"}},
 					Target:   map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
 				},
-				threshold: 80,
+				th: threshold.Threshold{
+					Default:   threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+					Overrides: map[string]threshold.Rates{"debian_13": {threshold.Added: 80}},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "debian_13",
@@ -473,8 +527,8 @@ func TestDiffDetection(t *testing.T) {
 						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 						Added:       []string{"CVE-2026-0003"},
-						ChangeRate:  50,
-						Threshold:   80,
+						Rates:       threshold.Rates{threshold.Added: 50, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 80, threshold.Removed: 10},
 						Pass:        true,
 					},
 				},
@@ -485,7 +539,7 @@ func TestDiffDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.overrides, tt.args.threshold)
+			got := detection.DiffDetection(tt.args.name, tt.args.ids, tt.args.th)
 			// Sources carries no order guarantee (the report sorts for
 			// presentation), so compare it order-insensitively.
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
@@ -506,6 +560,8 @@ func TestGenerateReport(t *testing.T) {
 		wantReport string
 	}{
 		{
+			// A FAIL row marks the tripped axis in bold and its Details
+			// headline names it with rate and threshold.
 			name: "fail with details",
 			args: args{
 				diffs: map[string]detection.FileDiff{
@@ -516,8 +572,8 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  0,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        true,
 							},
 						},
@@ -531,8 +587,8 @@ func TestGenerateReport(t *testing.T) {
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 								TargetIDs:   []string{"CVE-2026-0001"},
 								Removed:     []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								ChangeRate:  75.0,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 75},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        false,
 							},
 						},
@@ -547,14 +603,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| ubuntu_22.04 | ubuntu-oval | 4 | 1 | 0 | 3 | 75.0% | 10.0% | **FAIL** |
-| redhat_9 | redhat-csaf | 2 | 2 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| ubuntu_22.04 | ubuntu-oval | 4 | 1 | 0 | 3 | 0.0% / **75.0%** | 30.0% / 5.0% | **FAIL** |
+| redhat_9 | redhat-csaf | 2 | 2 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 ## Details (FAIL sources)
 
-### ubuntu_22.04 / ubuntu-oval (75.0%)
+### ubuntu_22.04 / ubuntu-oval (removed 75.0% > 5.0%)
 
 #### Removed IDs (3)
 
@@ -577,16 +633,16 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:    "cisco-json",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  100,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 100},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        false,
 							},
 							{
 								SourceID:    "nvd-feed-cve-v2",
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-								ChangeRate:  0,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        true,
 							},
 						},
@@ -601,14 +657,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| cpe_cisco | cisco-json | 2 | 0 | 0 | 2 | 100.0% | 10.0% | **FAIL** |
-| cpe_cisco | nvd-feed-cve-v2 | 4 | 4 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| cpe_cisco | cisco-json | 2 | 0 | 0 | 2 | 0.0% / **100.0%** | 30.0% / 5.0% | **FAIL** |
+| cpe_cisco | nvd-feed-cve-v2 | 4 | 4 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 ## Details (FAIL sources)
 
-### cpe_cisco / cisco-json (100.0%)
+### cpe_cisco / cisco-json (removed 100.0% > 5.0%)
 
 #### Removed IDs (2)
 
@@ -628,8 +684,8 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001"},
 								TargetIDs:   []string{"CVE-2026-0001"},
-								ChangeRate:  0,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        true,
 							},
 						},
@@ -644,13 +700,15 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 `,
 		},
 		{
+			// The Threshold column shows the resolved per-axis values, so
+			// an override on one axis is visible on its row.
 			name: "override applied",
 			args: args{
 				diffs: map[string]detection.FileDiff{
@@ -662,8 +720,8 @@ func TestGenerateReport(t *testing.T) {
 								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
 								TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
 								Added:       []string{"CVE-2026-0003"},
-								ChangeRate:  50,
-								Threshold:   80,
+								Rates:       threshold.Rates{threshold.Added: 50, threshold.Removed: 0},
+								Thresholds:  threshold.Rates{threshold.Added: 80, threshold.Removed: 5},
 								Pass:        true,
 							},
 						},
@@ -676,8 +734,8 @@ func TestGenerateReport(t *testing.T) {
 								SourceID:    "redhat-csaf",
 								BaselineIDs: []string{"CVE-2026-0001"},
 								TargetIDs:   []string{"CVE-2026-0001"},
-								ChangeRate:  0,
-								Threshold:   10,
+								Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+								Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
 								Pass:        true,
 							},
 						},
@@ -692,10 +750,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| debian_13 | debian-security-tracker-api | 2 | 3 | 1 | 0 | 50.0% | 80.0% | PASS |
-| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% | 10.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| debian_13 | debian-security-tracker-api | 2 | 3 | 1 | 0 | 50.0% / 0.0% | 80.0% / 5.0% | PASS |
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 `,
 		},
@@ -703,6 +761,8 @@ func TestGenerateReport(t *testing.T) {
 			// Locks the FAIL-first sort tier: a PASS row with a higher change
 			// rate (held passing by an override) must sort below a FAIL row
 			// whose rate is lower. Pure rate-desc sort would put alpha first.
+			// Both axes of the FAIL row trip, so both are bold and both are
+			// named in the headline.
 			name: "FAIL row sorts above higher-rate PASS row",
 			args: args{
 				diffs: map[string]detection.FileDiff{
@@ -715,8 +775,8 @@ func TestGenerateReport(t *testing.T) {
 								TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
 								Added:       []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
 								Removed:     []string{"CVE-2026-0001", "CVE-2026-0002"},
-								ChangeRate:  250,
-								Threshold:   300,
+								Rates:       threshold.Rates{threshold.Added: 150, threshold.Removed: 100},
+								Thresholds:  threshold.Rates{threshold.Added: 300, threshold.Removed: 300},
 								Pass:        true,
 							},
 						},
@@ -731,8 +791,8 @@ func TestGenerateReport(t *testing.T) {
 								TargetIDs:   []string{"CVE-2026-1001", "CVE-2026-1003"},
 								Added:       []string{"CVE-2026-1003"},
 								Removed:     []string{"CVE-2026-1002"},
-								ChangeRate:  100,
-								Threshold:   0,
+								Rates:       threshold.Rates{threshold.Added: 50, threshold.Removed: 50},
+								Thresholds:  threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
 								Pass:        false,
 							},
 						},
@@ -747,14 +807,14 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| beta | alma-errata | 2 | 2 | 1 | 1 | 100.0% | 0.0% | **FAIL** |
-| alpha | alma-errata | 2 | 3 | 3 | 2 | 250.0% | 300.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| beta | alma-errata | 2 | 2 | 1 | 1 | **50.0%** / **50.0%** | 0.0% / 0.0% | **FAIL** |
+| alpha | alma-errata | 2 | 3 | 3 | 2 | 150.0% / 100.0% | 300.0% / 300.0% | PASS |
 
 ## Details (FAIL sources)
 
-### beta / alma-errata (100.0%)
+### beta / alma-errata (added 50.0% > 0.0%, removed 50.0% > 0.0%)
 
 #### Added IDs (1)
 
@@ -785,9 +845,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Change Rate | Threshold | Result |
-|------|--------|----------|--------|-------|---------|-------------|-----------|--------|
-| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% | - | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% / 0.0% | - | PASS |
 
 `,
 		},
@@ -819,6 +879,8 @@ func TestDiff(t *testing.T) {
 		}
 	}
 
+	// ubuntu_2204 loses two of three IDs (66.7% removed, 0% added);
+	// redhat_9 is unchanged.
 	fakeDetect := func(_, _, _, _ string, files map[string]string) (map[string]detection.CVEIDs, error) {
 		result := make(map[string]detection.CVEIDs, len(files))
 		for name := range files {
@@ -844,11 +906,12 @@ func TestDiff(t *testing.T) {
 
 	emptyDir := t.TempDir()
 
+	// The 30 / 5 thresholds used below mirror the vuls-data-db defaults:
+	// additions tolerated up to 30%, removals up to 5%.
 	type args struct {
-		dir                          string
-		detectFunc                   detection.DetectFunc
-		changeRateThreshold          float64
-		changeRateThresholdOverrides map[string]float64
+		dir        string
+		detectFunc detection.DetectFunc
+		opts       []detection.Option
 	}
 	tests := []struct {
 		name    string
@@ -856,55 +919,87 @@ func TestDiff(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "fail on exceeded change rate",
+			name: "fail on exceeded removed rate",
 			args: args{
-				dir:                 scanDir,
-				detectFunc:          fakeDetect,
-				changeRateThreshold: 10,
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
 		{
 			name: "pass within threshold",
 			args: args{
-				dir:                 scanDir,
-				detectFunc:          fakeDetect,
-				changeRateThreshold: 100,
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 100, threshold.Removed: 100},
+				})},
 			},
 			wantErr: false,
 		},
 		{
+			// No threshold option at all judges on Defaults (added 30 /
+			// removed 5): ubuntu_2204's 66.7% removal fails.
+			name: "no options use Defaults",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+			},
+			wantErr: true,
+		},
+		{
+			// A generous added threshold alone does not excuse removals.
+			name: "added threshold does not cover removals",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 100, threshold.Removed: 5},
+				})},
+			},
+			wantErr: true,
+		},
+		{
 			name: "detect error propagated",
 			args: args{
-				dir:                 scanDir,
-				detectFunc:          fakeDetectErr,
-				changeRateThreshold: 10,
+				dir:        scanDir,
+				detectFunc: fakeDetectErr,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
 		{
 			name: "no scan results error",
 			args: args{
-				dir:                 emptyDir,
-				detectFunc:          fakeDetect,
-				changeRateThreshold: 10,
+				dir:        emptyDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
 		{
-			// Locks WithChangeRateThresholdOverrides forwarding from Diff
-			// into diffDetection. ubuntu_2204 in fakeDetect produces a 66.7%
-			// change rate (baseline 3 IDs, target 1, two removed) which would
-			// FAIL the 10% default. The "ubuntu_2204=70" override lifts every
-			// source in that file above its rate so the whole Diff returns
-			// nil. If Diff stops forwarding the option, the override has no
-			// effect and ubuntu_2204 fails again.
+			// Locks override forwarding from Diff into diffDetection. The
+			// "ubuntu_2204=removed:70" override lifts every source in that
+			// file above its removed rate so the whole Diff returns nil. If
+			// Diff stops forwarding the threshold, the override has no effect
+			// and ubuntu_2204 fails again.
 			name: "file override forwarded through to per-source resolution",
 			args: args{
-				dir:                          scanDir,
-				detectFunc:                   fakeDetect,
-				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204": 70},
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204": {threshold.Removed: 70},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -912,12 +1007,31 @@ func TestDiff(t *testing.T) {
 			// The "<file>/<source>" key form resolves for a specific source.
 			name: "file/source override forwarded through",
 			args: args{
-				dir:                          scanDir,
-				detectFunc:                   fakeDetect,
-				changeRateThreshold:          10,
-				changeRateThresholdOverrides: map[string]float64{"ubuntu_2204/ubuntu-oval": 70},
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204/ubuntu-oval": {threshold.Removed: 70},
+					},
+				})},
 			},
 			wantErr: false,
+		},
+		{
+			// An override on the added axis does nothing for a removal.
+			name: "override on the other axis does not lift",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204": {threshold.Added: 70},
+					},
+				})},
+			},
+			wantErr: true,
 		},
 		{
 			// The lenient direction of the same precedence: the file-wide key
@@ -925,13 +1039,15 @@ func TestDiff(t *testing.T) {
 			// key wins and lifts it above its rate.
 			name: "file/source override rescues from strict file override",
 			args: args{
-				dir:                 scanDir,
-				detectFunc:          fakeDetect,
-				changeRateThreshold: 100, // default alone would pass everything
-				changeRateThresholdOverrides: map[string]float64{
-					"ubuntu_2204":             10,
-					"ubuntu_2204/ubuntu-oval": 70,
-				},
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204":             {threshold.Removed: 10},
+						"ubuntu_2204/ubuntu-oval": {threshold.Removed: 70},
+					},
+				})},
 			},
 			wantErr: false,
 		},
@@ -941,38 +1057,71 @@ func TestDiff(t *testing.T) {
 			// only source present, so the file fails again.
 			name: "file/source override beats file override",
 			args: args{
-				dir:                 scanDir,
-				detectFunc:          fakeDetect,
-				changeRateThreshold: 10,
-				changeRateThresholdOverrides: map[string]float64{
-					"ubuntu_2204":             70,
-					"ubuntu_2204/ubuntu-oval": 10,
-				},
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204":             {threshold.Removed: 70},
+						"ubuntu_2204/ubuntu-oval": {threshold.Removed: 10},
+					},
+				})},
 			},
 			wantErr: true,
 		},
 		{
 			// An override entry that matches no file must fall through
 			// cleanly: every file still resolves to the default threshold.
-			// Locks resolveThreshold's miss branches.
 			name: "unmatched override key does not affect outcome",
 			args: args{
-				dir:                          scanDir,
-				detectFunc:                   fakeDetect,
-				changeRateThreshold:          100, // both files pass at default
-				changeRateThresholdOverrides: map[string]float64{"unknown_99": 1},
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default:   threshold.Rates{threshold.Added: 100, threshold.Removed: 100}, // both files pass at default
+					Overrides: map[string]threshold.Rates{"unknown_99": {threshold.Removed: 1}},
+				})},
 			},
 			wantErr: false,
+		},
+		{
+			// The judged axes are fixed by the command, not by the threshold:
+			// a Default that omits the removed axis judges it at 0, so the
+			// 66.7% removal still fails instead of going unchecked.
+			name: "threshold without the removed axis judges it at 0",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect, // 66.7% removed
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 100},
+				})},
+			},
+			wantErr: true,
+		},
+		{
+			// detection has no changed axis; an override on it is a
+			// configuration error, not silently ignored.
+			name: "override on the changed axis is an error",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetect,
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+					Overrides: map[string]threshold.Rates{
+						"ubuntu_2204": {threshold.Changed: 70},
+					},
+				})},
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := detection.Diff(
 				tt.args.dir, "baseline.db", "vuls0", "target.db", "vuls0",
-				detection.WithChangeRateThreshold(tt.args.changeRateThreshold),
-				detection.WithChangeRateThresholdOverrides(tt.args.changeRateThresholdOverrides),
-				detection.WithWriter(&bytes.Buffer{}),
-				detection.WithDetectFunc(tt.args.detectFunc),
+				append(tt.args.opts,
+					detection.WithWriter(&bytes.Buffer{}),
+					detection.WithDetectFunc(tt.args.detectFunc),
+				)...,
 			)
 
 			if (err != nil) != tt.wantErr {

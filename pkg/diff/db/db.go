@@ -23,45 +23,50 @@ import (
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
 	microsoftkbTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/microsoftkb"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+
+	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
+// Axes are the change axes `diff db` judges, in report order. Units are
+// compared by content, so a unit that stays under the same key with
+// different content is counted as changed rather than as a removal plus an
+// addition.
+var Axes = []threshold.Axis{threshold.Added, threshold.Changed, threshold.Removed}
+
+// Defaults are the built-in per-axis thresholds (%) applied when no
+// threshold option is given: additions are the routine pattern of
+// vulnerability data and get a generous default; changes and removals
+// keep the value the single-threshold guard ran with.
+var Defaults = threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 10}
+
 type options struct {
-	changeRateThreshold          float64
-	changeRateThresholdOverrides map[string]float64
-	writer                       io.Writer
-	debug                        bool
+	// threshold is the per-axis threshold set (WithThreshold); nil means
+	// Defaults.
+	threshold *threshold.Threshold
+
+	writer io.Writer
+	debug  bool
 }
 
 type Option interface {
 	apply(*options)
 }
 
-type changeRateThresholdOption float64
+type thresholdOption threshold.Threshold
 
-func (o changeRateThresholdOption) apply(opts *options) {
-	opts.changeRateThreshold = float64(o)
+func (o thresholdOption) apply(opts *options) {
+	opts.threshold = new(threshold.Threshold(o))
 }
 
-func WithChangeRateThreshold(r float64) Option {
-	return changeRateThresholdOption(r)
-}
-
-type changeRateThresholdOverridesOption map[string]float64
-
-func (o changeRateThresholdOverridesOption) apply(opts *options) {
-	opts.changeRateThresholdOverrides = map[string]float64(o)
-}
-
-// WithChangeRateThresholdOverrides supplies overrides of the change rate
-// threshold. Keys are either an ecosystem identifier (e.g. "ubuntu:26.04"),
-// which applies to every source in that ecosystem, or
-// "<ecosystem>/<source ID>" (e.g. "cpe/cisco-json"), which applies to a
-// single source and takes precedence over the ecosystem-wide key. Values are
-// percentages. Missing keys fall back to the default supplied via
-// WithChangeRateThreshold; a nil or empty map leaves every
-// (ecosystem, source) on that default.
-func WithChangeRateThresholdOverrides(m map[string]float64) Option {
-	return changeRateThresholdOverridesOption(m)
+// WithThreshold supplies the per-axis thresholds. Override keys are either
+// an ecosystem identifier (e.g. "ubuntu:26.04"), which applies to every
+// source in that ecosystem, or "<ecosystem>/<source ID>" (e.g.
+// "cpe/cisco-json"), which applies to a single source and takes precedence
+// over the ecosystem-wide key. Values are percentages. An axis or key with
+// no override falls back to the threshold's default for that axis.
+// Without this option the diff judges on Defaults.
+func WithThreshold(t threshold.Threshold) Option {
+	return thresholdOption(t)
 }
 
 type writerOption struct{ w io.Writer }
@@ -90,10 +95,11 @@ func WithDebug(d bool) Option {
 // small source (e.g. cisco-json) sharing the same ecosystem bucket.
 //
 // A source may contribute to a `detection` sub-bucket, a `kb` sub-bucket, or
-// both. Each is diffed independently and has its own change rate so that
+// both. Each is diffed independently and has its own change rates so that
 // disparities in magnitude (e.g. many detection units vs few KB units) do not
 // hide a large relative change in the smaller bucket.
-// A source Passes only when both change rates are within its threshold.
+// A source Passes only when every axis of both buckets is within its
+// threshold.
 type SourceDiff struct {
 	SourceID sourceTypes.SourceID
 
@@ -102,11 +108,19 @@ type SourceDiff struct {
 	BaselineKeys       int      // root IDs whose baseline value contains this source
 	TargetKeys         int      // root IDs whose target value contains this source
 	Added              []string // root IDs where this source appears only in target
-	Removed            []string // root IDs where this source appears only in baseline
 	Changed            []string // root IDs in both but with different detection data for this source
+	Removed            []string // root IDs where this source appears only in baseline
 	BaselineCriterions int      // total leaf criterion count for this source across all baseline root IDs
 	TargetCriterions   int      // total leaf criterion count for this source across all target root IDs
 	MatchedCriterions  int      // criterions structurally identical in both (Sort + Compare == 0)
+	// Unmatched criterions split per axis. Within one root ID, unmatched
+	// baseline criterions are paired with unmatched target criterions as
+	// Changed; the surplus on either side is Removed or Added. Invariants:
+	//   BaselineCriterions = MatchedCriterions + ChangedCriterions + RemovedCriterions
+	//   TargetCriterions   = MatchedCriterions + ChangedCriterions + AddedCriterions
+	AddedCriterions   int
+	ChangedCriterions int
+	RemovedCriterions int
 
 	// KB bucket diff (`<ecosystem>/kb/<KB ID>`), restricted to the entries
 	// this source contributes to. A source stores at most one KB record per
@@ -114,19 +128,23 @@ type SourceDiff struct {
 	// only key counts are kept.
 	BaselineKBKeys int      // KB IDs whose baseline value contains this source
 	TargetKBKeys   int      // KB IDs whose target value contains this source
-	AddedKBs       []string // KB IDs where this source appears only in target
-	RemovedKBs     []string // KB IDs where this source appears only in baseline
-	ChangedKBs     []string // KB IDs in both but with different KB data for this source
 	MatchedKBs     int      // KB IDs whose record is structurally identical in both (Sort + Compare == 0)
+	AddedKBs       []string // KB IDs where this source appears only in target
+	ChangedKBs     []string // KB IDs in both but with different KB data for this source
+	RemovedKBs     []string // KB IDs where this source appears only in baseline
 
-	// Per-bucket change rates. When a bucket is absent in both baseline
-	// and target, its rate is 0.
-	DetectionChangeRate float64
-	KBChangeRate        float64
+	// Change rates of this source in each of the two sub-buckets it may
+	// contribute to (`<ecosystem>/detection` and `<ecosystem>/kb`), one
+	// per axis in Axes, each as a percentage of that bucket's baseline
+	// unit count. The KB bucket's units are its keys, so its rates come
+	// straight from the Added/Changed/RemovedKBs lengths. When a bucket
+	// is absent in both baseline and target, its rates are 0.
+	DetectionRates threshold.Rates
+	KBRates        threshold.Rates
 
-	// Threshold actually applied to this source (post override resolution:
-	// "<ecosystem>/<source>" > "<ecosystem>" > default).
-	Threshold float64
+	// Thresholds actually applied to this source, one per axis (post
+	// override resolution: "<ecosystem>/<source>" > "<ecosystem>" > default).
+	Thresholds threshold.Rates
 
 	Pass bool
 }
@@ -147,12 +165,16 @@ type EcosystemDiff struct {
 // this function will need a corresponding rewrite.
 func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	o := &options{
-		changeRateThreshold: 0,
-		writer:              os.Stdout,
-		debug:               false,
+		writer: os.Stdout,
+		debug:  false,
 	}
 	for _, opt := range opts {
 		opt.apply(o)
+	}
+
+	th, err := o.effectiveThreshold()
+	if err != nil {
+		return errors.Wrap(err, "get effective threshold")
 	}
 
 	if o.debug {
@@ -173,7 +195,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 	defer targetDB.Close()
 
-	results, err := computeDiffs(baselineDB, targetDB, o.changeRateThreshold, o.changeRateThresholdOverrides)
+	results, err := computeDiffs(baselineDB, targetDB, th)
 	if err != nil {
 		return errors.Wrap(err, "compute diffs")
 	}
@@ -184,15 +206,31 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 	}
 
 	if !pass {
-		// Resolved per-source threshold is rendered per row in the report's
-		// Threshold column, so the exit error stays threshold-free to avoid
-		// implying the default was the one that tripped.
-		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold for at least one (ecosystem, source) pair; see report for details")
+		// Resolved per-source thresholds are rendered per row in the
+		// report's Threshold column, so the exit error stays threshold-free
+		// to avoid implying the default was the one that tripped.
+		return errors.New("diff failed: detection and/or KB change rate exceeded the applicable threshold on at least one axis (added / changed / removed) for at least one (ecosystem, source) pair; see report for details")
 	}
 	return nil
 }
 
-func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, overrides map[string]float64) ([]EcosystemDiff, error) {
+// effectiveThreshold returns the threshold to judge on: the one given via
+// WithThreshold, else Defaults. The judged axes are this package's Axes,
+// not something the threshold declares: an axis missing from its Default
+// resolves to 0 (strictest), so omitting one cannot disable its check,
+// and an axis this command does not judge is rejected by Validate.
+func (o *options) effectiveThreshold() (threshold.Threshold, error) {
+	th := threshold.Threshold{Default: Defaults}
+	if o.threshold != nil {
+		th = *o.threshold
+	}
+	if err := th.Validate(Axes); err != nil {
+		return threshold.Threshold{}, errors.Wrap(err, "validate threshold")
+	}
+	return th, nil
+}
+
+func computeDiffs(baselineDB, targetDB *bolt.DB, th threshold.Threshold) ([]EcosystemDiff, error) {
 	baselineEcos, err := getEcosystems(baselineDB)
 	if err != nil {
 		return nil, errors.Wrap(err, "get baseline ecosystems")
@@ -216,7 +254,7 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 		g.Go(func() error {
 			slog.Debug("ecosystem diff start", "ecosystem", eco)
 
-			d, err := diffEcosystem(baselineDB, targetDB, eco, overrides, changeRateThreshold)
+			d, err := diffEcosystem(baselineDB, targetDB, eco, th)
 			if err != nil {
 				return errors.Wrapf(err, "diff ecosystem %s", string(eco))
 			}
@@ -239,33 +277,12 @@ func computeDiffs(baselineDB, targetDB *bolt.DB, changeRateThreshold float64, ov
 	return results, nil
 }
 
-// resolveThreshold resolves the change-rate threshold for one
-// (ecosystem, source) pair.
-// Precedence: "<ecosystem>/<source>" override > "<ecosystem>" override > default.
-func resolveThreshold(overrides map[string]float64, def float64, eco ecosystemTypes.Ecosystem, sid sourceTypes.SourceID) float64 {
-	if v, ok := overrides[fmt.Sprintf("%s/%s", eco, sid)]; ok {
-		return v
-	}
-	if v, ok := overrides[string(eco)]; ok {
-		return v
-	}
-	return def
-}
-
-// changeRate computes a per-bucket change rate as a percentage:
-//
-//	(baseline - matched + target - matched) / baseline * 100
-//
-// When baseline is 0 but target has unmatched units, the rate is 100. When
-// both are 0, the rate is 0.
-func changeRate(baseline, target, matched int) float64 {
-	switch {
-	case baseline > 0:
-		return float64(baseline-matched+target-matched) / float64(baseline) * 100
-	case target-matched > 0:
-		return 100
-	default:
-		return 0
+// rates computes per-axis change rates (added, changed, removed) against baseline.
+func rates(baseline, added, changed, removed int) threshold.Rates {
+	return threshold.Rates{
+		threshold.Added:   threshold.Rate(baseline, added),
+		threshold.Changed: threshold.Rate(baseline, changed),
+		threshold.Removed: threshold.Rate(baseline, removed),
 	}
 }
 
@@ -290,8 +307,9 @@ func getEcosystems(db *bolt.DB) ([]ecosystemTypes.Ecosystem, error) {
 // diffEcosystem compares an ecosystem between two DBs by diffing each of its
 // sub-buckets (detection, kb) independently, accumulating counts per data
 // source. Either sub-bucket may be absent. Per-source thresholds are
-// resolved from overrides via resolveThreshold, falling back to threshold.
-func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, overrides map[string]float64, threshold float64) (EcosystemDiff, error) {
+// resolved per axis from th ("<ecosystem>/<source>" > "<ecosystem>" >
+// default) and judged on this package's Axes.
+func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosystem, th threshold.Threshold) (EcosystemDiff, error) {
 	diff := EcosystemDiff{Ecosystem: ecosystem}
 	agg := make(map[sourceTypes.SourceID]SourceDiff)
 	skipped := make(map[sourceTypes.SourceID]int)
@@ -338,10 +356,11 @@ func diffEcosystem(baselineDB, targetDB *bolt.DB, ecosystem ecosystemTypes.Ecosy
 	diff.Sources = make([]SourceDiff, 0, len(agg))
 	for sid, sd := range agg {
 		sd.SourceID = sid
-		sd.DetectionChangeRate = changeRate(sd.BaselineCriterions, sd.TargetCriterions, sd.MatchedCriterions)
-		sd.KBChangeRate = changeRate(sd.BaselineKBKeys, sd.TargetKBKeys, sd.MatchedKBs)
-		sd.Threshold = resolveThreshold(overrides, threshold, ecosystem, sid)
-		sd.Pass = sd.DetectionChangeRate <= sd.Threshold && sd.KBChangeRate <= sd.Threshold
+		sd.DetectionRates = rates(sd.BaselineCriterions, sd.AddedCriterions, sd.ChangedCriterions, sd.RemovedCriterions)
+		sd.KBRates = rates(sd.BaselineKBKeys, len(sd.AddedKBs), len(sd.ChangedKBs), len(sd.RemovedKBs))
+		sd.Thresholds = th.Resolve(Axes, fmt.Sprintf("%s/%s", ecosystem, sid), string(ecosystem))
+		sd.Pass = len(threshold.Exceeded(Axes, sd.DetectionRates, sd.Thresholds)) == 0 &&
+			len(threshold.Exceeded(Axes, sd.KBRates, sd.Thresholds)) == 0
 		diff.Sources = append(diff.Sources, sd)
 	}
 	diff.Pass = !slices.ContainsFunc(diff.Sources, func(s SourceDiff) bool { return !s.Pass })
@@ -388,9 +407,10 @@ func mergeBuckets(b, t *bolt.Bucket, visit func(key, bv, tv []byte) error) error
 }
 
 // updateDetectionDiff walks two `<ecosystem>/detection` buckets in sorted key
-// order and accumulates per-source Detection-related counts into agg. Either
-// bucket may be nil. Sources skipped for having zero criterions are counted
-// in skipped.
+// order and accumulates per-source Detection-related counts into agg,
+// including the per-axis criterion split (see SourceDiff). Either bucket
+// may be nil. Sources skipped for having zero criterions are counted in
+// skipped.
 func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]SourceDiff, skipped map[sourceTypes.SourceID]int) error {
 	err := mergeBuckets(bDet, tDet, func(k, bv, tv []byte) error {
 		switch {
@@ -413,6 +433,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				sd.BaselineKeys++
 				sd.Removed = append(sd.Removed, string(k))
 				sd.BaselineCriterions += count
+				sd.RemovedCriterions += count
 				agg[sid] = sd
 			}
 		case bv == nil: // target-only → Added
@@ -430,6 +451,7 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 				sd.TargetKeys++
 				sd.Added = append(sd.Added, string(k))
 				sd.TargetCriterions += count
+				sd.AddedCriterions += count
 				agg[sid] = sd
 			}
 		default: // key in both → compare per source
@@ -454,6 +476,15 @@ func updateDetectionDiff(bDet, tDet *bolt.Bucket, agg map[sourceTypes.SourceID]S
 					sd.TargetCriterions += t.Target
 				}
 				sd.MatchedCriterions += t.Matched
+				// Pair the unmatched criterions of both sides under this
+				// root ID as changed; the surplus is removed (baseline
+				// side) or added (target side). The pairing is by count
+				// only — which criterion replaced which is not tracked.
+				lost, gained := t.Baseline-t.Matched, t.Target-t.Matched
+				changed := min(lost, gained)
+				sd.ChangedCriterions += changed
+				sd.RemovedCriterions += lost - changed
+				sd.AddedCriterions += gained - changed
 				switch {
 				case t.Baseline > 0 && t.Target > 0:
 					if t.Matched < t.Baseline || t.Matched < t.Target {

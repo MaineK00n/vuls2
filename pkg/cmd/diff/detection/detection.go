@@ -7,55 +7,59 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
+	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/thresholdflag"
 	diffdetection "github.com/MaineK00n/vuls2/pkg/diff/detection"
 )
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		changeRateThreshold          float64
-		changeRateThresholdOverrides []string
-		debug                        bool
+		thresholds *thresholdflag.Flags
+		debug      bool
 	}{
-		changeRateThreshold: 0,
-		debug:               false,
+		debug: false,
 	}
 
 	cmd := &cobra.Command{
 		Use:   "detection <scan-results-dir> <baseline-db> <baseline-vuls0-binary> <target-db> <target-vuls0-binary>",
 		Short: "compare detection results between baseline and target (binary, DB) pairs",
 		Example: heredoc.Doc(`
-		# fail when any data source in any scan-result file drifts more than 5%
+		# defaults: fail when any data source in any scan-result file gains
+		# more than 30%, or loses more than 5%, of its CVEs
+		$ vuls diff detection \
+		    ./scan-results \
+		    ./baseline.db ./vuls0 \
+		    ./target.db ./vuls0
+
+		# tighten removals for every (file, source) pair; axes not named
+		# keep their default
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
-		    --change-rate-threshold 5
+		    --rate-threshold removed:1
 
-		# relax debian_13 (new CVEs landed) without weakening the default
+		# relax additions for debian_13 (new CVEs landing) without weakening
+		# the removal default
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
-		    --change-rate-threshold 5 \
-		    --change-rate-threshold-override debian_13=8
+		    --rate-threshold-override debian_13=added:50
 
-		# relax a single data source within a file;
+		# relax removals for a single data source within a file;
 		# <file>/<source> takes precedence over <file>
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
-		    --change-rate-threshold 5 \
-		    --change-rate-threshold-override cpe_jvn/jvn-feed-rss=25
+		    --rate-threshold-override cpe_jvn/jvn-feed-rss=removed:25
 
 		# repeated and comma-separated forms are interchangeable
 		$ vuls diff detection \
 		    ./scan-results \
 		    ./baseline.db ./vuls0 \
 		    ./target.db ./vuls0 \
-		    --change-rate-threshold 5 \
-		    --change-rate-threshold-override 'debian_13=8,cpe_jvn/jvn-feed-rss=25'
+		    --rate-threshold-override 'debian_13=added:50,cpe_jvn/jvn-feed-rss=removed:25'
 		`),
 		Args: cobra.ExactArgs(5),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
@@ -68,23 +72,21 @@ func NewCmd() *cobra.Command {
 			}
 			return nil
 		},
-		RunE: func(_ *cobra.Command, args []string) error {
-			overrides, err := override.Parse(options.changeRateThresholdOverrides)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			th, err := options.thresholds.Threshold(cmd.Flags())
 			if err != nil {
-				return errors.Wrap(err, "parse change-rate-threshold-override")
+				return errors.Wrap(err, "parse threshold flags")
 			}
 			return diffdetection.Diff(
 				args[0], args[1], args[2], args[3], args[4],
-				diffdetection.WithChangeRateThreshold(options.changeRateThreshold),
-				diffdetection.WithChangeRateThresholdOverrides(overrides),
+				diffdetection.WithThreshold(th),
 				diffdetection.WithDebug(options.debug),
 			)
 		},
 	}
 
-	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (scan result file, data source); exit non-zero if exceeded")
-	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
-		"override of the threshold; format: <file-basename>=<rate> (all data sources in the file) or <file-basename>/<source>=<rate> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key) (repeatable; comma-separated entries also accepted)")
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdetection.Axes, diffdetection.Defaults, "(scan result file, data source)",
+		"<file-basename> (all data sources in the file, e.g. debian_13) or <file-basename>/<source> (single source, e.g. cpe_jvn/jvn-feed-rss, wins over the file key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
