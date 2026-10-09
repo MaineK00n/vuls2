@@ -239,16 +239,11 @@ func TestFormatExceeded(t *testing.T) {
 		rate, threshold float64
 		want            string
 	}{
-		{name: "distinct at one decimal", rate: 12.34, threshold: 10, want: "12.3% > 10.0%"},
-		{name: "needs two decimals", rate: 100.0 / 999 * 100, threshold: 10, want: "10.01% > 10.0%"},
+		{name: "one decimal", rate: 12.34, threshold: 10, want: "12.3% > 10.0%"},
 		{name: "zero threshold", rate: 2.5, threshold: 0, want: "2.5% > 0.0%"},
-		{name: "beyond six decimals falls back to %g", rate: 10 + 1e-9, threshold: 10, want: "10.000000001% > 10.0%"},
-		// A threshold with more than one decimal keeps its digits, and the
-		// rate is printed at no less precision, so 10.061 over 10.06 never
-		// reads as "10.061% > 10.1%".
-		{name: "decimal threshold keeps its digits", rate: 10.061, threshold: 10.06, want: "10.061% > 10.06%"},
-		{name: "rate rounding down to a decimal threshold grows", rate: 10.0604, threshold: 10.06, want: "10.0604% > 10.06%"},
-		{name: "one-decimal threshold renders uniformly", rate: 13, threshold: 12.5, want: "13.0% > 12.5%"},
+		// The judgement is on the unrounded values, so both sides may print
+		// equal.
+		{name: "rounds to the threshold", rate: 100.0 / 999 * 100, threshold: 10, want: "10.0% > 10.0%"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -273,21 +268,12 @@ func TestFormat(t *testing.T) {
 			want:       "12.3% / 0.0% / **10.0%**",
 		},
 		{
-			// An exceeded rate that rounds to its threshold at one decimal
-			// gets more decimals; the non-exceeded cells keep one.
-			name:       "exceeded rate near threshold grows",
+			// Bold follows the unrounded judgement: an exceeded rate may
+			// print equal to its threshold.
+			name:       "exceeded cell that rounds to its threshold",
 			rates:      threshold.Rates{threshold.Added: 10.04, threshold.Changed: 9.96, threshold.Removed: 0},
 			thresholds: threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 0},
-			want:       "**10.04%** / 10.0% / 0.0%",
-		},
-		{
-			// A passing rate that one-decimal rounding would lift above its
-			// rendered threshold also gets more decimals: 10.05 under 10.051
-			// must not print as "10.1%" beside "10.051%".
-			name:       "passing rate near threshold grows",
-			rates:      threshold.Rates{threshold.Added: threshold.Rate(2000, 201), threshold.Changed: 10.04, threshold.Removed: 0},
-			thresholds: threshold.Rates{threshold.Added: 10.051, threshold.Changed: 10.05, threshold.Removed: 0},
-			want:       "10.050% / 10.04% / 0.0%",
+			want:       "**10.0%** / 10.0% / 0.0%",
 		},
 	}
 	for _, tt := range tests {
@@ -311,9 +297,9 @@ func TestFormatThresholds(t *testing.T) {
 			want:       "30.0% / 10.0% / 5.0%",
 		},
 		{
-			name:       "decimal threshold keeps its digits",
+			name:       "one decimal",
 			thresholds: threshold.Rates{threshold.Added: 10.06, threshold.Changed: 12.5, threshold.Removed: 0},
-			want:       "10.06% / 12.5% / 0.0%",
+			want:       "10.1% / 12.5% / 0.0%",
 		},
 	}
 	for _, tt := range tests {
