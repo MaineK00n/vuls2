@@ -77,17 +77,9 @@ func ParseAxes(entries []string, axes []threshold.Axis) (map[string]threshold.Ra
 		if k == "" {
 			return nil, errors.Errorf("unexpected override key. expected: non-empty, actual: %q (entry: %q)", k, e)
 		}
-		as, rs, ok := strings.Cut(v, ":")
-		if !ok {
-			return nil, errors.Errorf("unexpected override value. expected: %q, actual: %q (entry: %q)", "<axis>:<rate>", v, e)
-		}
-		a := threshold.Axis(strings.TrimSpace(as))
-		if !slices.Contains(axes, a) {
-			return nil, errors.Errorf("unexpected override axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
-		}
-		f, err := parseRate(strings.TrimSpace(rs))
+		a, f, err := parseAxisRate(v, axes)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse rate. entry: %q", e)
+			return nil, errors.Wrapf(err, "parse override entry %q", e)
 		}
 		if m[k] == nil {
 			m[k] = make(threshold.Rates, len(axes))
@@ -115,17 +107,9 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 		if strings.Contains(e, "=") {
 			return nil, errors.Errorf("unexpected threshold entry. expected: %q (a per-target override belongs to --rate-threshold-override), actual: %q", "<axis>:<rate>", e)
 		}
-		as, rs, ok := strings.Cut(e, ":")
-		if !ok {
-			return nil, errors.Errorf("unexpected threshold entry. expected: %q, actual: %q", "<axis>:<rate>", e)
-		}
-		a := threshold.Axis(strings.TrimSpace(as))
-		if !slices.Contains(axes, a) {
-			return nil, errors.Errorf("unexpected threshold axis. expected: one of %v, actual: %q (entry: %q)", axes, a, e)
-		}
-		f, err := parseRate(strings.TrimSpace(rs))
+		a, f, err := parseAxisRate(e, axes)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse rate. entry: %q", e)
+			return nil, errors.Wrapf(err, "parse threshold entry %q", e)
 		}
 		if _, dup := r[a]; dup {
 			slog.Warn("duplicate threshold axis, last wins", "axis", a, "rate", f)
@@ -133,6 +117,24 @@ func ParseDefaults(entries []string, axes []threshold.Axis) (threshold.Rates, er
 		r[a] = f
 	}
 	return r, nil
+}
+
+// parseAxisRate parses "<axis>:<rate>", accepting only axes. Whitespace
+// around the axis and the rate is tolerated.
+func parseAxisRate(s string, axes []threshold.Axis) (threshold.Axis, float64, error) {
+	as, rs, ok := strings.Cut(s, ":")
+	if !ok {
+		return "", 0, errors.Errorf("unexpected entry. expected: %q, actual: %q", "<axis>:<rate>", s)
+	}
+	a := threshold.Axis(strings.TrimSpace(as))
+	if !slices.Contains(axes, a) {
+		return "", 0, errors.Errorf("unexpected axis. expected: one of %v, actual: %q", axes, a)
+	}
+	f, err := parseRate(strings.TrimSpace(rs))
+	if err != nil {
+		return "", 0, errors.Wrap(err, "parse rate")
+	}
+	return a, f, nil
 }
 
 // parseRate parses a percentage, refusing non-numeric, non-finite and
