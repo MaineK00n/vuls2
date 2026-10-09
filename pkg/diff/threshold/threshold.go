@@ -76,8 +76,8 @@ func (t Threshold) Validate() error {
 		if !slices.Contains(t.Axes, a) {
 			return errors.Errorf("unexpected default axis. expected: one of %v, actual: %q", t.Axes, a)
 		}
-		if err := checkRate(v); err != nil {
-			return errors.Wrapf(err, "default threshold. axis: %s", a)
+		if err := validateThreshold(v); err != nil {
+			return errors.Wrapf(err, "validate default of %s axis", a)
 		}
 	}
 	for a, m := range t.Overrides {
@@ -88,24 +88,24 @@ func (t Threshold) Validate() error {
 			if k == "" {
 				return errors.Errorf("unexpected override key. expected: non-empty, actual: %q (axis: %s)", k, a)
 			}
-			if err := checkRate(v); err != nil {
-				return errors.Wrapf(err, "override threshold. axis: %s, key: %s", a, k)
+			if err := validateThreshold(v); err != nil {
+				return errors.Wrapf(err, "validate override of %s axis for %q", a, k)
 			}
 		}
 	}
 	return nil
 }
 
-// checkRate rejects NaN / ±Inf / negative rates. The judgement is
+// validateThreshold rejects NaN / ±Inf / negative thresholds. The judgement is
 // `rate > threshold`, so a NaN threshold makes every comparison false and
 // lets every diff PASS however large the change; +Inf likewise PASSes
 // everything; a negative threshold can never be met.
-func checkRate(f float64) error {
+func validateThreshold(f float64) error {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
-		return errors.Errorf("unexpected rate. expected: finite, actual: %v", f)
+		return errors.Errorf("unexpected threshold. expected: finite, actual: %v", f)
 	}
 	if f < 0 {
-		return errors.Errorf("unexpected rate. expected: >= 0, actual: %v", f)
+		return errors.Errorf("unexpected threshold. expected: >= 0, actual: %v", f)
 	}
 	return nil
 }

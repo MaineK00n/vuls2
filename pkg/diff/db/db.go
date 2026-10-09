@@ -174,7 +174,7 @@ func DiffBoltDB(baselinePath, targetPath string, opts ...Option) error {
 
 	th, err := o.effectiveThreshold()
 	if err != nil {
-		return errors.Wrap(err, "resolve thresholds")
+		return errors.Wrap(err, "get effective threshold")
 	}
 
 	if o.debug {
