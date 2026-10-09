@@ -17,26 +17,65 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
+
+	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
+// Axes are the change axes `diff detection` judges, in report order. Only
+// (CVE ID, source) pairs are compared, never per-CVE content, so there is
+// no changed axis: a CVE is either detected on both sides or on one.
+var Axes = []threshold.Axis{threshold.Added, threshold.Removed}
+
 type options struct {
+	// thresholds is the per-axis configuration (WithThresholds).
+	thresholds *threshold.Config
+
+	// Legacy single-threshold inputs (WithChangeRateThreshold /
+	// WithChangeRateThresholdOverrides); legacySet records that either was
+	// supplied so Diff can refuse mixing them with WithThresholds.
 	changeRateThreshold          float64
 	changeRateThresholdOverrides map[string]float64
-	debug                        bool
-	writer                       io.Writer
-	detectFunc                   func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
+	legacySet                    bool
+
+	debug      bool
+	writer     io.Writer
+	detectFunc func(baselineBin, baselineDB, targetBin, targetDB string, files map[string]string) (map[string]cveIDs, error)
 }
 
 type Option interface {
 	apply(*options)
 }
 
+type thresholdsOption threshold.Config
+
+func (o thresholdsOption) apply(opts *options) {
+	c := threshold.Config(o)
+	opts.thresholds = &c
+}
+
+// WithThresholds supplies the per-axis thresholds. Override keys are either
+// a scan-result file basename (without the `.json` extension, e.g.
+// "debian_13"), which applies to every data source detected in that file,
+// or "<file>/<source ID>" (e.g. "cpe_jvn/jvn-feed-rss"), which applies to a
+// single source and takes precedence over the file-wide key — the same
+// source ID vocabulary `vuls diff db` overrides use. Values are
+// percentages. An axis or key with no override falls back to the config's
+// default for that axis. Cannot be combined with WithChangeRateThreshold /
+// WithChangeRateThresholdOverrides.
+func WithThresholds(c threshold.Config) Option {
+	return thresholdsOption(c)
+}
+
 type changeRateThresholdOption float64
 
 func (o changeRateThresholdOption) apply(opts *options) {
 	opts.changeRateThreshold = float64(o)
+	opts.legacySet = true
 }
 
+// WithChangeRateThreshold supplies the legacy single threshold, applied to
+// every axis alike (see threshold.Legacy). Prefer WithThresholds; this is
+// kept for callers of the pre-axis API and cannot be combined with it.
 func WithChangeRateThreshold(r float64) Option {
 	return changeRateThresholdOption(r)
 }
@@ -45,17 +84,13 @@ type changeRateThresholdOverridesOption map[string]float64
 
 func (o changeRateThresholdOverridesOption) apply(opts *options) {
 	opts.changeRateThresholdOverrides = map[string]float64(o)
+	opts.legacySet = true
 }
 
-// WithChangeRateThresholdOverrides supplies overrides of the change rate
-// threshold. Keys are either a scan-result file basename (without the `.json`
-// extension, e.g. "debian_13"), which applies to every data source detected
-// in that file, or "<file>/<source ID>" (e.g. "cpe_jvn/jvn-feed-rss"), which
-// applies to a single source and takes precedence over the file-wide key —
-// the same source ID vocabulary `vuls diff db` overrides use. Values are
-// percentages. Missing keys fall back to the default supplied via
-// WithChangeRateThreshold; a nil or empty map leaves every
-// (file, source) on that default.
+// WithChangeRateThresholdOverrides supplies legacy overrides of the single
+// threshold, each applied to every axis alike. Keys follow the same
+// vocabulary as WithThresholds. Prefer WithThresholds; this is kept for
+// callers of the pre-axis API and cannot be combined with it.
 func WithChangeRateThresholdOverrides(m map[string]float64) Option {
 	return changeRateThresholdOverridesOption(m)
 }
@@ -91,11 +126,15 @@ type SourceDiff struct {
 	TargetIDs   []string
 	Added       []string
 	Removed     []string
-	ChangeRate  float64
 
-	// Threshold actually applied to this (file, source) pair (post override
-	// resolution: "<file>/<source>" > "<file>" > default).
-	Threshold float64
+	// Rates holds the change rate of every axis in Axes, each as a
+	// percentage of the baseline ID count.
+	Rates threshold.Rates
+
+	// Thresholds actually applied to this (file, source) pair, one per
+	// axis (post override resolution: "<file>/<source>" > "<file>" >
+	// default).
+	Thresholds threshold.Rates
 
 	Pass bool
 }
@@ -123,12 +162,16 @@ type cveIDs struct {
 // Diff compares detection results between baseline and target pairs of (binary, DB).
 func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, opts ...Option) error {
 	o := &options{
-		changeRateThreshold: 0,
-		writer:              os.Stdout,
-		detectFunc:          detectAll,
+		writer:     os.Stdout,
+		detectFunc: detectAll,
 	}
 	for _, opt := range opts {
 		opt.apply(o)
+	}
+
+	cfg, err := o.config()
+	if err != nil {
+		return errors.Wrap(err, "resolve thresholds")
 	}
 
 	if o.debug {
@@ -154,7 +197,7 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 
 	diffm := make(map[string]FileDiff, len(idm))
 	for name, ids := range idm {
-		diffm[name] = diffDetection(name, ids, o.changeRateThresholdOverrides, o.changeRateThreshold)
+		diffm[name] = diffDetection(name, ids, cfg)
 	}
 
 	pass, err := generateReport(o.writer, diffm)
@@ -162,24 +205,32 @@ func Diff(scanResultsDir, baselineDB, baselineBin, targetDB, targetBin string, o
 		return errors.Wrap(err, "generate report")
 	}
 	if !pass {
-		// Resolved per-(file, source) threshold is rendered per row in the
-		// report's Threshold column, so the exit error stays threshold-free to
-		// avoid implying the default was the one that tripped.
-		return errors.New("diff failed: change rate exceeded the applicable threshold for at least one (scan-result file, data source) pair; see report for details")
+		// Resolved per-(file, source) thresholds are rendered per row in
+		// the report's Threshold column, so the exit error stays
+		// threshold-free to avoid implying the default was the one that
+		// tripped.
+		return errors.New("diff failed: change rate exceeded the applicable threshold on at least one axis (added / removed) for at least one (scan-result file, data source) pair; see report for details")
 	}
 	return nil
 }
 
-// resolveThreshold resolves the change-rate threshold for one (file, source)
-// pair. Precedence: "<file>/<source>" override > "<file>" override > default.
-func resolveThreshold(overrides map[string]float64, def float64, name string, sid sourceTypes.SourceID) float64 {
-	if v, ok := overrides[fmt.Sprintf("%s/%s", name, sid)]; ok {
-		return v
+// config resolves the threshold configuration from the options: the
+// per-axis config when given, else the legacy single threshold mapped onto
+// every axis, else all-zero defaults. Mixing both styles is an error.
+func (o *options) config() (threshold.Config, error) {
+	var cfg threshold.Config
+	switch {
+	case o.thresholds != nil && o.legacySet:
+		return threshold.Config{}, errors.New("unexpected threshold options. expected: either WithThresholds or WithChangeRateThreshold/WithChangeRateThresholdOverrides, actual: both")
+	case o.thresholds != nil:
+		cfg = *o.thresholds
+	default:
+		cfg = threshold.Legacy(Axes, o.changeRateThreshold, o.changeRateThresholdOverrides)
 	}
-	if v, ok := overrides[name]; ok {
-		return v
+	if err := cfg.Validate(); err != nil {
+		return threshold.Config{}, errors.Wrap(err, "validate thresholds")
 	}
-	return def
+	return cfg, nil
 }
 
 // listScanResults lists *.json files in the directory.
@@ -421,8 +472,8 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 }
 
 // diffDetection builds the FileDiff of one scan result file from its raw
-// per-source CVE ID collections. Per-source thresholds are resolved from
-// overrides via resolveThreshold, falling back to threshold. Parallels
+// per-source CVE ID collections. Per-source thresholds are resolved per
+// axis from cfg ("<file>/<source>" > "<file>" > default). Parallels
 // `diffEcosystem` on the db side.
 //
 // Only (CVE ID, source) pairs are compared; per-CVE content (confidence
@@ -431,7 +482,7 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
-func diffDetection(name string, ids cveIDs, overrides map[string]float64, threshold float64) FileDiff {
+func diffDetection(name string, ids cveIDs, cfg threshold.Config) FileDiff {
 	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
 	for s := range ids.Baseline {
 		sources[s] = struct{}{}
@@ -452,31 +503,16 @@ func diffDetection(name string, ids cveIDs, overrides map[string]float64, thresh
 		}
 		sd.Added = subtract(sd.TargetIDs, sd.BaselineIDs)
 		sd.Removed = subtract(sd.BaselineIDs, sd.TargetIDs)
-		sd.ChangeRate = changeRate(len(sd.BaselineIDs), len(sd.Added), len(sd.Removed))
-		sd.Threshold = resolveThreshold(overrides, threshold, name, sid)
-		sd.Pass = sd.ChangeRate <= sd.Threshold
+		sd.Rates = threshold.Rates{
+			threshold.Added:   threshold.Rate(len(sd.BaselineIDs), len(sd.Added)),
+			threshold.Removed: threshold.Rate(len(sd.BaselineIDs), len(sd.Removed)),
+		}
+		sd.Thresholds = cfg.Resolve(fmt.Sprintf("%s/%s", name, sid), name)
+		sd.Pass = len(threshold.Exceeded(cfg.Axes, sd.Rates, sd.Thresholds)) == 0
 		d.Sources = append(d.Sources, sd)
 	}
 	d.Pass = !slices.ContainsFunc(d.Sources, func(sd SourceDiff) bool { return !sd.Pass })
 	return d
-}
-
-// changeRate computes a per-source change rate as a percentage:
-//
-//	(added + removed) / baseline * 100
-//
-// It can exceed 100% when additions outnumber baseline entries — capping at
-// 100 would hide the magnitude of large additions. When baseline is empty but
-// entries were added or removed, the rate is 100. When nothing changed, 0.
-func changeRate(baseline, added, removed int) float64 {
-	switch {
-	case baseline > 0:
-		return float64(added+removed) / float64(baseline) * 100
-	case added+removed > 0:
-		return 100
-	default:
-		return 0
-	}
 }
 
 // subtract returns elements in a that are not in b (i.e. a \ b).

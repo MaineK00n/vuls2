@@ -5,62 +5,63 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/override"
+	"github.com/MaineK00n/vuls2/pkg/cmd/diff/internal/thresholdflag"
 	diffdb "github.com/MaineK00n/vuls2/pkg/diff/db"
 )
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		changeRateThreshold          float64
-		changeRateThresholdOverrides []string
-		debug                        bool
+		thresholds *thresholdflag.Flags
+		debug      bool
 	}{
-		changeRateThreshold: 0,
-		debug:               false,
+		debug: false,
 	}
 	cmd := &cobra.Command{
 		Use:   "db <baseline-db> <target-db>",
 		Short: "compare detection data directly between two vuls DBs",
 		Example: heredoc.Doc(`
-		# fail when any data source in any ecosystem drifts more than 10%
-		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
-
-		# relax ubuntu:26.04 (new-distro churn) and fedora:45 individually,
-		# keep every other ecosystem at the 10% default
+		# tolerate up to 30% additions (the default) but fail when any data
+		# source in any ecosystem changes or removes more than 10% of its units
 		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override ubuntu:26.04=25 \
-		    --change-rate-threshold-override fedora:45=15
+		    --changed-rate-threshold 10 \
+		    --removed-rate-threshold 10
 
-		# relax a single data source within an ecosystem;
-		# <ecosystem>/<source> takes precedence over <ecosystem>
+		# relax additions for ubuntu:26.04 (new-distro backfill) and removals
+		# for a single source; <ecosystem>/<source> takes precedence over
+		# <ecosystem>, and each override touches only the axis it names
 		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override cpe/cisco-json=30
+		    --changed-rate-threshold 10 \
+		    --removed-rate-threshold 10 \
+		    --rate-threshold-override ubuntu:26.04=added:80 \
+		    --rate-threshold-override cpe/cisco-json=removed:25
 
 		# comma-separated form is equivalent
 		$ vuls diff db ./baseline.db ./target.db \
-		    --change-rate-threshold 10 \
-		    --change-rate-threshold-override 'ubuntu:26.04=25,fedora:45=15'
+		    --changed-rate-threshold 10 \
+		    --removed-rate-threshold 10 \
+		    --rate-threshold-override 'ubuntu:26.04=added:80,cpe/cisco-json=removed:25'
+
+		# legacy single-threshold form (deprecated): one value applied to
+		# added, changed and removed alike; cannot be mixed with the flags above
+		$ vuls diff db ./baseline.db ./target.db --change-rate-threshold 10
 		`),
 		Args: cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			overrides, err := override.Parse(options.changeRateThresholdOverrides)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := options.thresholds.Config(cmd.Flags())
 			if err != nil {
-				return errors.Wrap(err, "parse change-rate-threshold-override")
+				return errors.Wrap(err, "resolve thresholds")
 			}
 			return diffdb.DiffBoltDB(
 				args[0], args[1],
-				diffdb.WithChangeRateThreshold(options.changeRateThreshold),
-				diffdb.WithChangeRateThresholdOverrides(overrides),
+				diffdb.WithThresholds(cfg),
 				diffdb.WithDebug(options.debug),
 			)
 		},
 	}
 
-	cmd.Flags().Float64Var(&options.changeRateThreshold, "change-rate-threshold", options.changeRateThreshold, "change rate (%) threshold per (ecosystem, data source); exit non-zero if exceeded")
-	cmd.Flags().StringSliceVar(&options.changeRateThresholdOverrides, "change-rate-threshold-override", nil,
-		"override of the threshold; format: <ecosystem>=<rate> (all sources in the ecosystem) or <ecosystem>/<source>=<rate> (single source, wins over the ecosystem key) (repeatable; comma-separated entries also accepted)")
+	options.thresholds = thresholdflag.Register(cmd.Flags(), diffdb.Axes,
+		"(ecosystem, data source)",
+		"<ecosystem> (all sources in the ecosystem, e.g. ubuntu:26.04) or <ecosystem>/<source> (single source, e.g. cpe/cisco-json, wins over the ecosystem key)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd

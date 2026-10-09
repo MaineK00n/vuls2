@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/pkg/errors"
 
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
+
+	"github.com/MaineK00n/vuls2/pkg/diff/threshold"
 )
 
 // placeholderSourceID marks the row emitted for an ecosystem compared
@@ -42,9 +45,10 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 		}
 	}
 
-	// Sort: FAIL first, then by max(rate) desc, then by ecosystem asc, source asc.
-	// Per-source threshold can hide a high-rate row behind PASS, so surfacing
-	// FAIL rows first keeps triage focused on what actually blocks promotion.
+	// Sort: FAIL first, then by the max rate over every (bucket, axis) desc,
+	// then by ecosystem asc, source asc. Per-source thresholds can hide a
+	// high-rate row behind PASS, so surfacing FAIL rows first keeps triage
+	// focused on what actually blocks promotion.
 	slices.SortFunc(rows, func(a, b reportRow) int {
 		return cmp.Or(
 			func() int {
@@ -57,8 +61,7 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 					return 0
 				}
 			}(),
-			cmp.Compare(max(b.DetectionChangeRate, b.KBChangeRate),
-				max(a.DetectionChangeRate, a.KBChangeRate)),
+			cmp.Compare(maxRate(b.SourceDiff), maxRate(a.SourceDiff)),
 			cmp.Compare(a.Ecosystem, b.Ecosystem),
 			cmp.Compare(a.SourceID, b.SourceID),
 		)
@@ -72,17 +75,19 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 
 **Result**: %s
 
-| Ecosystem | Source | Detection Change Rate | KB Change Rate | Threshold | Result |
-|-----------|--------|-----------------------|----------------|-----------|--------|
+| Ecosystem | Source | Detection (added / changed / removed) | KB (added / changed / removed) | Threshold (added / changed / removed) | Result |
+|-----------|--------|---------------------------------------|--------------------------------|---------------------------------------|--------|
 `, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 	for _, r := range rows {
-		if _, err := fmt.Fprintf(w, "| %s | %s | %.1f%% | %.1f%% | %s | %s |\n",
+		// Rates above their threshold are rendered in bold so a FAIL row
+		// shows which (bucket, axis) tripped without reading Details.
+		if _, err := fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s |\n",
 			r.Ecosystem,
 			r.SourceID,
-			r.DetectionChangeRate,
-			r.KBChangeRate,
+			threshold.Format(Axes, r.DetectionRates, r.Thresholds),
+			threshold.Format(Axes, r.KBRates, r.Thresholds),
 			thresholdCell(r.SourceDiff),
 			resultLabel(r.Pass),
 		); err != nil {
@@ -98,8 +103,8 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 	}) {
 		if _, err := fmt.Fprintf(w, `## Detection
 
-| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions |
-|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|
+| Ecosystem | Source | Baseline Keys | Target Keys | Added | Removed | Changed | Baseline Criterions | Target Criterions | Matched Criterions | Added Criterions | Changed Criterions | Removed Criterions |
+|-----------|--------|---------------|-------------|-------|---------|---------|---------------------|-------------------|--------------------|------------------|--------------------|--------------------|
 `); err != nil {
 			return false, errors.Wrap(err, "write detection header")
 		}
@@ -107,10 +112,11 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			if r.BaselineKeys == 0 && r.TargetKeys == 0 {
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d |\n",
+			if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d |\n",
 				r.Ecosystem, r.SourceID, r.BaselineKeys, r.TargetKeys,
 				len(r.Added), len(r.Removed), len(r.Changed),
-				r.BaselineCriterions, r.TargetCriterions, r.MatchedCriterions); err != nil {
+				r.BaselineCriterions, r.TargetCriterions, r.MatchedCriterions,
+				r.AddedCriterions, r.ChangedCriterions, r.RemovedCriterions); err != nil {
 				return false, errors.Wrap(err, "write detection row")
 			}
 		}
@@ -158,10 +164,10 @@ func generateReport(w io.Writer, diffs []EcosystemDiff) (bool, error) {
 			return false, errors.Wrap(err, "write details header")
 		}
 		for _, r := range failRows {
-			// A source can fail on either rate (e.g. microsoft on KB alone),
-			// so the headline shows whichever signal is larger — same rule as
-			// the summary sort.
-			if _, err := fmt.Fprintf(w, "### %s / %s (%.1f%%)\n\n", r.Ecosystem, r.SourceID, max(r.DetectionChangeRate, r.KBChangeRate)); err != nil {
+			// The headline names every (bucket, axis) that tripped, with
+			// its rate and threshold, so the reason is visible without
+			// scanning the Summary row.
+			if _, err := fmt.Fprintf(w, "### %s / %s (%s)\n\n", r.Ecosystem, r.SourceID, exceededLabel(r.SourceDiff)); err != nil {
 				return false, errors.Wrapf(err, "write source header %s/%s", r.Ecosystem, r.SourceID)
 			}
 			for _, l := range []struct {
@@ -196,7 +202,32 @@ func thresholdCell(sd SourceDiff) string {
 	if sd.SourceID == placeholderSourceID {
 		return "-"
 	}
-	return fmt.Sprintf("%.1f%%", sd.Threshold)
+	return threshold.FormatThresholds(Axes, sd.Thresholds)
+}
+
+// maxRate is the largest rate over both buckets and every axis — the
+// Summary sort key within a PASS/FAIL tier.
+func maxRate(sd SourceDiff) float64 {
+	return max(threshold.Max(Axes, sd.DetectionRates), threshold.Max(Axes, sd.KBRates))
+}
+
+// exceededLabel lists every (bucket, axis) above its threshold as
+// "detection removed 12.3% > 10.0%", comma-separated, for the Details
+// headline of a FAIL source.
+func exceededLabel(sd SourceDiff) string {
+	var parts []string
+	for _, b := range []struct {
+		name  string
+		rates threshold.Rates
+	}{
+		{"detection", sd.DetectionRates},
+		{"kb", sd.KBRates},
+	} {
+		for _, a := range threshold.Exceeded(Axes, b.rates, sd.Thresholds) {
+			parts = append(parts, fmt.Sprintf("%s %s %.1f%% > %.1f%%", b.name, a, b.rates[a], sd.Thresholds[a]))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func resultLabel(pass bool) string {
