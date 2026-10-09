@@ -255,7 +255,10 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -284,7 +287,10 @@ func TestDiffDetection(t *testing.T) {
 					Target: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005",
 						"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0011"}},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 25, threshold.Removed: 25}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 25, threshold.Removed: 25},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -313,7 +319,10 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
 					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "ubuntu_22.04",
@@ -342,7 +351,10 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"}},
 					Target:   map[sourceTypes.SourceID][]string{"debian-security-tracker-api": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0005"}},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 0}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "debian_13",
@@ -378,7 +390,10 @@ func TestDiffDetection(t *testing.T) {
 						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
 					},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "cpe_cisco",
@@ -461,7 +476,10 @@ func TestDiffDetection(t *testing.T) {
 					Baseline: map[sourceTypes.SourceID][]string{},
 					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
 				},
-				th: threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name: "redhat_9",
@@ -483,7 +501,10 @@ func TestDiffDetection(t *testing.T) {
 			args: args{
 				name: "redhat_9",
 				ids:  detection.CVEIDs{},
-				th:   threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10}},
+				th: threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
+				},
 			},
 			want: detection.FileDiff{
 				Name:    "redhat_9",
@@ -894,8 +915,8 @@ func TestDiff(t *testing.T) {
 
 	emptyDir := t.TempDir()
 
-	// threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5}} mirrors the vuls-data-db defaults: additions tolerated up
-	// to 30%, removals up to 5%.
+	// The 30 / 5 thresholds used below mirror the vuls-data-db defaults:
+	// additions tolerated up to 30%, removals up to 5%.
 	type args struct {
 		dir        string
 		detectFunc detection.DetectFunc
@@ -911,7 +932,10 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5}})},
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
@@ -920,7 +944,10 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 100, threshold.Removed: 100}})},
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 100, threshold.Removed: 100},
+				})},
 			},
 			wantErr: false,
 		},
@@ -952,7 +979,10 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        scanDir,
 				detectFunc: fakeDetectErr,
-				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5}})},
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
@@ -961,7 +991,10 @@ func TestDiff(t *testing.T) {
 			args: args{
 				dir:        emptyDir,
 				detectFunc: fakeDetect,
-				opts:       []detection.Option{detection.WithThreshold(threshold.Threshold{Axes: detection.Axes, Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5}})},
+				opts: []detection.Option{detection.WithThreshold(threshold.Threshold{
+					Axes:    detection.Axes,
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				})},
 			},
 			wantErr: true,
 		},
