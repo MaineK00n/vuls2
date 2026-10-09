@@ -157,6 +157,9 @@ func Rate(baseline, n int) float64 {
 
 // Format renders rates in axes order as "a% / b% / c%", wrapping in bold
 // the ones above their threshold so a FAIL row shows which axis tripped.
+// An exceeded rate is printed with enough decimals to read as different
+// from its (one-decimal) threshold, so 10.04% over 10% renders as
+// "**10.04%**" rather than a "**10.0%**" that looks equal to "10.0%".
 func Format(axes []Axis, rates, thresholds Rates) string {
 	s := ""
 	for i, a := range axes {
@@ -165,7 +168,8 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 		}
 		cell := fmt.Sprintf("%.1f%%", rates[a])
 		if rates[a] > thresholds[a] {
-			cell = "**" + cell + "**"
+			r, _ := formatDistinct(rates[a], thresholds[a])
+			cell = "**" + r + "%**"
 		}
 		s += cell
 	}
@@ -175,16 +179,26 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 // FormatExceeded renders "rate% > threshold%" for an exceeded axis with
 // just enough decimals for the two numbers to read as different: at one
 // decimal 10.010% over a 10% threshold would print as "10.0% > 10.0%", a
-// false inequality. Precision grows up to six decimals, past which the
-// two are printed with %g.
+// false inequality.
 func FormatExceeded(rate, threshold float64) string {
+	r, t := formatDistinct(rate, threshold)
+	return r + "% > " + t + "%"
+}
+
+// formatDistinct formats two values at the smallest precision (from one
+// decimal up to six) at which they render differently, falling back to %g
+// when even six decimals do not separate them. Equal values render equal.
+func formatDistinct(a, b float64) (string, string) {
 	for p := 1; p <= 6; p++ {
-		r, t := fmt.Sprintf("%.*f", p, rate), fmt.Sprintf("%.*f", p, threshold)
-		if r != t {
-			return r + "% > " + t + "%"
+		as, bs := fmt.Sprintf("%.*f", p, a), fmt.Sprintf("%.*f", p, b)
+		if as != bs {
+			return as, bs
 		}
 	}
-	return fmt.Sprintf("%g%% > %g%%", rate, threshold)
+	if a == b {
+		return fmt.Sprintf("%.1f", a), fmt.Sprintf("%.1f", b)
+	}
+	return fmt.Sprintf("%g", a), fmt.Sprintf("%g", b)
 }
 
 // FormatThresholds renders thresholds in axes order as "a% / b% / c%".

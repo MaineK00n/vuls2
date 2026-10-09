@@ -241,6 +241,13 @@ func TestFormat(t *testing.T) {
 	if got, want := threshold.Format(all, rates, thresholds), "12.3% / 0.0% / **10.0%**"; got != want {
 		t.Errorf("Format() = %q, want %q", got, want)
 	}
+	// An exceeded rate that rounds to its threshold at one decimal gets
+	// more decimals; the non-exceeded cells keep one.
+	near := threshold.Rates{threshold.Added: 10.04, threshold.Changed: 9.96, threshold.Removed: 0}
+	nearT := threshold.Rates{threshold.Added: 10, threshold.Changed: 10, threshold.Removed: 0}
+	if got, want := threshold.Format(all, near, nearT), "**10.04%** / 10.0% / 0.0%"; got != want {
+		t.Errorf("Format() = %q, want %q", got, want)
+	}
 	if got, want := threshold.FormatThresholds(all, thresholds), "30.0% / 10.0% / 5.0%"; got != want {
 		t.Errorf("FormatThresholds() = %q, want %q", got, want)
 	}
