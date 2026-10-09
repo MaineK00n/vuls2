@@ -133,11 +133,12 @@ type SourceDiff struct {
 	ChangedKBs     []string // KB IDs in both but with different KB data for this source
 	RemovedKBs     []string // KB IDs where this source appears only in baseline
 
-	// Per-bucket change rates, one per axis in Axes, each as a percentage
-	// of the bucket's baseline unit count. The KB bucket's units are its
-	// keys, so its rates come straight from the Added/Changed/RemovedKBs
-	// lengths. When a bucket is absent in both baseline and target, its
-	// rates are 0.
+	// Change rates of this source in each of the two sub-buckets it may
+	// contribute to (`<ecosystem>/detection` and `<ecosystem>/kb`), one
+	// per axis in Axes, each as a percentage of that bucket's baseline
+	// unit count. The KB bucket's units are its keys, so its rates come
+	// straight from the Added/Changed/RemovedKBs lengths. When a bucket
+	// is absent in both baseline and target, its rates are 0.
 	DetectionRates threshold.Rates
 	KBRates        threshold.Rates
 
