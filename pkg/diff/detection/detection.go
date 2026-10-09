@@ -49,8 +49,7 @@ type Option interface {
 type thresholdsOption threshold.Config
 
 func (o thresholdsOption) apply(opts *options) {
-	c := threshold.Config(o)
-	opts.thresholds = &c
+	opts.thresholds = (*threshold.Config)(&o)
 }
 
 // WithThresholds supplies the per-axis thresholds. Override keys are either
