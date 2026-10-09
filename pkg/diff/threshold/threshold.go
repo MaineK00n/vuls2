@@ -172,6 +172,21 @@ func Format(axes []Axis, rates, thresholds Rates) string {
 	return s
 }
 
+// FormatExceeded renders "rate% > threshold%" for an exceeded axis with
+// just enough decimals for the two numbers to read as different: at one
+// decimal 10.010% over a 10% threshold would print as "10.0% > 10.0%", a
+// false inequality. Precision grows up to six decimals, past which the
+// two are printed with %g.
+func FormatExceeded(rate, threshold float64) string {
+	for p := 1; p <= 6; p++ {
+		r, t := fmt.Sprintf("%.*f", p, rate), fmt.Sprintf("%.*f", p, threshold)
+		if r != t {
+			return r + "% > " + t + "%"
+		}
+	}
+	return fmt.Sprintf("%g%% > %g%%", rate, threshold)
+}
+
 // FormatThresholds renders thresholds in axes order as "a% / b% / c%".
 func FormatThresholds(axes []Axis, thresholds Rates) string {
 	s := ""

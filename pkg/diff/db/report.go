@@ -224,7 +224,7 @@ func exceededLabel(sd SourceDiff) string {
 		{"kb", sd.KBRates},
 	} {
 		for _, a := range threshold.Exceeded(Axes, b.rates, sd.Thresholds) {
-			parts = append(parts, fmt.Sprintf("%s %s %.1f%% > %.1f%%", b.name, a, b.rates[a], sd.Thresholds[a]))
+			parts = append(parts, fmt.Sprintf("%s %s %s", b.name, a, threshold.FormatExceeded(b.rates[a], sd.Thresholds[a])))
 		}
 	}
 	return strings.Join(parts, ", ")

@@ -150,7 +150,7 @@ func thresholdCell(sd SourceDiff) string {
 func exceededLabel(sd SourceDiff) string {
 	var parts []string
 	for _, a := range threshold.Exceeded(Axes, sd.Rates, sd.Thresholds) {
-		parts = append(parts, fmt.Sprintf("%s %.1f%% > %.1f%%", a, sd.Rates[a], sd.Thresholds[a]))
+		parts = append(parts, fmt.Sprintf("%s %s", a, threshold.FormatExceeded(sd.Rates[a], sd.Thresholds[a])))
 	}
 	return strings.Join(parts, ", ")
 }

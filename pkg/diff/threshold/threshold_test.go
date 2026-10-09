@@ -215,6 +215,26 @@ func TestRate(t *testing.T) {
 	}
 }
 
+func TestFormatExceeded(t *testing.T) {
+	tests := []struct {
+		name            string
+		rate, threshold float64
+		want            string
+	}{
+		{name: "distinct at one decimal", rate: 12.34, threshold: 10, want: "12.3% > 10.0%"},
+		{name: "needs two decimals", rate: 100.0 / 999 * 100, threshold: 10, want: "10.01% > 10.00%"},
+		{name: "zero threshold", rate: 2.5, threshold: 0, want: "2.5% > 0.0%"},
+		{name: "beyond six decimals falls back to %g", rate: 10 + 1e-9, threshold: 10, want: "10.000000001% > 10%"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := threshold.FormatExceeded(tt.rate, tt.threshold); got != tt.want {
+				t.Errorf("FormatExceeded(%v, %v) = %q, want %q", tt.rate, tt.threshold, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormat(t *testing.T) {
 	rates := threshold.Rates{threshold.Added: 12.34, threshold.Changed: 0, threshold.Removed: 10}
 	thresholds := threshold.Rates{threshold.Added: 30, threshold.Changed: 10, threshold.Removed: 5}
