@@ -94,7 +94,16 @@ type SourceDiff struct {
 	BaselineIDs []string
 	TargetIDs   []string
 	Added       []string
-	Removed     []string
+
+	// Removed holds the IDs the source lost that no source of the file
+	// reports in the target: the detection is gone for the user. The
+	// removed axis is judged on it.
+	Removed []string
+
+	// Moved holds the IDs the source lost that another source of the file
+	// still reports in the target: the detecting source changed, the
+	// detection did not. Reported, not judged.
+	Moved []Move
 
 	// Rates holds the change rate of every axis in Axes, each as a
 	// percentage of the baseline ID count.
@@ -106,6 +115,21 @@ type SourceDiff struct {
 	Thresholds threshold.Rates
 
 	Pass bool
+}
+
+// Move is an ID a source lost while another source of the same file still
+// reports it in the target. vuls0 suppresses a CPE match from a secondary
+// source (VulnCheck, JVN) once a verified source (NVD, Fortinet, Cisco,
+// PaloAlto) defines the same product for the CVE, so when NVD starts
+// covering a product the CVE is detected as before but attributed to NVD;
+// on the secondary source's row that reads as a removal. Telling the two
+// apart keeps the removed axis for detections the user actually loses.
+type Move struct {
+	ID string
+
+	// To lists the target sources that report ID, sorted; never empty
+	// and never the losing source itself (it no longer reports ID).
+	To []sourceTypes.SourceID
 }
 
 // FileDiff holds the comparison result for a single scan result file, broken
@@ -449,6 +473,15 @@ func collectSources(scannedCves map[string]vulnInfo) (map[sourceTypes.SourceID][
 // regression detection (missing or extra CVEs per data source), but not for
 // validating data source migrations where IDs stay the same but metadata
 // differs.
+//
+// An ID a source lost is split by whether another source of the file still
+// reports it in the target: if so it is a Move (the detection survived
+// under another source), otherwise it is Removed (the detection is gone
+// from the file). Only Removed feeds the removed rate, so the invariants
+// are lost = Removed ⊎ Moved per source and, over the file, the union of
+// every source's Removed equals the IDs the file as a whole lost. Added is
+// not split the same way: the receiving side of a move is a plain
+// addition on the other source's row.
 func diffDetection(name string, ids cveIDs, th threshold.Threshold) FileDiff {
 	sources := make(map[sourceTypes.SourceID]struct{}, max(len(ids.Baseline), len(ids.Target)))
 	for s := range ids.Baseline {
@@ -456,6 +489,18 @@ func diffDetection(name string, ids cveIDs, th threshold.Threshold) FileDiff {
 	}
 	for s := range ids.Target {
 		sources[s] = struct{}{}
+	}
+
+	// targetBy resolves where a lost ID went: every target source that
+	// reports it, sorted so Move.To is stable.
+	targetBy := make(map[string][]sourceTypes.SourceID)
+	for sid, list := range ids.Target {
+		for _, id := range list {
+			targetBy[id] = append(targetBy[id], sid)
+		}
+	}
+	for _, to := range targetBy {
+		slices.Sort(to)
 	}
 
 	d := FileDiff{
@@ -469,7 +514,15 @@ func diffDetection(name string, ids cveIDs, th threshold.Threshold) FileDiff {
 			TargetIDs:   ids.Target[sid],
 		}
 		sd.Added = subtract(sd.TargetIDs, sd.BaselineIDs)
-		sd.Removed = subtract(sd.BaselineIDs, sd.TargetIDs)
+		for _, id := range subtract(sd.BaselineIDs, sd.TargetIDs) {
+			// id is not in sd.TargetIDs, so targetBy[id] never holds sid
+			// itself: a non-empty entry means another source has it.
+			if to := targetBy[id]; len(to) > 0 {
+				sd.Moved = append(sd.Moved, Move{ID: id, To: to})
+			} else {
+				sd.Removed = append(sd.Removed, id)
+			}
+		}
 		sd.Rates = threshold.Rates{
 			threshold.Added:   threshold.Rate(len(sd.BaselineIDs), len(sd.Added)),
 			threshold.Removed: threshold.Rate(len(sd.BaselineIDs), len(sd.Removed)),

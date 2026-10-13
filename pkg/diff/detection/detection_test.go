@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -371,19 +372,20 @@ func TestDiffDetection(t *testing.T) {
 		},
 		{
 			// A small source must not hide behind a big one: cisco-json
-			// disappears while NVD is unchanged. The union of CVE IDs would
-			// barely move (cisco CVEs are also detected by NVD), but the
-			// per-source diff fails loudly.
+			// loses both of its IDs, which no other source of the file
+			// reports, while NVD is unchanged. Against the file's union
+			// (6 → 4) that is 33%; the per-source diff reports cisco-json
+			// at 100% and fails loudly.
 			name: "small source loss not masked by large source",
 			args: args{
 				name: "cpe_cisco",
 				ids: detection.CVEIDs{
 					Baseline: map[sourceTypes.SourceID][]string{
-						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"nvd-feed-cve-v2": {"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
 						"cisco-json":      {"CVE-2026-0001", "CVE-2026-0002"},
 					},
 					Target: map[sourceTypes.SourceID][]string{
-						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"nvd-feed-cve-v2": {"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
 					},
 				},
 				th: threshold.Threshold{
@@ -403,8 +405,8 @@ func TestDiffDetection(t *testing.T) {
 					},
 					{
 						SourceID:    "nvd-feed-cve-v2",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						BaselineIDs: []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+						TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
 						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
 						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        true,
@@ -422,11 +424,11 @@ func TestDiffDetection(t *testing.T) {
 				ids: detection.CVEIDs{
 					Baseline: map[sourceTypes.SourceID][]string{
 						"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0002"},
-						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0004"},
 					},
 					Target: map[sourceTypes.SourceID][]string{
 						"jvn-feed-rss":    {"CVE-2026-0001", "CVE-2026-0003"},
-						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0002"},
+						"nvd-feed-cve-v2": {"CVE-2026-0001", "CVE-2026-0004"},
 					},
 				},
 				th: threshold.Threshold{
@@ -451,8 +453,8 @@ func TestDiffDetection(t *testing.T) {
 					},
 					{
 						SourceID:    "nvd-feed-cve-v2",
-						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
-						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0002"},
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0004"},
+						TargetIDs:   []string{"CVE-2026-0001", "CVE-2026-0004"},
 						Rates:       threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
 						Thresholds:  threshold.Rates{threshold.Added: 10, threshold.Removed: 10},
 						Pass:        true,
@@ -535,6 +537,337 @@ func TestDiffDetection(t *testing.T) {
 				Pass: true,
 			},
 		},
+		{
+			// The suppression pattern: NVD starts covering a product, so
+			// vuls0 attributes two CVEs to NVD instead of VulnCheck. The
+			// CVEs are still detected; on the VulnCheck row they are moves,
+			// not removals, and the removed rate stays at 0.
+			name: "move between sources is not a removal",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						"nvd-feed-cve-v2": {"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008",
+							"CVE-2026-0009", "CVE-2026-0010", "CVE-2026-0011", "CVE-2026-0012", "CVE-2026-0013"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0003"},
+						"nvd-feed-cve-v2": {"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008",
+							"CVE-2026-0009", "CVE-2026-0010", "CVE-2026-0011", "CVE-2026-0012", "CVE-2026-0013", "CVE-2026-0001", "CVE-2026-0002"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						TargetIDs:   []string{"CVE-2026-0003"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+							{
+								ID: "CVE-2026-0002",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+					{
+						SourceID: "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008",
+							"CVE-2026-0009", "CVE-2026-0010", "CVE-2026-0011", "CVE-2026-0012", "CVE-2026-0013"},
+						TargetIDs: []string{"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008",
+							"CVE-2026-0009", "CVE-2026-0010", "CVE-2026-0011", "CVE-2026-0012", "CVE-2026-0013", "CVE-2026-0001", "CVE-2026-0002"},
+						Added:      []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Rates:      threshold.Rates{threshold.Added: 20, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// Of three lost IDs one moved to NVD and two vanished from the
+			// file; only the two count, and 2/4 still trips the row.
+			name: "loss and move on one source are judged apart",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						"nvd-feed-cve-v2":     {"CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0004"},
+						"nvd-feed-cve-v2":     {"CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0001"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004"},
+						TargetIDs:   []string{"CVE-2026-0004"},
+						Removed:     []string{"CVE-2026-0002", "CVE-2026-0003"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 50},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       false,
+					},
+					{
+						SourceID:    "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008"},
+						TargetIDs:   []string{"CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+				},
+				Pass: false,
+			},
+		},
+		{
+			// Two secondary sources lose the same ID to NVD at once; each
+			// records the move on its own row, and neither is in the target.
+			name: "same ID moves from two sources to one",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0001"},
+						"jvn-feed-rss":        {"CVE-2026-0001"},
+						"nvd-feed-cve-v2":     {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"nvd-feed-cve-v2": {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "jvn-feed-rss",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+					{
+						SourceID:    "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						TargetIDs:   []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// An ID picked up by two sources lists both destinations,
+			// sorted, regardless of map iteration order.
+			name: "move to several sources lists them sorted",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0001"},
+						"nvd-feed-cve-v2":     {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						"jvn-feed-rss":        {"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"nvd-feed-cve-v2": {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+						"jvn-feed-rss":    {"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0001"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "jvn-feed-rss",
+						BaselineIDs: []string{"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009"},
+						TargetIDs:   []string{"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+					{
+						SourceID:    "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						TargetIDs:   []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"jvn-feed-rss", "nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// The reverse direction (NVD drops a product, VulnCheck is no
+			// longer suppressed) rides the same rule: a move on the NVD row,
+			// a plain addition on the VulnCheck row.
+			name: "move back from NVD is a move on the NVD row",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"nvd-feed-cve-v2":     {"CVE-2026-0001"},
+						"vulncheck-nist-nvd2": {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0001"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"vulncheck-nist-nvd2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       true,
+					},
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+						TargetIDs:   []string{"CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+				},
+				Pass: true,
+			},
+		},
+		{
+			// A source that vanishes from the target entirely still has its
+			// lost IDs split: the one NVD picked up is a move, the other is
+			// a removal, and 1/2 trips the row.
+			name: "source absent from target still splits moves from removals",
+			args: args{
+				name: "cpe_nvd",
+				ids: detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"vulncheck-nist-nvd2": {"CVE-2026-0001", "CVE-2026-0002"},
+						"nvd-feed-cve-v2":     {"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"nvd-feed-cve-v2": {"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0001"},
+					},
+				},
+				th: threshold.Threshold{
+					Default: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+				},
+			},
+			want: detection.FileDiff{
+				Name: "cpe_nvd",
+				Sources: []detection.SourceDiff{
+					{
+						SourceID:    "nvd-feed-cve-v2",
+						BaselineIDs: []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006"},
+						TargetIDs:   []string{"CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0001"},
+						Added:       []string{"CVE-2026-0001"},
+						Rates:       threshold.Rates{threshold.Added: 25, threshold.Removed: 0},
+						Thresholds:  threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:        true,
+					},
+					{
+						SourceID:    "vulncheck-nist-nvd2",
+						BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002"},
+						Removed:     []string{"CVE-2026-0002"},
+						Moved: []detection.Move{
+							{
+								ID: "CVE-2026-0001",
+								To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+							},
+						},
+						Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 50},
+						Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+						Pass:       false,
+					},
+				},
+				Pass: false,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -544,6 +877,58 @@ func TestDiffDetection(t *testing.T) {
 			// presentation), so compare it order-insensitively.
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b detection.SourceDiff) bool { return a.SourceID < b.SourceID })); diff != "" {
 				t.Errorf("DiffDetection() mismatch (-want +got):\n%s", diff)
+			}
+
+			// Invariants of the lost-ID split, independent of the expected
+			// values: per source, lost = Removed ⊎ Moved and every move
+			// names at least one other source, sorted; over the file, the
+			// union of every source's Removed is exactly what the file as a
+			// whole lost.
+			var targetUnion []string
+			for _, list := range tt.args.ids.Target {
+				targetUnion = append(targetUnion, list...)
+			}
+			var baselineUnion []string
+			for _, list := range tt.args.ids.Baseline {
+				baselineUnion = append(baselineUnion, list...)
+			}
+			fileLost := detection.Subtract(baselineUnion, targetUnion)
+			slices.Sort(fileLost)
+			fileLost = slices.Compact(fileLost)
+
+			var removedUnion []string
+			for _, sd := range got.Sources {
+				lost := detection.Subtract(sd.BaselineIDs, sd.TargetIDs)
+				if len(lost) != len(sd.Removed)+len(sd.Moved) {
+					t.Errorf("%s: lost %d != removed %d + moved %d", sd.SourceID, len(lost), len(sd.Removed), len(sd.Moved))
+				}
+				for _, id := range sd.Removed {
+					if slices.Contains(targetUnion, id) {
+						t.Errorf("%s: removed %s is still reported by a source of the file", sd.SourceID, id)
+					}
+				}
+				for _, m := range sd.Moved {
+					if len(m.To) == 0 {
+						t.Errorf("%s: move %s has no destination", sd.SourceID, m.ID)
+					}
+					if !slices.IsSorted(m.To) {
+						t.Errorf("%s: move %s destinations not sorted: %v", sd.SourceID, m.ID, m.To)
+					}
+					if slices.Contains(m.To, sd.SourceID) {
+						t.Errorf("%s: move %s lists the losing source as a destination", sd.SourceID, m.ID)
+					}
+					for _, to := range m.To {
+						if !slices.Contains(tt.args.ids.Target[to], m.ID) {
+							t.Errorf("%s: move %s names %s, which does not report it in the target", sd.SourceID, m.ID, to)
+						}
+					}
+				}
+				removedUnion = append(removedUnion, sd.Removed...)
+			}
+			slices.Sort(removedUnion)
+			removedUnion = slices.Compact(removedUnion)
+			if diff := cmp.Diff(fileLost, removedUnion, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("union of Removed != IDs lost by the file (-file +sources):\n%s", diff)
 			}
 		})
 	}
@@ -603,10 +988,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| ubuntu_22.04 | ubuntu-oval | 4 | 1 | 0 | 3 | 0.0% / **75.0%** | 30.0% / 5.0% | **FAIL** |
-| redhat_9 | redhat-csaf | 2 | 2 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| ubuntu_22.04 | ubuntu-oval | 4 | 1 | 0 | 3 | 0 | 0.0% / **75.0%** | 30.0% / 5.0% | **FAIL** |
+| redhat_9 | redhat-csaf | 2 | 2 | 0 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 ## Details (FAIL sources)
 
@@ -657,10 +1042,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| cpe_cisco | cisco-json | 2 | 0 | 0 | 2 | 0.0% / **100.0%** | 30.0% / 5.0% | **FAIL** |
-| cpe_cisco | nvd-feed-cve-v2 | 4 | 4 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| cpe_cisco | cisco-json | 2 | 0 | 0 | 2 | 0 | 0.0% / **100.0%** | 30.0% / 5.0% | **FAIL** |
+| cpe_cisco | nvd-feed-cve-v2 | 4 | 4 | 0 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 ## Details (FAIL sources)
 
@@ -700,9 +1085,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 `,
 		},
@@ -750,10 +1135,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| debian_13 | debian-security-tracker-api | 2 | 3 | 1 | 0 | 50.0% / 0.0% | 80.0% / 5.0% | PASS |
-| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| debian_13 | debian-security-tracker-api | 2 | 3 | 1 | 0 | 0 | 50.0% / 0.0% | 80.0% / 5.0% | PASS |
+| redhat_9 | redhat-csaf | 1 | 1 | 0 | 0 | 0 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
 
 `,
 		},
@@ -807,10 +1192,10 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: **FAIL**
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| beta | alma-errata | 2 | 2 | 1 | 1 | **50.0%** / **50.0%** | 0.0% / 0.0% | **FAIL** |
-| alpha | alma-errata | 2 | 3 | 3 | 2 | 150.0% / 100.0% | 300.0% / 300.0% | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| beta | alma-errata | 2 | 2 | 1 | 1 | 0 | **50.0%** / **50.0%** | 0.0% / 0.0% | **FAIL** |
+| alpha | alma-errata | 2 | 3 | 3 | 2 | 0 | 150.0% / 100.0% | 300.0% / 300.0% | PASS |
 
 ## Details (FAIL sources)
 
@@ -823,6 +1208,123 @@ func TestGenerateReport(t *testing.T) {
 #### Removed IDs (1)
 
 - CVE-2026-1002
+
+`,
+		},
+		{
+			// Moved is counted on every row but listed only under a FAIL
+			// row, where the IDs are sorted and each names its target
+			// sources. Moved never enters the sort: cisco-json has the most
+			// moves yet sorts last on its 0% rates.
+			name: "moved counted on every row and listed only for FAIL rows",
+			args: args{
+				diffs: map[string]detection.FileDiff{
+					"cpe_nvd": {
+						Name: "cpe_nvd",
+						Sources: []detection.SourceDiff{
+							{
+								SourceID:    "vulncheck-nist-nvd2",
+								BaselineIDs: []string{"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003", "CVE-2026-0004", "CVE-2026-0005"},
+								TargetIDs:   []string{"CVE-2026-0004"},
+								Removed:     []string{"CVE-2026-0003", "CVE-2026-0002"},
+								Moved: []detection.Move{
+									{
+										ID: "CVE-2026-0005",
+										To: []sourceTypes.SourceID{"jvn-feed-rss", "nvd-feed-cve-v2"},
+									},
+									{
+										ID: "CVE-2026-0001",
+										To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+									},
+								},
+								Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 40},
+								Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+								Pass:       false,
+							},
+							{
+								SourceID:    "jvn-feed-rss",
+								BaselineIDs: []string{"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
+								TargetIDs:   []string{"CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0005"},
+								Added:       []string{"CVE-2026-0005"},
+								Moved: []detection.Move{
+									{
+										ID: "CVE-2026-0010",
+										To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+									},
+								},
+								Rates:      threshold.Rates{threshold.Added: 20, threshold.Removed: 0},
+								Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+								Pass:       true,
+							},
+							{
+								SourceID:    "cisco-json",
+								BaselineIDs: []string{"CVE-2026-0021", "CVE-2026-0022", "CVE-2026-0023"},
+								Moved: []detection.Move{
+									{
+										ID: "CVE-2026-0021",
+										To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+									},
+									{
+										ID: "CVE-2026-0022",
+										To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+									},
+									{
+										ID: "CVE-2026-0023",
+										To: []sourceTypes.SourceID{"nvd-feed-cve-v2"},
+									},
+								},
+								Rates:      threshold.Rates{threshold.Added: 0, threshold.Removed: 0},
+								Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+								Pass:       true,
+							},
+							{
+								SourceID: "nvd-feed-cve-v2",
+								BaselineIDs: []string{"CVE-2026-0101", "CVE-2026-0102", "CVE-2026-0103", "CVE-2026-0104", "CVE-2026-0105",
+									"CVE-2026-0106", "CVE-2026-0107", "CVE-2026-0108", "CVE-2026-0109", "CVE-2026-0110",
+									"CVE-2026-0111", "CVE-2026-0112", "CVE-2026-0113", "CVE-2026-0114", "CVE-2026-0115",
+									"CVE-2026-0116", "CVE-2026-0117", "CVE-2026-0118", "CVE-2026-0119", "CVE-2026-0120"},
+								TargetIDs: []string{"CVE-2026-0101", "CVE-2026-0102", "CVE-2026-0103", "CVE-2026-0104", "CVE-2026-0105",
+									"CVE-2026-0106", "CVE-2026-0107", "CVE-2026-0108", "CVE-2026-0109", "CVE-2026-0110",
+									"CVE-2026-0111", "CVE-2026-0112", "CVE-2026-0113", "CVE-2026-0114", "CVE-2026-0115",
+									"CVE-2026-0116", "CVE-2026-0117", "CVE-2026-0118", "CVE-2026-0119", "CVE-2026-0120",
+									"CVE-2026-0001", "CVE-2026-0005", "CVE-2026-0010", "CVE-2026-0021", "CVE-2026-0022", "CVE-2026-0023"},
+								Added:      []string{"CVE-2026-0001", "CVE-2026-0005", "CVE-2026-0010", "CVE-2026-0021", "CVE-2026-0022", "CVE-2026-0023"},
+								Rates:      threshold.Rates{threshold.Added: 30, threshold.Removed: 0},
+								Thresholds: threshold.Rates{threshold.Added: 30, threshold.Removed: 5},
+								Pass:       true,
+							},
+						},
+						Pass: false,
+					},
+				},
+			},
+			wantPass: false,
+			wantReport: `# Diff Report: Detection
+
+## Summary
+
+**Result**: **FAIL**
+
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| cpe_nvd | vulncheck-nist-nvd2 | 5 | 1 | 0 | 2 | 2 | 0.0% / **40.0%** | 30.0% / 5.0% | **FAIL** |
+| cpe_nvd | nvd-feed-cve-v2 | 20 | 26 | 6 | 0 | 0 | 30.0% / 0.0% | 30.0% / 5.0% | PASS |
+| cpe_nvd | jvn-feed-rss | 5 | 5 | 1 | 0 | 1 | 20.0% / 0.0% | 30.0% / 5.0% | PASS |
+| cpe_nvd | cisco-json | 3 | 0 | 0 | 0 | 3 | 0.0% / 0.0% | 30.0% / 5.0% | PASS |
+
+## Details (FAIL sources)
+
+### cpe_nvd / vulncheck-nist-nvd2 (removed 40.0% > 5.0%)
+
+#### Removed IDs (2)
+
+- CVE-2026-0002
+- CVE-2026-0003
+
+#### Moved IDs (2)
+
+- CVE-2026-0001 → nvd-feed-cve-v2
+- CVE-2026-0005 → jvn-feed-rss, nvd-feed-cve-v2
 
 `,
 		},
@@ -845,9 +1347,9 @@ func TestGenerateReport(t *testing.T) {
 
 **Result**: PASS
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
-| empty_file | (none) | 0 | 0 | 0 | 0 | 0.0% / 0.0% | - | PASS |
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
+| empty_file | (none) | 0 | 0 | 0 | 0 | 0 | 0.0% / 0.0% | - | PASS |
 
 `,
 		},
@@ -894,6 +1396,35 @@ func TestDiff(t *testing.T) {
 				result[name] = detection.CVEIDs{
 					Baseline: map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"}},
 					Target:   map[sourceTypes.SourceID][]string{"ubuntu-oval": {"CVE-2026-0001"}},
+				}
+			}
+		}
+		return result, nil
+	}
+
+	// Same shape as fakeDetect, but the two IDs ubuntu-oval loses are
+	// reported by ubuntu-cve-tracker in the target (2/7 = 28.6% added,
+	// under the 30% default): a move, not a loss, so nothing fails.
+	fakeDetectMoved := func(_, _, _, _ string, files map[string]string) (map[string]detection.CVEIDs, error) {
+		result := make(map[string]detection.CVEIDs, len(files))
+		for name := range files {
+			switch name {
+			case "redhat_9":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+					Target:   map[sourceTypes.SourceID][]string{"redhat-csaf": {"CVE-2026-0001", "CVE-2026-0002"}},
+				}
+			case "ubuntu_2204":
+				result[name] = detection.CVEIDs{
+					Baseline: map[sourceTypes.SourceID][]string{
+						"ubuntu-oval":        {"CVE-2026-0001", "CVE-2026-0002", "CVE-2026-0003"},
+						"ubuntu-cve-tracker": {"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010"},
+					},
+					Target: map[sourceTypes.SourceID][]string{
+						"ubuntu-oval": {"CVE-2026-0001"},
+						"ubuntu-cve-tracker": {"CVE-2026-0004", "CVE-2026-0005", "CVE-2026-0006", "CVE-2026-0007", "CVE-2026-0008", "CVE-2026-0009", "CVE-2026-0010",
+							"CVE-2026-0002", "CVE-2026-0003"},
+					},
 				}
 			}
 		}
@@ -949,6 +1480,17 @@ func TestDiff(t *testing.T) {
 				detectFunc: fakeDetect,
 			},
 			wantErr: true,
+		},
+		{
+			// The 66.7% that fails above is judged on IDs the file lost;
+			// when another source of the file still reports them they are
+			// moves and the removed axis stays at 0 under Defaults.
+			name: "lost IDs another source still reports do not trip the removed axis",
+			args: args{
+				dir:        scanDir,
+				detectFunc: fakeDetectMoved,
+			},
+			wantErr: false,
 		},
 		{
 			// A generous added threshold alone does not excuse removals.

@@ -72,17 +72,20 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 
 **Result**: %s
 
-| Name | Source | Baseline | Target | Added | Removed | Rate (added / removed) | Threshold (added / removed) | Result |
-|------|--------|----------|--------|-------|---------|------------------------|-----------------------------|--------|
+| Name | Source | Baseline | Target | Added | Removed | Moved | Rate (added / removed) | Threshold (added / removed) | Result |
+|------|--------|----------|--------|-------|---------|-------|------------------------|-----------------------------|--------|
 `, resultLabel(pass)); err != nil {
 		return false, errors.Wrap(err, "write header")
 	}
 
 	for _, r := range rows {
 		// Rates above their threshold are rendered in bold so a FAIL row
-		// shows which axis tripped without reading Details.
-		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %s | %s | %s |\n",
-			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed),
+		// shows which axis tripped without reading Details. Moved is
+		// shown but not judged: a FAIL row whose Moved count dwarfs its
+		// Removed count points at a change of detecting source rather
+		// than a loss.
+		if _, err := fmt.Fprintf(w, "| %s | %s | %d | %d | %d | %d | %d | %s | %s | %s |\n",
+			r.Name, r.SourceID, len(r.BaselineIDs), len(r.TargetIDs), len(r.Added), len(r.Removed), len(r.Moved),
 			threshold.Format(Axes, r.Rates, r.Thresholds),
 			thresholdCell(r.SourceDiff), resultLabel(r.Pass)); err != nil {
 			return false, errors.Wrap(err, "write summary row")
@@ -128,6 +131,13 @@ func generateReport(w io.Writer, diffm map[string]FileDiff) (bool, error) {
 					return false, errors.Wrapf(err, "write removed IDs %s/%s", r.Name, r.SourceID)
 				}
 			}
+			if len(r.Moved) > 0 {
+				moved := slices.Clone(r.Moved)
+				slices.SortFunc(moved, func(a, b Move) int { return cmp.Compare(a.ID, b.ID) })
+				if err := writeMoveList(w, "Moved IDs", moved); err != nil {
+					return false, errors.Wrapf(err, "write moved IDs %s/%s", r.Name, r.SourceID)
+				}
+			}
 		}
 	}
 
@@ -160,6 +170,31 @@ func resultLabel(pass bool) string {
 		return "PASS"
 	}
 	return "**FAIL**"
+}
+
+// writeMoveList writes a "#### <label> (N)" section listing each move as
+// "- <ID> → <source>, <source>" so the Details of a FAIL source show where
+// its lost IDs went. It is a no-op when moves is empty.
+func writeMoveList(w io.Writer, label string, moves []Move) error {
+	if len(moves) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "#### %s (%d)\n\n", label, len(moves)); err != nil {
+		return errors.Wrap(err, "write header")
+	}
+	for _, m := range moves {
+		to := make([]string, 0, len(m.To))
+		for _, sid := range m.To {
+			to = append(to, string(sid))
+		}
+		if _, err := fmt.Fprintf(w, "- %s → %s\n", m.ID, strings.Join(to, ", ")); err != nil {
+			return errors.Wrap(err, "write move")
+		}
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return errors.Wrap(err, "write separator")
+	}
+	return nil
 }
 
 // writeIDList writes a "#### <label> (N)" section with a bulleted list of IDs.
