@@ -1,6 +1,6 @@
 module github.com/MaineK00n/vuls2
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/MaineK00n/vuls-data-update v0.0.0-20261009052605-f18dafcbe5da
@@ -19,11 +19,11 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	go.etcd.io/bbolt v1.5.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.24.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
-	oras.land/oras-go/v2 v2.6.2
+	oras.land/oras-go/v2 v2.6.4
 )
 
 require (
