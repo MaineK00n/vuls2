@@ -185,7 +185,10 @@ func TestDetectStreaming(t *testing.T) {
 					t.Fatalf("expected the consumer panic to propagate, recovered %v", r)
 				}
 			}()
-			for range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
+			for _, err := range util.Detect(st, ecosystem, []string{"stub"}, stubRequestFn, concurrency) {
+				if err != nil {
+					t.Errorf("Detect. error = %v", err)
+				}
 				// Make sure at least one worker is provably mid-fetch when
 				// the panic fires.
 				for st.inFlight.Load() == 0 {
