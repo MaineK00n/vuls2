@@ -1,6 +1,6 @@
 module github.com/MaineK00n/vuls2
 
-go 1.26
+go 1.27.3
 
 require (
 	github.com/MaineK00n/vuls-data-update v0.0.0-20261009052605-f18dafcbe5da
