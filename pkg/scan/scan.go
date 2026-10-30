@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	ecosystemTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/data/detection/segment/ecosystem"
@@ -80,10 +80,7 @@ func Scan(root string, opts ...Option) error {
 	}
 
 	for name, ts := range m {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return errors.Wrap(err, "new UUID v4")
-		}
+		id := uuid.NewV4()
 		for _, t := range ts {
 			if err := func() error {
 				f, err := os.Open(filepath.Join(root, t, name))
