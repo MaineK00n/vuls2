@@ -175,42 +175,62 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		return nil, errors.Wrap(err, "validate lock")
 	}
 
-	workdir := options.dir
-	if workdir == "" {
-		d, err := os.MkdirTemp("", "vuls-db-build-*")
-		if err != nil {
-			return nil, errors.Wrap(err, "mkdir temp")
-		}
-		defer func() {
-			if err := os.RemoveAll(d); err != nil {
-				slog.Warn("Failed to remove work directory", slog.String("dir", d), slog.String("err", err.Error()))
-			}
-		}()
-		workdir = d
-	} else {
-		if err := os.MkdirAll(workdir, 0755); err != nil {
-			return nil, errors.Wrapf(err, "mkdir %s", workdir)
+	// Every invocation gets its own work directory, under options.dir when
+	// given, and removes it however the build ends, so a failure cannot leave
+	// extracted trees behind.
+	if options.dir != "" {
+		if err := os.MkdirAll(options.dir, 0755); err != nil {
+			return nil, errors.Wrapf(err, "mkdir %s", options.dir)
 		}
 	}
+	workdir, err := os.MkdirTemp(options.dir, "vuls-db-build-*")
+	if err != nil {
+		return nil, errors.Wrap(err, "mkdir temp")
+	}
+	defer func() {
+		if err := os.RemoveAll(workdir); err != nil {
+			slog.Warn("Failed to remove work directory", slog.String("dir", workdir), slog.String("err", err.Error()))
+		}
+	}()
 
-	// The db is built at target; for boltdb that is a scratch file renamed
-	// over dbpath at the end.
+	// The db is built at target; for boltdb that is a scratch file, unique
+	// to this invocation so concurrent builds of the same dbpath cannot
+	// touch each other's, renamed over dbpath at the end.
 	target := options.dbpath
 	if options.dbtype == "boltdb" {
 		if err := os.MkdirAll(filepath.Dir(options.dbpath), 0755); err != nil {
 			return nil, errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
 		}
-		target = filepath.Join(filepath.Dir(options.dbpath), fmt.Sprintf(".%s.build", filepath.Base(options.dbpath)))
-		if err := os.RemoveAll(target); err != nil {
-			return nil, errors.Wrapf(err, "remove %s", target)
+		f, err := os.CreateTemp(filepath.Dir(options.dbpath), fmt.Sprintf(".%s.build-*", filepath.Base(options.dbpath)))
+		if err != nil {
+			return nil, errors.Wrapf(err, "create scratch db in %s", filepath.Dir(options.dbpath))
+		}
+		target = f.Name()
+		if err := f.Close(); err != nil {
+			return nil, errors.Wrapf(err, "close %s", target)
 		}
 		// The scratch db is renamed away on success; on any other exit it
 		// must not be left next to dbpath.
 		defer func() {
-			if err := os.RemoveAll(target); err != nil {
+			if err := os.RemoveAll(target); err != nil && !os.IsNotExist(err) {
 				slog.Warn("Failed to remove scratch db", slog.String("dbpath", target), slog.String("err", err.Error()))
 			}
 		}()
+	}
+
+	// The report is written after the db has been verified, so a report
+	// path that is the db (or its scratch file) would replace a good db with
+	// JSON and still report success. Refuse that up front.
+	if options.report != "" {
+		for _, p := range []string{options.dbpath, target} {
+			same, err := samePath(options.report, p)
+			if err != nil {
+				return nil, err
+			}
+			if same {
+				return nil, errors.Errorf("report path %s is the db path %s", options.report, p)
+			}
+		}
 	}
 
 	slog.Info("Initialize DB", slog.String("dbpath", target))
@@ -227,7 +247,10 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 
 	// Pulls run ahead of the adds, at most `parallel` at a time; a slot is
 	// held until the tree has been added and removed, which bounds the trees
-	// on disk. Adds consume the pulls in lock order.
+	// on disk. Adds consume the pulls in lock order, so slots must also be
+	// handed out in lock order: one dispatcher admits the sources one by
+	// one, which keeps a later source from taking the last slot while the
+	// consumer is still waiting on an earlier one that has none.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -238,22 +261,30 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	}
 	slots := make(chan struct{}, options.parallel)
 	ready := make([]chan prepared, len(lock.Sources))
-	var wg sync.WaitGroup
-	for i, s := range lock.Sources {
+	for i := range ready {
 		ready[i] = make(chan prepared, 1)
-		wg.Add(1)
-		go func(i int, s Source) {
-			defer wg.Done()
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i, s := range lock.Sources {
 			select {
 			case slots <- struct{}{}:
 			case <-ctx.Done():
-				ready[i] <- prepared{err: ctx.Err()}
+				for j := i; j < len(lock.Sources); j++ {
+					ready[j] <- prepared{err: ctx.Err()}
+				}
 				return
 			}
-			root, rep, err := prepare(workdir, lock, s)
-			ready[i] <- prepared{root: root, rep: rep, err: err}
-		}(i, s)
-	}
+			wg.Add(1)
+			go func(i int, s Source) {
+				defer wg.Done()
+				root, rep, err := prepare(workdir, lock, s)
+				ready[i] <- prepared{root: root, rep: rep, err: err}
+			}(i, s)
+		}
+	}()
 
 	for i, s := range lock.Sources {
 		p := <-ready[i]
@@ -453,6 +484,47 @@ func verify(options *options, dbpath string, report *Report) error {
 	}
 
 	return nil
+}
+
+// samePath reports whether a and b name the same file: the same cleaned
+// absolute path, the same path once symlinks are resolved, or (when both
+// exist) the same inode.
+func samePath(a, b string) (bool, error) {
+	resolve := func(p string) (string, error) {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return "", errors.Wrapf(err, "abs %s", p)
+		}
+		real, err := filepath.EvalSymlinks(abs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return abs, nil
+			}
+			return "", errors.Wrapf(err, "resolve %s", p)
+		}
+		return real, nil
+	}
+	ra, err := resolve(a)
+	if err != nil {
+		return false, err
+	}
+	rb, err := resolve(b)
+	if err != nil {
+		return false, err
+	}
+	if ra == rb {
+		return true, nil
+	}
+
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false, nil
+	}
+	fb, err := os.Stat(b)
+	if err != nil {
+		return false, nil
+	}
+	return os.SameFile(fa, fb), nil
 }
 
 func writeReport(path string, report *Report) error {

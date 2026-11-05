@@ -55,10 +55,33 @@ func TestBuild(t *testing.T) {
 
 	alpha := newExtracted(t, "alpha", "alpha", 2)
 	beta := newExtracted(t, "beta", "beta", 1)
-	// gamma declares alpha's datasource id: adding both must fail.
-	gamma := newExtracted(t, "gamma", "alpha", 1)
-	for name, e := range map[string]extracted{"alpha": alpha, "beta": beta, "gamma": gamma} {
+	gamma := newExtracted(t, "gamma", "gamma", 1)
+	// delta declares alpha's datasource id: adding both must fail.
+	delta := newExtracted(t, "delta", "alpha", 1)
+	for name, e := range map[string]extracted{"alpha": alpha, "beta": beta, "gamma": gamma, "delta": delta} {
 		pushExtracted(t, registry, name, e.dir)
+	}
+
+	// build runs Build and fails the test if it does not return in time,
+	// so a scheduling bug shows up as a failure rather than a hung test.
+	runBuild := func(t *testing.T, lock build.Lock, opts ...build.Option) (*build.Report, error) {
+		t.Helper()
+		type result struct {
+			report *build.Report
+			err    error
+		}
+		ch := make(chan result, 1)
+		go func() {
+			r, err := build.Build(lock, opts...)
+			ch <- result{r, err}
+		}()
+		select {
+		case r := <-ch:
+			return r.report, r.err
+		case <-time.After(2 * time.Minute):
+			t.Fatal("Build() did not return in 2 minutes")
+			return nil, nil
+		}
 	}
 
 	t.Run("build", func(t *testing.T) {
@@ -69,7 +92,7 @@ func TestBuild(t *testing.T) {
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
 
-		report, err := build.Build(lock, build.WithDBPath(dbpath), build.WithParallel(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work")))
+		report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work")))
 		if err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
@@ -77,9 +100,7 @@ func TestBuild(t *testing.T) {
 		if _, err := os.Stat(dbpath); err != nil {
 			t.Errorf("db not built: %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(filepath.Dir(dbpath), ".vuls.db.build")); !os.IsNotExist(err) {
-			t.Errorf("scratch db left behind: %v", err)
-		}
+		assertNoScratch(t, dbpath)
 
 		dss := datasources(t, dbpath)
 		if len(dss) != 2 {
@@ -130,31 +151,74 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("more sources than slots", func(t *testing.T) {
+		// Slots are handed out in lock order; with one slot and three
+		// sources a later source must not starve the one being waited on.
+		for _, parallel := range []int{1, 2} {
+			dbpath := filepath.Join(t.TempDir(), "vuls.db")
+			lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+				{Name: "alpha", Commit: alpha.nightly[1]},
+				{Name: "beta", Commit: beta.nightly[0]},
+				{Name: "gamma", Commit: gamma.nightly[0]},
+			}}
+			report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(parallel), build.WithDir(filepath.Join(t.TempDir(), "work")))
+			if err != nil {
+				t.Fatalf("parallel=%d: Build() error = %v", parallel, err)
+			}
+			if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
+				t.Errorf("parallel=%d: order = %v", parallel, got)
+			}
+			if dss := datasources(t, dbpath); len(dss) != 3 {
+				t.Errorf("parallel=%d: datasources = %d, want 3", parallel, len(dss))
+			}
+		}
+	})
+
 	t.Run("existing db is kept when the build fails", func(t *testing.T) {
 		dbpath := filepath.Join(t.TempDir(), "vuls.db")
 		if err := os.WriteFile(dbpath, []byte("not a db"), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		dir := filepath.Join(t.TempDir(), "work")
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "alpha", Commit: strings.Repeat("0", 40)},
 		}}
-		if _, err := build.Build(lock, build.WithDBPath(dbpath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
+		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err == nil {
 			t.Fatal("Build() error = nil, want commit not found")
 		}
 		bs, err := os.ReadFile(dbpath)
 		if err != nil || string(bs) != "not a db" {
 			t.Errorf("existing db changed: %q, %v", bs, err)
 		}
-		if _, err := os.Stat(filepath.Join(filepath.Dir(dbpath), ".vuls.db.build")); !os.IsNotExist(err) {
-			t.Errorf("scratch db left behind: %v", err)
+		assertNoScratch(t, dbpath)
+		assertEmptyDir(t, dir)
+	})
+
+	t.Run("work directory is removed after a failed add", func(t *testing.T) {
+		// delta carries alpha's id, so its add fails after alpha's succeeded
+		// and after later sources may already have been pulled.
+		dbpath := filepath.Join(t.TempDir(), "vuls.db")
+		dir := filepath.Join(t.TempDir(), "work")
+		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+			{Name: "alpha", Commit: alpha.nightly[1]},
+			{Name: "delta", Commit: delta.nightly[0]},
+			{Name: "beta", Commit: beta.nightly[0]},
+		}}
+		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(3), build.WithDir(dir)); err == nil {
+			t.Fatal("Build() error = nil, want duplicate datasource")
 		}
+		if _, err := os.Stat(dbpath); !os.IsNotExist(err) {
+			t.Errorf("db written despite failure: %v", err)
+		}
+		assertNoScratch(t, dbpath)
+		assertEmptyDir(t, dir)
 	})
 
 	t.Run("commit outside the branch", func(t *testing.T) {
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "alpha", Commit: alpha.stray},
 		}}
-		_, err := build.Build(lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
+		_, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
 		if err == nil || !strings.Contains(err.Error(), "not an ancestor") {
 			t.Fatalf("Build() error = %v, want not an ancestor", err)
 		}
@@ -164,31 +228,41 @@ func TestBuild(t *testing.T) {
 		lock := build.Lock{Branch: "release", Registry: registry, Sources: []build.Source{
 			{Name: "alpha", Commit: alpha.nightly[0]},
 		}}
-		if _, err := build.Build(lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
+		if _, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
 			t.Fatal("Build() error = nil, want unknown branch")
-		}
-	})
-
-	t.Run("duplicate datasource id", func(t *testing.T) {
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.nightly[1]},
-			{Name: "gamma", Commit: gamma.nightly[0]},
-		}}
-		dbpath := filepath.Join(t.TempDir(), "vuls.db")
-		if _, err := build.Build(lock, build.WithDBPath(dbpath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
-			t.Fatal("Build() error = nil, want duplicate datasource")
-		}
-		if _, err := os.Stat(dbpath); !os.IsNotExist(err) {
-			t.Errorf("db written despite failure: %v", err)
 		}
 	})
 
 	t.Run("missing repository", func(t *testing.T) {
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "delta", Commit: alpha.nightly[0]},
+			{Name: "zeta", Commit: alpha.nightly[0]},
 		}}
-		if _, err := build.Build(lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
+		if _, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
 			t.Fatal("Build() error = nil, want pull failure")
+		}
+	})
+
+	t.Run("report must not be the db", func(t *testing.T) {
+		dir := t.TempDir()
+		dbpath := filepath.Join(dir, "vuls.db")
+		if err := os.WriteFile(dbpath, []byte("not a db"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link.db")
+		if err := os.Symlink(dbpath, link); err != nil {
+			t.Fatal(err)
+		}
+		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+			{Name: "beta", Commit: beta.nightly[0]},
+		}}
+		for _, report := range []string{dbpath, filepath.Join(dir, ".", "vuls.db"), link} {
+			if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
+			}
+			bs, err := os.ReadFile(dbpath)
+			if err != nil || string(bs) != "not a db" {
+				t.Errorf("report=%s: existing db changed: %q, %v", report, bs, err)
+			}
 		}
 	})
 }
@@ -196,6 +270,34 @@ func TestBuild(t *testing.T) {
 // commitDate is the author date of the n-th commit newExtracted makes.
 func commitDate(n int) time.Time {
 	return time.Date(2026, 1, n, 0, 0, 0, 0, time.UTC)
+}
+
+// assertNoScratch fails if a scratch db of dbpath was left behind.
+func assertNoScratch(t *testing.T, dbpath string) {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(dbpath), "."+filepath.Base(dbpath)+".build-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) > 0 {
+		t.Errorf("scratch db left behind: %v", matches)
+	}
+}
+
+// assertEmptyDir fails if the work directory still holds anything.
+func assertEmptyDir(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	if len(entries) > 0 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("%s not cleaned up: %v", dir, names)
+	}
 }
 
 // newExtracted makes a repository shaped like vuls-data-extracted-<name>:
