@@ -112,6 +112,11 @@ func TestBuild(t *testing.T) {
 		if got := dss["alpha"].Extracted.Date; got == nil || !got.Equal(commitDate(1)) {
 			t.Errorf("alpha date = %v, want %v", got, commitDate(1))
 		}
+		// alpha is pinned one commit behind nightly: the tree that was
+		// restored and added must be the pinned commit's, not the head's.
+		if got := dss["alpha"].Name; got == nil || *got != "alpha 1" {
+			t.Errorf("alpha name = %v, want %q (the pinned commit's datasource.json)", got, "alpha 1")
+		}
 		if got := dss["beta"].Extracted.Commit; got != beta.nightly[0] {
 			t.Errorf("beta commit = %s, want %s", got, beta.nightly[0])
 		}
@@ -358,20 +363,28 @@ func newExtracted(t *testing.T, name, id string, n int) extracted {
 	}
 
 	run(commitDate(1), "init", "-q", "-b", "nightly")
-	ds := datasourceTypes.DataSource{
-		ID:   sourceTypes.SourceID(id),
-		Name: func() *string { s := name; return &s }(),
-	}
-	bs, err := json.Marshal(ds)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "datasource.json"), bs, 0o644); err != nil {
-		t.Fatal(err)
+
+	// datasource.json carries the commit number in its name, so the
+	// datasource read back from the db tells which commit's tree was
+	// restored and added.
+	writeDataSource := func(i int) {
+		t.Helper()
+		ds := datasourceTypes.DataSource{
+			ID:   sourceTypes.SourceID(id),
+			Name: func() *string { s := fmt.Sprintf("%s %d", name, i); return &s }(),
+		}
+		bs, err := json.Marshal(ds)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "datasource.json"), bs, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	e := extracted{dir: dir}
 	for i := 1; i <= n; i++ {
+		writeDataSource(i)
 		if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(fmt.Sprintf("%s %d\n", name, i)), 0o644); err != nil {
 			t.Fatal(err)
 		}
