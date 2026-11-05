@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	addCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/add"
+	buildCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/build"
 	compressCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/compress"
 	fetchCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/fetch"
 	initCmd "github.com/MaineK00n/vuls2/pkg/cmd/db/init"
@@ -19,7 +20,7 @@ func NewCmd() *cobra.Command {
 
 	cmd.AddCommand(
 		fetchCmd.NewCmd(), compressCmd.NewCmd(), pushCmd.NewCmd(),
-		initCmd.NewCmd(), addCmd.NewCmd(),
+		initCmd.NewCmd(), addCmd.NewCmd(), buildCmd.NewCmd(),
 		searchCmd.NewCmd(),
 	)
 
