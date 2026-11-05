@@ -147,6 +147,12 @@ type SourceReport struct {
 	Behind         int        `json:"behind"`
 	NextCommit     string     `json:"next_commit,omitempty"`
 	NextCommitDate *time.Time `json:"next_commit_date,omitempty"`
+
+	// How long each stage took for this source, in seconds: pulling the
+	// dotgit, checking the tree out, and adding it to the db.
+	PullSeconds     float64 `json:"pull_seconds"`
+	CheckoutSeconds float64 `json:"checkout_seconds"`
+	AddSeconds      float64 `json:"add_seconds"`
 }
 
 // Build initializes a db and adds every source of the lock at its pinned
@@ -245,26 +251,32 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		Sources:     make([]SourceReport, 0, len(lock.Sources)),
 	}
 
-	// Pulls run ahead of the adds, at most `parallel` at a time; a slot is
-	// held until the tree has been added and removed, which bounds the trees
-	// on disk. Adds consume the pulls in lock order, so slots must also be
-	// handed out in lock order: one dispatcher admits the sources one by
-	// one, which keeps a later source from taking the last slot while the
-	// consumer is still waiting on an earlier one that has none.
+	// Three stages. Downloads (the dotgit, i.e. the .git directory only)
+	// run ahead for every source, at most `parallel` at a time, in lock
+	// order; they are small (about 1 GiB at most) so all of them may sit on
+	// disk. Checkouts write the extracted tree, which is large, so only the
+	// next source is checked out while the current one is being added:
+	// at most two trees exist at once. Adds are serial, in lock order,
+	// because bbolt has a single writer.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	type prepared struct {
+	type staged struct {
 		root string
 		rep  SourceReport
 		err  error
 	}
-	slots := make(chan struct{}, options.parallel)
-	ready := make([]chan prepared, len(lock.Sources))
-	for i := range ready {
-		ready[i] = make(chan prepared, 1)
+	downloaded := make([]chan staged, len(lock.Sources))
+	checkedOut := make([]chan staged, len(lock.Sources))
+	for i := range lock.Sources {
+		downloaded[i] = make(chan staged, 1)
+		checkedOut[i] = make(chan staged, 1)
 	}
 	var wg sync.WaitGroup
+
+	// Stage 1: downloads. One dispatcher admits the sources in lock order
+	// so an early source is never starved of a slot by later ones.
+	slots := make(chan struct{}, options.parallel)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -273,44 +285,101 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 			case slots <- struct{}{}:
 			case <-ctx.Done():
 				for j := i; j < len(lock.Sources); j++ {
-					ready[j] <- prepared{err: ctx.Err()}
+					downloaded[j] <- staged{err: ctx.Err()}
 				}
 				return
 			}
 			wg.Add(1)
 			go func(i int, s Source) {
 				defer wg.Done()
-				root, rep, err := prepare(workdir, lock, s)
-				ready[i] <- prepared{root: root, rep: rep, err: err}
+				defer func() { <-slots }()
+				root, rep, err := download(workdir, lock, s)
+				if err != nil {
+					cancel()
+				}
+				downloaded[i] <- staged{root: root, rep: rep, err: err}
 			}(i, s)
 		}
 	}()
 
-	// On error the dispatcher is cancelled and the in-flight pulls are
-	// waited for before returning: pull.Pull takes no context, so a pull
-	// already running goes on until it finishes or the registry client
-	// times out, and the work directory must not be removed under it.
+	// Stage 2: checkouts, one source ahead of the add. A tree slot is held
+	// from checkout until the add has removed the tree.
+	trees := make(chan struct{}, 2)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i, s := range lock.Sources {
+			select {
+			case trees <- struct{}{}:
+			case <-ctx.Done():
+				for j := i; j < len(lock.Sources); j++ {
+					checkedOut[j] <- staged{err: ctx.Err()}
+				}
+				return
+			}
+			var d staged
+			select {
+			case d = <-downloaded[i]:
+			case <-ctx.Done():
+				d = staged{err: ctx.Err()}
+			}
+			if d.err == nil {
+				d.rep, d.err = checkout(d.root, s, d.rep)
+				if d.err != nil {
+					cancel()
+				}
+			}
+			checkedOut[i] <- d
+		}
+	}()
+
+	// Stage 3: adds. On error the other stages are cancelled and waited
+	// for before returning: pull.Pull takes no context, so a download already
+	// running goes on until it finishes or the registry client times out,
+	// and the work directory must not be removed under it.
+	fail := func(err error) (*Report, error) {
+		cancel()
+		wg.Wait()
+		return nil, err
+	}
 	for i, s := range lock.Sources {
-		p := <-ready[i]
-		if p.err != nil {
-			cancel()
-			wg.Wait()
-			return nil, errors.Wrapf(p.err, "prepare %s", s.Name)
+		c := <-checkedOut[i]
+		if c.err != nil {
+			if errors.Is(c.err, context.Canceled) {
+				// The real error is in the stage that cancelled; find it.
+				wg.Wait()
+				for j := range lock.Sources {
+					select {
+					case d := <-downloaded[j]:
+						if d.err != nil && !errors.Is(d.err, context.Canceled) {
+							return fail(errors.Wrapf(d.err, "download %s", lock.Sources[j].Name))
+						}
+					default:
+					}
+					select {
+					case d := <-checkedOut[j]:
+						if d.err != nil && !errors.Is(d.err, context.Canceled) {
+							return fail(errors.Wrapf(d.err, "checkout %s", lock.Sources[j].Name))
+						}
+					default:
+					}
+				}
+			}
+			return fail(errors.Wrapf(c.err, "prepare %s", s.Name))
 		}
 
-		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(p.rep.ID)), slog.String("commit", s.Commit))
-		if err := dbAdd.Add(p.root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
-			cancel()
-			wg.Wait()
-			return nil, errors.Wrapf(err, "add %s", s.Name)
+		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(c.rep.ID)), slog.String("commit", s.Commit))
+		addStart := time.Now()
+		if err := dbAdd.Add(c.root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
+			return fail(errors.Wrapf(err, "add %s", s.Name))
 		}
-		if err := os.RemoveAll(p.root); err != nil {
-			cancel()
-			wg.Wait()
-			return nil, errors.Wrapf(err, "remove %s", p.root)
+		c.rep.AddSeconds = time.Since(addStart).Seconds()
+		slog.Info("Added", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(addStart).Round(time.Millisecond)))
+		if err := os.RemoveAll(c.root); err != nil {
+			return fail(errors.Wrapf(err, "remove %s", c.root))
 		}
-		<-slots
-		report.Sources = append(report.Sources, p.rep)
+		<-trees
+		report.Sources = append(report.Sources, c.rep)
 	}
 	wg.Wait()
 
@@ -335,9 +404,10 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	return report, nil
 }
 
-// prepare pulls one source's dotgit into workdir, checks the commit out and
-// stamps datasource.json with it. It returns the tree root ready for add.
-func prepare(workdir string, lock Lock, s Source) (string, SourceReport, error) {
+// download pulls one source's dotgit (its .git only, no worktree) into
+// workdir, checks that the lock commit belongs to the branch, and reads the
+// commit facts the report needs. It returns the repository root.
+func download(workdir string, lock Lock, s Source) (string, SourceReport, error) {
 	repository := s.Repository(lock.Registry)
 	ref, err := remote.NewRepository(repository)
 	if err != nil {
@@ -346,12 +416,12 @@ func prepare(workdir string, lock Lock, s Source) (string, SourceReport, error) 
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
 	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", repository))
-	// The checkout is done here rather than by pull: the dotgit has no
-	// worktree, and checkout --force both detaches at the commit and writes
-	// the files in one step.
+	start := time.Now()
 	if err := pull.Pull(repository, pull.WithDir(workdir), pull.WithCheckout(""), pull.WithRestore(false)); err != nil {
 		return "", SourceReport{}, errors.Wrapf(err, "pull %s", repository)
 	}
+	rep := SourceReport{Name: s.Name, Repository: repository, Commit: s.Commit, PullSeconds: time.Since(start).Seconds()}
+	slog.Info("Pulled", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
 	// The branch must exist as exactly this ref: the lock has already
 	// rejected revision syntax, and this keeps a missing branch from being
@@ -375,11 +445,6 @@ func prepare(workdir string, lock Lock, s Source) (string, SourceReport, error) 
 		return "", SourceReport{}, errors.Errorf("commit %s is not an ancestor of %s in %s", s.Commit, lock.Branch, repository)
 	}
 
-	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
-		return "", SourceReport{}, err
-	}
-
-	rep := SourceReport{Name: s.Name, Repository: repository, Commit: s.Commit}
 	if rep.CommitDate, err = authorTime(root, s.Commit); err != nil {
 		return "", SourceReport{}, err
 	}
@@ -403,11 +468,26 @@ func prepare(workdir string, lock Lock, s Source) (string, SourceReport, error) 
 		rep.NextCommitDate = &t
 	}
 
-	if rep.ID, err = stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, rep.CommitDate); err != nil {
-		return "", SourceReport{}, err
-	}
-
 	return root, rep, nil
+}
+
+// checkout writes the tree of the lock commit into the downloaded
+// repository and stamps datasource.json with the commit. The dotgit has no
+// worktree, and checkout --force both detaches at the commit and writes the
+// files in one step.
+func checkout(root string, s Source, rep SourceReport) (SourceReport, error) {
+	start := time.Now()
+	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
+		return SourceReport{}, err
+	}
+	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, rep.CommitDate)
+	if err != nil {
+		return SourceReport{}, err
+	}
+	rep.ID = id
+	rep.CheckoutSeconds = time.Since(start).Seconds()
+	slog.Info("Checked out", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
+	return rep, nil
 }
 
 // stampDataSource records the checked-out commit and its date as the
