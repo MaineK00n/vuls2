@@ -43,6 +43,11 @@ func (s Source) Repository(registry string) string {
 
 var commitRegexp = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+// nameRegexp is what may follow "vuls-data-extracted-" in an OCI tag: a tag
+// is [A-Za-z0-9_][A-Za-z0-9._-]{0,127}, the prefix supplies the first
+// character and 20 of the 128, so the name is at most 108 of the rest.
+var nameRegexp = regexp.MustCompile(`^[A-Za-z0-9._-]{1,108}$`)
+
 // validBranchName applies the rules of git check-ref-format --branch to a
 // branch name, so that "refs/heads/<branch>" names a branch and not a
 // revision expression: "nightly~1" or "nightly^{commit}" would otherwise
@@ -107,8 +112,8 @@ func (l Lock) Validate() error {
 		if s.Name == "" {
 			return errors.Errorf("sources[%d]: name is empty", i)
 		}
-		if strings.ContainsAny(s.Name, "/:@ \t\n") {
-			return errors.Errorf("sources[%d]: unexpected name. expected: %q, actual: %q", i, "<extracted repository name without vuls-data-extracted- prefix>", s.Name)
+		if !nameRegexp.MatchString(s.Name) {
+			return errors.Errorf("sources[%d]: unexpected name. expected: %q, actual: %q", i, "<extracted repository name without vuls-data-extracted- prefix> ([A-Za-z0-9._-], at most 108 characters)", s.Name)
 		}
 		if _, ok := seen[s.Name]; ok {
 			return errors.Errorf("sources[%d]: duplicate name %q", i, s.Name)
