@@ -99,6 +99,16 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "registry with uppercase repository path",
+			in:      `{"branch": "nightly", "registry": "ghcr.io/Vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "registry with empty path component",
+			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio//vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			wantErr: true,
+		},
+		{
 			name:    "registry with trailing slash",
 			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db/", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
 			wantErr: true,

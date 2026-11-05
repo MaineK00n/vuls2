@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 // Lock is the recipe a vuls db is built from: the extracted dotgit of every
@@ -122,6 +123,13 @@ func (l Lock) Validate() error {
 
 		if !commitRegexp.MatchString(s.Commit) {
 			return errors.Errorf("sources[%d] (%s): unexpected commit. expected: %q, actual: %q", i, s.Name, "40 lowercase hex digits", s.Commit)
+		}
+
+		// The reference the build will pull must parse as the OCI client
+		// parses it (lowercase repository path, valid host), so that
+		// --check and the build agree on what a valid lock is.
+		if _, err := remote.NewRepository(s.Repository(l.Registry)); err != nil {
+			return errors.Wrapf(err, "sources[%d] (%s): invalid OCI reference %q", i, s.Name, s.Repository(l.Registry))
 		}
 	}
 
