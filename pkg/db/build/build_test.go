@@ -281,7 +281,17 @@ func TestBuild(t *testing.T) {
 		if err := os.Symlink(newdb, dangling); err != nil {
 			t.Fatal(err)
 		}
-		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling} {
+		// alias2 -> real/sub: "alias2/../new.db" is real/new.db on the
+		// filesystem, not the lexical parent of alias2.
+		sub := filepath.Join(dir, "sub")
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		alias2 := filepath.Join(t.TempDir(), "alias2")
+		if err := os.Symlink(sub, alias2); err != nil {
+			t.Fatal(err)
+		}
+		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling, alias2 + "/../new.db"} {
 			if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
 				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
 			}
