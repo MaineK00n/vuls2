@@ -264,6 +264,26 @@ func TestBuild(t *testing.T) {
 				t.Errorf("report=%s: existing db changed: %q, %v", report, bs, err)
 			}
 		}
+
+		// The db does not exist yet, so the alias has to be seen through
+		// a symlinked parent directory and through a dangling symlink.
+		newdb := filepath.Join(dir, "new.db")
+		aliasDir := filepath.Join(t.TempDir(), "alias")
+		if err := os.Symlink(dir, aliasDir); err != nil {
+			t.Fatal(err)
+		}
+		dangling := filepath.Join(dir, "dangling.json")
+		if err := os.Symlink(newdb, dangling); err != nil {
+			t.Fatal(err)
+		}
+		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling} {
+			if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
+			}
+			if _, err := os.Lstat(newdb); !os.IsNotExist(err) {
+				t.Errorf("report=%s: db written despite refused report path: %v", report, err)
+			}
+		}
 	})
 }
 
