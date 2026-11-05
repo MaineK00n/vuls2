@@ -647,8 +647,12 @@ func walkPath(p string, depth int) (string, error) {
 		return "", errors.Errorf("too many levels of symbolic links: %s", p)
 	}
 
-	cur := string(filepath.Separator)
-	comps := strings.Split(p, string(filepath.Separator))
+	// Start at the root of p's volume (empty on Unix; a drive or UNC share
+	// on Windows, which must not be split into components) and walk the
+	// rest with separators normalized.
+	vol := filepath.VolumeName(p)
+	cur := vol + string(filepath.Separator)
+	comps := strings.Split(filepath.ToSlash(p[len(vol):]), "/")
 	missing := false
 	for i, c := range comps {
 		switch c {
@@ -685,7 +689,7 @@ func walkPath(p string, depth int) (string, error) {
 		}
 		// Continue from the link target with the remaining components, so a
 		// ".." that follows the link applies to where the link points.
-		return walkPath(target+string(filepath.Separator)+strings.Join(comps[i+1:], string(filepath.Separator)), depth+1)
+		return walkPath(filepath.FromSlash(target+"/"+strings.Join(comps[i+1:], "/")), depth+1)
 	}
 	return cur, nil
 }
