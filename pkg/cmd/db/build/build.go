@@ -92,10 +92,10 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
-	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory to pull dotgits into (default: a temporary directory removed afterwards)")
+	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory under which this build's work directory is created and removed afterwards (default: the system temporary directory)")
 	cmd.Flags().IntVarP(&options.downloadConcurrency, "download-concurrency", "", options.downloadConcurrency, "dotgits pulled at once (network; .git only, so this does not grow the trees on disk)")
 	cmd.Flags().IntVarP(&options.restoreConcurrency, "restore-concurrency", "", options.restoreConcurrency, "sources restored ahead of the add; this many plus one extracted trees are on disk at most")
-	cmd.Flags().StringVarP(&options.report, "report", "", "", "write a JSON report of what was built (datasource ids, commits, how far behind the branch) to this path")
+	cmd.Flags().StringVarP(&options.report, "report", "", "", "write a JSON report of what was built (datasource ids, commits, how far behind the branch, seconds per stage) to this path")
 	cmd.Flags().BoolVarP(&options.check, "check", "", false, "validate the lock file and exit without building")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
