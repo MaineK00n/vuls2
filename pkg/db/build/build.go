@@ -34,9 +34,10 @@ type options struct {
 	dbpath      string
 	storageopts session.StorageOptions
 
-	dir      string
-	parallel int
-	report   string
+	dir                 string
+	downloadConcurrency int
+	restoreConcurrency  int
+	report              string
 
 	debug bool
 }
@@ -88,17 +89,31 @@ func WithDir(dir string) Option {
 	return dirOption(dir)
 }
 
-type parallelOption int
+type downloadConcurrencyOption int
 
-func (o parallelOption) apply(opts *options) {
-	opts.parallel = int(o)
+func (o downloadConcurrencyOption) apply(opts *options) {
+	opts.downloadConcurrency = int(o)
 }
 
-// WithParallel sets how many dotgits are pulled at once. It is also the
-// upper bound on how many extracted trees sit on disk at the same time, since
-// a tree is only released after it has been added.
-func WithParallel(parallel int) Option {
-	return parallelOption(parallel)
+// WithDownloadConcurrency sets how many dotgits are pulled at once. A pulled
+// dotgit is the .git directory only, so this scales network use, not the
+// extracted trees on disk.
+func WithDownloadConcurrency(n int) Option {
+	return downloadConcurrencyOption(n)
+}
+
+type restoreConcurrencyOption int
+
+func (o restoreConcurrencyOption) apply(opts *options) {
+	opts.restoreConcurrency = int(o)
+}
+
+// WithRestoreConcurrency sets how many sources are restored (their tree
+// checked out) ahead of the add. Each restored tree stays on disk until it
+// has been added, so n+1 trees exist at most: n ahead plus the one being
+// added.
+func WithRestoreConcurrency(n int) Option {
+	return restoreConcurrencyOption(n)
 }
 
 type reportOption string
@@ -150,14 +165,15 @@ type SourceReport struct {
 	NextCommitDate *time.Time `json:"next_commit_date,omitempty"`
 
 	// How long each stage took for this source, in seconds: pulling the
-	// dotgit, checking the tree out, and adding it to the db.
-	PullSeconds     float64 `json:"pull_seconds"`
-	CheckoutSeconds float64 `json:"checkout_seconds"`
-	AddSeconds      float64 `json:"add_seconds"`
+	// dotgit, restoring the tree, and adding it to the db.
+	PullSeconds    float64 `json:"pull_seconds"`
+	RestoreSeconds float64 `json:"restore_seconds"`
+	AddSeconds     float64 `json:"add_seconds"`
 }
 
 // Build initializes a db and adds every source of the lock at its pinned
-// commit, in lock order. Dotgits are pulled in parallel; adds are serial.
+// commit, in lock order. Dotgits are pulled concurrently and trees restored
+// ahead of the add; adds are serial.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed over it
 // only when every source has been added and verified, so a failed build
@@ -165,18 +181,18 @@ type SourceReport struct {
 // types are built in place.
 func Build(lock Lock, opts ...Option) (*Report, error) {
 	options := &options{
-		dbtype:      "boltdb",
-		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
-		parallel:    runtime.NumCPU(),
-		debug:       false,
+		dbtype:              "boltdb",
+		dbpath:              filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts:         session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		downloadConcurrency: runtime.NumCPU(),
+		restoreConcurrency:  1,
+		debug:               false,
 	}
 	for _, o := range opts {
 		o.apply(options)
 	}
-	if options.parallel < 1 {
-		options.parallel = 1
-	}
+	options.downloadConcurrency = max(options.downloadConcurrency, 1)
+	options.restoreConcurrency = max(options.restoreConcurrency, 1)
 
 	if err := lock.Validate(); err != nil {
 		return nil, errors.Wrap(err, "validate lock")
@@ -253,12 +269,12 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	}
 
 	// Three stages. Downloads (the dotgit, i.e. the .git directory only)
-	// run ahead for every source, at most `parallel` at a time, in lock
+	// run ahead for every source, downloadConcurrency at a time, in lock
 	// order; they are small (about 1 GiB at most) so all of them may sit on
-	// disk. Checkouts write the extracted tree, which is large, so only the
-	// next source is checked out while the current one is being added:
-	// at most two trees exist at once. Adds are serial, in lock order,
-	// because bbolt has a single writer.
+	// disk. Restores write the extracted tree, which is large, so only
+	// restoreConcurrency sources are restored ahead of the one being added:
+	// restoreConcurrency+1 trees exist at most. Adds are serial, in lock
+	// order, because bbolt has a single writer.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -268,16 +284,16 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		err  error
 	}
 	downloaded := make([]chan staged, len(lock.Sources))
-	checkedOut := make([]chan staged, len(lock.Sources))
+	restored := make([]chan staged, len(lock.Sources))
 	for i := range lock.Sources {
 		downloaded[i] = make(chan staged, 1)
-		checkedOut[i] = make(chan staged, 1)
+		restored[i] = make(chan staged, 1)
 	}
 	var wg sync.WaitGroup
 
 	// Stage 1: downloads. One dispatcher admits the sources in lock order
 	// so an early source is never starved of a slot by later ones.
-	slots := make(chan struct{}, options.parallel)
+	slots := make(chan struct{}, options.downloadConcurrency)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -303,9 +319,10 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		}
 	}()
 
-	// Stage 2: checkouts, one source ahead of the add. A tree slot is held
-	// from checkout until the add has removed the tree.
-	trees := make(chan struct{}, 2)
+	// Stage 2: restores, restoreConcurrency sources ahead of the add. A
+	// tree slot is held from restore until the add has removed the tree, and
+	// is handed out in lock order like the download slots.
+	trees := make(chan struct{}, options.restoreConcurrency+1)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -314,23 +331,27 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 			case trees <- struct{}{}:
 			case <-ctx.Done():
 				for j := i; j < len(lock.Sources); j++ {
-					checkedOut[j] <- staged{err: ctx.Err()}
+					restored[j] <- staged{err: ctx.Err()}
 				}
 				return
 			}
-			var d staged
-			select {
-			case d = <-downloaded[i]:
-			case <-ctx.Done():
-				d = staged{err: ctx.Err()}
-			}
-			if d.err == nil {
-				d.rep, d.err = checkout(d.root, s, d.rep)
-				if d.err != nil {
-					cancel()
+			wg.Add(1)
+			go func(i int, s Source) {
+				defer wg.Done()
+				var d staged
+				select {
+				case d = <-downloaded[i]:
+				case <-ctx.Done():
+					d = staged{err: ctx.Err()}
 				}
-			}
-			checkedOut[i] <- d
+				if d.err == nil {
+					d.rep, d.err = restore(d.root, s, d.rep)
+					if d.err != nil {
+						cancel()
+					}
+				}
+				restored[i] <- d
+			}(i, s)
 		}
 	}()
 
@@ -344,7 +365,7 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		return nil, err
 	}
 	for i, s := range lock.Sources {
-		c := <-checkedOut[i]
+		c := <-restored[i]
 		if c.err != nil {
 			if errors.Is(c.err, context.Canceled) {
 				// The real error is in the stage that cancelled; find it.
@@ -358,9 +379,9 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 					default:
 					}
 					select {
-					case d := <-checkedOut[j]:
+					case d := <-restored[j]:
 						if d.err != nil && !errors.Is(d.err, context.Canceled) {
-							return fail(errors.Wrapf(d.err, "checkout %s", lock.Sources[j].Name))
+							return fail(errors.Wrapf(d.err, "restore %s", lock.Sources[j].Name))
 						}
 					default:
 					}
@@ -472,11 +493,11 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 	return root, rep, nil
 }
 
-// checkout writes the tree of the lock commit into the downloaded
-// repository and stamps datasource.json with the commit. The dotgit has no
-// worktree, and checkout --force both detaches at the commit and writes the
-// files in one step.
-func checkout(root string, s Source, rep SourceReport) (SourceReport, error) {
+// restore writes the tree of the lock commit into the downloaded repository
+// and stamps datasource.json with the commit. The dotgit has no worktree,
+// and checkout --force both detaches at the commit and writes the files in
+// one step.
+func restore(root string, s Source, rep SourceReport) (SourceReport, error) {
 	start := time.Now()
 	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
 		return SourceReport{}, err
@@ -486,8 +507,8 @@ func checkout(root string, s Source, rep SourceReport) (SourceReport, error) {
 		return SourceReport{}, err
 	}
 	rep.ID = id
-	rep.CheckoutSeconds = time.Since(start).Seconds()
-	slog.Info("Checked out", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
+	rep.RestoreSeconds = time.Since(start).Seconds()
+	slog.Info("Restored", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 	return rep, nil
 }
 
