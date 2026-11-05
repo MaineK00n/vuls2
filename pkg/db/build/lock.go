@@ -43,6 +43,30 @@ func (s Source) Repository(registry string) string {
 
 var commitRegexp = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+// validBranchName applies the rules of git check-ref-format --branch to a
+// branch name, so that "refs/heads/<branch>" names a branch and not a
+// revision expression: "nightly~1" or "nightly^{commit}" would otherwise
+// resolve, and the build would pin to something other than a branch head.
+func validBranchName(name string) bool {
+	if name == "" || name == "@" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
+		return false
+	}
+	if strings.Contains(name, "..") || strings.Contains(name, "@{") || strings.Contains(name, "//") || strings.Contains(name, "/.") || strings.HasPrefix(name, ".") {
+		return false
+	}
+	for _, r := range name {
+		if r <= 0x20 || r == 0x7f || strings.ContainsRune("~^:?*[\\", r) {
+			return false
+		}
+	}
+	for _, component := range strings.Split(name, "/") {
+		if strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
 // ReadLock parses and validates a lock. Unknown members are rejected so a
 // typo in a hand-edited lock fails here rather than being silently ignored.
 func ReadLock(r io.Reader) (Lock, error) {
@@ -63,14 +87,15 @@ func (l Lock) Validate() error {
 	if l.Branch == "" {
 		return errors.New("branch is empty")
 	}
-	if strings.ContainsAny(l.Branch, " \t\n") {
-		return errors.Errorf("unexpected branch. expected: %q, actual: %q", "<branch name>", l.Branch)
+	if !validBranchName(l.Branch) {
+		return errors.Errorf("unexpected branch. expected: %q, actual: %q", "<branch name> (git check-ref-format --branch)", l.Branch)
 	}
 
 	if l.Registry == "" {
 		return errors.New("registry is empty")
 	}
-	if strings.Contains(l.Registry, "@") || strings.Contains(l.Registry[strings.LastIndex(l.Registry, "/")+1:], ":") || !strings.Contains(l.Registry, "/") {
+	host, repository, found := strings.Cut(l.Registry, "/")
+	if !found || host == "" || repository == "" || strings.Contains(l.Registry, "@") || strings.Contains(repository, ":") || strings.HasSuffix(repository, "/") {
 		return errors.Errorf("unexpected registry. expected: %q, actual: %q", "<host>/<repository> (no tag, no digest)", l.Registry)
 	}
 
