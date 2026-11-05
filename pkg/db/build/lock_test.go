@@ -149,6 +149,25 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "name with tag-invalid character",
+			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alpha[", "commit": "` + commit + `"}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "name too long for a tag",
+			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "` + strings.Repeat("a", 109) + `", "commit": "` + commit + `"}]}`,
+			wantErr: true,
+		},
+		{
+			name: "name at the tag length limit",
+			in:   `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "` + strings.Repeat("a", 108) + `", "commit": "` + commit + `"}]}`,
+			want: build.Lock{
+				Branch:   "nightly",
+				Registry: "ghcr.io/vulsio/vuls-data-db",
+				Sources:  []build.Source{{Name: strings.Repeat("a", 108), Commit: commit}},
+			},
+		},
+		{
 			name:    "duplicate name",
 			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}, {"name": "alma-errata", "commit": "` + commit + `"}]}`,
 			wantErr: true,
