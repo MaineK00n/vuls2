@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,6 @@ import (
 	containerregistry "github.com/google/go-containerregistry/pkg/registry"
 	"github.com/klauspost/compress/zstd"
 	godigest "github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"oras.land/oras-go/v2"
@@ -67,10 +65,10 @@ func TestPush(t *testing.T) {
 				token:   "gho_xxx",
 			},
 			want: ocispec.Manifest{
-				Versioned:    specs.Versioned{SchemaVersion: 2},
-				MediaType:    ocispec.MediaTypeImageManifest,
-				ArtifactType: "application/vnd.vulsio.vuls.db+type",
-				Config:       ocispec.DescriptorEmptyJSON,
+				SchemaVersion: 2,
+				MediaType:     ocispec.MediaTypeImageManifest,
+				ArtifactType:  "application/vnd.vulsio.vuls.db+type",
+				Config:        ocispec.DescriptorEmptyJSON,
 				Layers: []ocispec.Descriptor{{
 					MediaType:   "application/vnd.vulsio.vuls.db.layer.v1+zstd",
 					Digest:      godigest.Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(newBytes))),
@@ -92,10 +90,10 @@ func TestPush(t *testing.T) {
 				token:   "gho_xxx",
 			},
 			want: ocispec.Manifest{
-				Versioned:    specs.Versioned{SchemaVersion: 2},
-				MediaType:    ocispec.MediaTypeImageManifest,
-				ArtifactType: "application/vnd.vulsio.vuls.db+type",
-				Config:       ocispec.DescriptorEmptyJSON,
+				SchemaVersion: 2,
+				MediaType:     ocispec.MediaTypeImageManifest,
+				ArtifactType:  "application/vnd.vulsio.vuls.db+type",
+				Config:        ocispec.DescriptorEmptyJSON,
 				Layers: []ocispec.Descriptor{{
 					MediaType:   "application/vnd.vulsio.vuls.db.layer.v1+zstd",
 					Digest:      godigest.Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(newBytes))),
@@ -127,10 +125,10 @@ func TestPush(t *testing.T) {
 				opts:    []push.Option{push.WithForce(true)},
 			},
 			want: ocispec.Manifest{
-				Versioned:    specs.Versioned{SchemaVersion: 2},
-				MediaType:    ocispec.MediaTypeImageManifest,
-				ArtifactType: "application/vnd.vulsio.vuls.db+type",
-				Config:       ocispec.DescriptorEmptyJSON,
+				SchemaVersion: 2,
+				MediaType:     ocispec.MediaTypeImageManifest,
+				ArtifactType:  "application/vnd.vulsio.vuls.db+type",
+				Config:        ocispec.DescriptorEmptyJSON,
 				Layers: []ocispec.Descriptor{{
 					MediaType:   "application/vnd.vulsio.vuls.db.layer.v1+zstd",
 					Digest:      godigest.Digest(fmt.Sprintf("sha256:%x", sha256.Sum256(newBytes))),
@@ -179,25 +177,21 @@ func TestPush(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewTLSServer(containerregistry.New())
-			defer ts.Close()
+			// The in-memory network routes every host, ghcr.io
+			// included, to the test server, so the fixtures keep
+			// their production image references.
+			ts := httptest.NewTestServer(t, containerregistry.New())
 
 			originalTransport := http.DefaultTransport
 			http.DefaultTransport = ts.Client().Transport
-			defer func() {
+			t.Cleanup(func() {
 				http.DefaultTransport = originalTransport
-			}()
-
-			u, err := url.Parse(ts.URL)
-			if err != nil {
-				t.Fatalf("parse url: %v", err)
-			}
+			})
 
 			ref, err := remote.NewRepository(tt.args.image)
 			if err != nil {
 				t.Fatalf("parse repository %q: %v", tt.args.image, err)
 			}
-			ref.Reference.Registry = u.Host
 
 			repo := &remote.Repository{
 				Reference: registry.Reference{
