@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -603,56 +604,69 @@ func samePath(a, b string) (bool, error) {
 	return os.SameFile(fa, fb), nil
 }
 
-// resolvePath returns the absolute path of p with every symlink resolved,
-// including when p itself does not exist yet: the longest existing prefix
-// is resolved and the missing tail re-attached, and a dangling symlink is
-// followed to where it points.
+// resolvePath returns p as an absolute path with every symlink resolved,
+// including when p itself does not exist yet. The path is walked in
+// filesystem order: a symlink is followed where it is met and ".." applies
+// to the directory reached so far, so "alias/../x" with alias -> real/sub
+// resolves to real/x as the kernel would, not to the lexical parent of
+// alias. Once a component is missing, the rest is kept as written.
 func resolvePath(p string) (string, error) {
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return "", errors.Wrapf(err, "abs %s", p)
+	if !filepath.IsAbs(p) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", errors.Wrap(err, "getwd")
+		}
+		p = wd + string(filepath.Separator) + p
 	}
-	return resolveAbs(abs, 0)
+	return walkPath(p, 0)
 }
 
-func resolveAbs(abs string, depth int) (string, error) {
+func walkPath(p string, depth int) (string, error) {
 	if depth > 40 {
-		return "", errors.Errorf("too many levels of symbolic links: %s", abs)
+		return "", errors.Errorf("too many levels of symbolic links: %s", p)
 	}
 
-	real, err := filepath.EvalSymlinks(abs)
-	if err == nil {
-		return real, nil
+	cur := string(filepath.Separator)
+	comps := strings.Split(p, string(filepath.Separator))
+	missing := false
+	for i, c := range comps {
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, c)
+		if missing {
+			cur = next
+			continue
+		}
+		fi, err := os.Lstat(next)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", errors.Wrapf(err, "lstat %s", next)
+			}
+			missing = true
+			cur = next
+			continue
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			cur = next
+			continue
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return "", errors.Wrapf(err, "readlink %s", next)
+		}
+		if !filepath.IsAbs(target) {
+			target = cur + string(filepath.Separator) + target
+		}
+		// Continue from the link target with the remaining components, so a
+		// ".." that follows the link applies to where the link points.
+		return walkPath(target+string(filepath.Separator)+strings.Join(comps[i+1:], string(filepath.Separator)), depth+1)
 	}
-	if !os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "resolve %s", abs)
-	}
-
-	// abs does not exist (or is a dangling symlink). Resolve its parent,
-	// then follow the link if there is one.
-	parent, base := filepath.Split(abs)
-	parent = filepath.Clean(parent)
-	if parent == abs {
-		return abs, nil
-	}
-	rp, err := resolveAbs(parent, depth+1)
-	if err != nil {
-		return "", err
-	}
-	resolved := filepath.Join(rp, base)
-
-	fi, err := os.Lstat(resolved)
-	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		return resolved, nil
-	}
-	target, err := os.Readlink(resolved)
-	if err != nil {
-		return "", errors.Wrapf(err, "readlink %s", resolved)
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(rp, target)
-	}
-	return resolveAbs(filepath.Clean(target), depth+1)
+	return cur, nil
 }
 
 func writeReport(path string, report *Report) error {
