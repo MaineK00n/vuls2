@@ -136,6 +136,11 @@ func TestBuild(t *testing.T) {
 		if !strings.HasPrefix(report.VulsVersion, "vuls ") {
 			t.Errorf("vuls version = %q", report.VulsVersion)
 		}
+		for _, r := range report.Sources {
+			if r.PullSeconds <= 0 || r.CheckoutSeconds <= 0 || r.AddSeconds <= 0 {
+				t.Errorf("%s: stage timings not recorded: pull %v checkout %v add %v", r.Name, r.PullSeconds, r.CheckoutSeconds, r.AddSeconds)
+			}
+		}
 
 		f, err := os.Open(reportPath)
 		if err != nil {
