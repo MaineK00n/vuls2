@@ -92,7 +92,7 @@ func TestBuild(t *testing.T) {
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
 
-		report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work")))
+		report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work")))
 		if err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
@@ -137,8 +137,8 @@ func TestBuild(t *testing.T) {
 			t.Errorf("vuls version = %q", report.VulsVersion)
 		}
 		for _, r := range report.Sources {
-			if r.PullSeconds <= 0 || r.CheckoutSeconds <= 0 || r.AddSeconds <= 0 {
-				t.Errorf("%s: stage timings not recorded: pull %v checkout %v add %v", r.Name, r.PullSeconds, r.CheckoutSeconds, r.AddSeconds)
+			if r.PullSeconds <= 0 || r.RestoreSeconds <= 0 || r.AddSeconds <= 0 {
+				t.Errorf("%s: stage timings not recorded: pull %v restore %v add %v", r.Name, r.PullSeconds, r.RestoreSeconds, r.AddSeconds)
 			}
 		}
 
@@ -158,23 +158,24 @@ func TestBuild(t *testing.T) {
 
 	t.Run("more sources than slots", func(t *testing.T) {
 		// Slots are handed out in lock order; with one slot and three
-		// sources a later source must not starve the one being waited on.
-		for _, parallel := range []int{1, 2} {
+		// sources a later source must not starve the one being waited on,
+		// for download slots and tree slots alike.
+		for _, c := range []struct{ download, restore int }{{1, 1}, {2, 1}, {1, 2}, {3, 3}} {
 			dbpath := filepath.Join(t.TempDir(), "vuls.db")
 			lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 				{Name: "alpha", Commit: alpha.nightly[1]},
 				{Name: "beta", Commit: beta.nightly[0]},
 				{Name: "gamma", Commit: gamma.nightly[0]},
 			}}
-			report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(parallel), build.WithDir(filepath.Join(t.TempDir(), "work")))
+			report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(c.download), build.WithRestoreConcurrency(c.restore), build.WithDir(filepath.Join(t.TempDir(), "work")))
 			if err != nil {
-				t.Fatalf("parallel=%d: Build() error = %v", parallel, err)
+				t.Fatalf("%+v: Build() error = %v", c, err)
 			}
 			if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
-				t.Errorf("parallel=%d: order = %v", parallel, got)
+				t.Errorf("%+v: order = %v", c, got)
 			}
 			if dss := datasources(t, dbpath); len(dss) != 3 {
-				t.Errorf("parallel=%d: datasources = %d, want 3", parallel, len(dss))
+				t.Errorf("%+v: datasources = %d, want 3", c, len(dss))
 			}
 		}
 	})
@@ -209,7 +210,7 @@ func TestBuild(t *testing.T) {
 			{Name: "delta", Commit: delta.nightly[0]},
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithParallel(3), build.WithDir(dir)); err == nil {
+		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(3), build.WithRestoreConcurrency(2), build.WithDir(dir)); err == nil {
 			t.Fatal("Build() error = nil, want duplicate datasource")
 		}
 		if _, err := os.Stat(dbpath); !os.IsNotExist(err) {
