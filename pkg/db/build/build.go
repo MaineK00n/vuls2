@@ -286,6 +286,10 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		}
 	}()
 
+	// On error the dispatcher is cancelled and the in-flight pulls are
+	// waited for before returning: pull.Pull takes no context, so a pull
+	// already running goes on until it finishes or the registry client
+	// times out, and the work directory must not be removed under it.
 	for i, s := range lock.Sources {
 		p := <-ready[i]
 		if p.err != nil {
@@ -349,7 +353,13 @@ func prepare(workdir string, lock Lock, s Source) (string, SourceReport, error) 
 		return "", SourceReport{}, errors.Wrapf(err, "pull %s", repository)
 	}
 
+	// The branch must exist as exactly this ref: the lock has already
+	// rejected revision syntax, and this keeps a missing branch from being
+	// resolved as anything else by the revision-parsing commands below.
 	branch := "refs/heads/" + lock.Branch
+	if _, err := git(root, "show-ref", "--verify", "--quiet", branch); err != nil {
+		return "", SourceReport{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
+	}
 	ok, err := commitExists(root, s.Commit)
 	if err != nil {
 		return "", SourceReport{}, err
@@ -486,29 +496,15 @@ func verify(options *options, dbpath string, report *Report) error {
 	return nil
 }
 
-// samePath reports whether a and b name the same file: the same cleaned
-// absolute path, the same path once symlinks are resolved, or (when both
-// exist) the same inode.
+// samePath reports whether a and b name the same file: the same path once
+// symlinks are resolved (also through parents and dangling links of a file
+// that does not exist yet), or (when both exist) the same inode.
 func samePath(a, b string) (bool, error) {
-	resolve := func(p string) (string, error) {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return "", errors.Wrapf(err, "abs %s", p)
-		}
-		real, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return abs, nil
-			}
-			return "", errors.Wrapf(err, "resolve %s", p)
-		}
-		return real, nil
-	}
-	ra, err := resolve(a)
+	ra, err := resolvePath(a)
 	if err != nil {
 		return false, err
 	}
-	rb, err := resolve(b)
+	rb, err := resolvePath(b)
 	if err != nil {
 		return false, err
 	}
@@ -525,6 +521,58 @@ func samePath(a, b string) (bool, error) {
 		return false, nil
 	}
 	return os.SameFile(fa, fb), nil
+}
+
+// resolvePath returns the absolute path of p with every symlink resolved,
+// including when p itself does not exist yet: the longest existing prefix
+// is resolved and the missing tail re-attached, and a dangling symlink is
+// followed to where it points.
+func resolvePath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", errors.Wrapf(err, "abs %s", p)
+	}
+	return resolveAbs(abs, 0)
+}
+
+func resolveAbs(abs string, depth int) (string, error) {
+	if depth > 40 {
+		return "", errors.Errorf("too many levels of symbolic links: %s", abs)
+	}
+
+	real, err := filepath.EvalSymlinks(abs)
+	if err == nil {
+		return real, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", errors.Wrapf(err, "resolve %s", abs)
+	}
+
+	// abs does not exist (or is a dangling symlink). Resolve its parent,
+	// then follow the link if there is one.
+	parent, base := filepath.Split(abs)
+	parent = filepath.Clean(parent)
+	if parent == abs {
+		return abs, nil
+	}
+	rp, err := resolveAbs(parent, depth+1)
+	if err != nil {
+		return "", err
+	}
+	resolved := filepath.Join(rp, base)
+
+	fi, err := os.Lstat(resolved)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return resolved, nil
+	}
+	target, err := os.Readlink(resolved)
+	if err != nil {
+		return "", errors.Wrapf(err, "readlink %s", resolved)
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(rp, target)
+	}
+	return resolveAbs(filepath.Clean(target), depth+1)
 }
 
 func writeReport(path string, report *Report) error {
