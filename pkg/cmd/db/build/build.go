@@ -18,19 +18,21 @@ import (
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		lock     string
-		dbtype   utilflag.DBType
-		dbpath   string
-		dir      string
-		parallel int
-		report   string
-		check    bool
-		debug    bool
+		lock                string
+		dbtype              utilflag.DBType
+		dbpath              string
+		dir                 string
+		downloadConcurrency int
+		restoreConcurrency  int
+		report              string
+		check               bool
+		debug               bool
 	}{
-		dbtype:   utilflag.DBTypeBoltDB,
-		dbpath:   filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		parallel: runtime.NumCPU(),
-		debug:    false,
+		dbtype:              utilflag.DBTypeBoltDB,
+		dbpath:              filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		downloadConcurrency: runtime.NumCPU(),
+		restoreConcurrency:  1,
+		debug:               false,
 	}
 
 	cmd := &cobra.Command{
@@ -48,16 +50,18 @@ func NewCmd() *cobra.Command {
 		   ]}
 
 		Each source is pulled from <registry>:vuls-data-extracted-<name>,
-		checked out at its commit (which must belong to the branch), stamped
-		into datasource.json, and added. Dotgits are pulled in parallel, up to
-		--parallel at a time, which also bounds how many extracted trees are on
-		disk at once; adds are serial. A boltdb is written to a scratch file
-		and renamed over --dbpath only after every source has been added and
-		verified, so a failed build leaves nothing behind.
+		restored at its commit (which must belong to the branch), stamped
+		into datasource.json, and added, in three stages: dotgits (the .git
+		only) are pulled --download-concurrency at a time for every source
+		ahead of the adds; trees are restored --restore-concurrency sources
+		ahead of the one being added, so that many plus one trees are on
+		disk at most; adds are serial, in lock order. A boltdb is written to
+		a scratch file and renamed over --dbpath only after every source has
+		been added and verified, so a failed build leaves nothing behind.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
-		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db --parallel 4 --report report.json
+		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db --download-concurrency 8 --restore-concurrency 1 --report report.json
 		$ vuls db build --lock db-nightly.lock.json --check
 		$ jq '.sources |= map(select(.name == "alma-errata"))' db-nightly.lock.json | vuls db build --lock - --dbpath ./mini.db
 		`),
@@ -74,7 +78,7 @@ func NewCmd() *cobra.Command {
 
 			if _, err := db.Build(lock,
 				db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath),
-				db.WithDir(options.dir), db.WithParallel(options.parallel), db.WithReport(options.report),
+				db.WithDir(options.dir), db.WithDownloadConcurrency(options.downloadConcurrency), db.WithRestoreConcurrency(options.restoreConcurrency), db.WithReport(options.report),
 				db.WithDebug(options.debug),
 			); err != nil {
 				return errors.Wrap(err, "db build")
@@ -89,7 +93,8 @@ func NewCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory to pull dotgits into (default: a temporary directory removed afterwards)")
-	cmd.Flags().IntVarP(&options.parallel, "parallel", "", options.parallel, "dotgits pulled at once; also the most extracted trees kept on disk at once")
+	cmd.Flags().IntVarP(&options.downloadConcurrency, "download-concurrency", "", options.downloadConcurrency, "dotgits pulled at once (network; .git only, so this does not grow the trees on disk)")
+	cmd.Flags().IntVarP(&options.restoreConcurrency, "restore-concurrency", "", options.restoreConcurrency, "sources restored ahead of the add; this many plus one extracted trees are on disk at most")
 	cmd.Flags().StringVarP(&options.report, "report", "", "", "write a JSON report of what was built (datasource ids, commits, how far behind the branch) to this path")
 	cmd.Flags().BoolVarP(&options.check, "check", "", false, "validate the lock file and exit without building")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
