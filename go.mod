@@ -3,13 +3,13 @@ module github.com/MaineK00n/vuls2
 go 1.27.3
 
 require (
-	github.com/MaineK00n/vuls-data-update v0.0.0-20261009052605-f18dafcbe5da
+	github.com/MaineK00n/vuls-data-update v0.0.0-20261108004038-681f47deed4d
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.22.1
 	github.com/klauspost/compress v1.20.0
-	github.com/knqyf263/go-cpe v0.0.0-20230627041855-cb0794d06872
+	github.com/knqyf263/go-cpe v0.0.0-20261105105232-0e8dfa8dd44c
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
@@ -27,7 +27,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.1 // indirect
-	github.com/MaineK00n/go-microsoft-version v0.0.0-20260325021654-1d9206bdeffc // indirect
+	github.com/MaineK00n/go-microsoft-version v0.0.0-20261029064356-a5b20527022c // indirect
 	github.com/MaineK00n/go-paloalto-version v0.0.0-20260324210858-f043171ba2bf // indirect
 	github.com/aquasecurity/go-gem-version v0.0.0-20201115065557-8eed6fe000ce // indirect
 	github.com/aquasecurity/go-npm-version v0.0.2 // indirect
