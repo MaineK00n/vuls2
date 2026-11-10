@@ -473,7 +473,7 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 	// The branch must exist as exactly this ref: the lock has already
 	// rejected revision syntax, and this keeps a missing branch from being
 	// resolved as anything else by the revision-parsing commands below.
-	branch := "refs/heads/" + lock.Branch
+	branch := fmt.Sprintf("refs/heads/%s", lock.Branch)
 	if _, err := git(root, "show-ref", "--verify", "--quiet", branch); err != nil {
 		return "", SourceReport{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
 	}
@@ -662,7 +662,7 @@ func resolvePath(p string) (string, error) {
 		if err != nil {
 			return "", errors.Wrap(err, "getwd")
 		}
-		p = wd + string(filepath.Separator) + p
+		p = fmt.Sprintf("%s%c%s", wd, filepath.Separator, p)
 	}
 	return walkPath(p, 0)
 }
@@ -676,7 +676,7 @@ func walkPath(p string, depth int) (string, error) {
 	// on Windows, which must not be split into components) and walk the
 	// rest with separators normalized.
 	vol := filepath.VolumeName(p)
-	cur := vol + string(filepath.Separator)
+	cur := fmt.Sprintf("%s%c", vol, filepath.Separator)
 	comps := strings.Split(filepath.ToSlash(p[len(vol):]), "/")
 	missing := false
 	for i, c := range comps {
@@ -710,11 +710,11 @@ func walkPath(p string, depth int) (string, error) {
 			return "", errors.Wrapf(err, "readlink %s", next)
 		}
 		if !filepath.IsAbs(target) {
-			target = cur + string(filepath.Separator) + target
+			target = fmt.Sprintf("%s%c%s", cur, filepath.Separator, target)
 		}
 		// Continue from the link target with the remaining components, so a
 		// ".." that follows the link applies to where the link points.
-		return walkPath(filepath.FromSlash(target+"/"+strings.Join(comps[i+1:], "/")), depth+1)
+		return walkPath(filepath.FromSlash(fmt.Sprintf("%s/%s", target, strings.Join(comps[i+1:], "/"))), depth+1)
 	}
 	return cur, nil
 }
