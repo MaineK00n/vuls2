@@ -206,9 +206,20 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 			return nil, errors.Wrapf(err, "mkdir %s", options.dir)
 		}
 	}
-	workdir, err := os.MkdirTemp(options.dir, "vuls-db-build-*")
+	created, err := os.MkdirTemp(options.dir, "vuls-db-build-*")
 	if err != nil {
 		return nil, errors.Wrap(err, "mkdir temp")
+	}
+	// The kernel resolves "alias/../work" through the symlink, while
+	// filepath.Join cleans it lexically to "work". Resolve the created
+	// directory once so that downloads, restores and the cleanup below all
+	// use the directory that was actually created.
+	workdir, err := filepath.EvalSymlinks(created)
+	if err != nil {
+		if rerr := os.RemoveAll(created); rerr != nil {
+			slog.Warn("Failed to remove work directory", slog.String("dir", created), slog.String("err", rerr.Error()))
+		}
+		return nil, errors.Wrapf(err, "resolve %s", created)
 	}
 	defer func() {
 		if err := os.RemoveAll(workdir); err != nil {
@@ -219,14 +230,28 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	// The db is built at target; for boltdb that is a scratch file, unique
 	// to this invocation so concurrent builds of the same dbpath cannot
 	// touch each other's, renamed over dbpath at the end.
-	target := options.dbpath
+	dbpath, target := options.dbpath, options.dbpath
 	if options.dbtype == "boltdb" {
-		if err := os.MkdirAll(filepath.Dir(options.dbpath), 0755); err != nil {
-			return nil, errors.Wrapf(err, "mkdir %s", filepath.Dir(options.dbpath))
+		// The scratch db must sit in the directory dbpath is renamed into,
+		// or the final rename can cross filesystems. filepath.Dir would clean
+		// "alias/../vuls.db" lexically to ".", so split without cleaning and
+		// resolve the parent as the kernel does.
+		dir, base := filepath.Split(options.dbpath)
+		if dir == "" {
+			dir = "."
 		}
-		f, err := os.CreateTemp(filepath.Dir(options.dbpath), fmt.Sprintf(".%s.build-*", filepath.Base(options.dbpath)))
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, errors.Wrapf(err, "mkdir %s", dir)
+		}
+		resolved, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			return nil, errors.Wrapf(err, "create scratch db in %s", filepath.Dir(options.dbpath))
+			return nil, errors.Wrapf(err, "resolve %s", dir)
+		}
+		dbpath = filepath.Join(resolved, base)
+
+		f, err := os.CreateTemp(resolved, fmt.Sprintf(".%s.build-*", base))
+		if err != nil {
+			return nil, errors.Wrapf(err, "create scratch db in %s", resolved)
 		}
 		target = f.Name()
 		if err := f.Close(); err != nil {
@@ -245,7 +270,7 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	// path that is the db (or its scratch file) would replace a good db with
 	// JSON and still report success. Refuse that up front.
 	if options.report != "" {
-		for _, p := range []string{options.dbpath, target} {
+		for _, p := range []string{dbpath, target} {
 			same, err := samePath(options.report, p)
 			if err != nil {
 				return nil, err
@@ -416,12 +441,12 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		}
 	}
 
-	if target != options.dbpath {
-		if err := os.Rename(target, options.dbpath); err != nil {
-			return nil, errors.Wrapf(err, "rename %s to %s", target, options.dbpath)
+	if target != dbpath {
+		if err := os.Rename(target, dbpath); err != nil {
+			return nil, errors.Wrapf(err, "rename %s to %s", target, dbpath)
 		}
 	}
-	slog.Info("Built", slog.String("dbpath", options.dbpath), slog.Int("sources", len(report.Sources)))
+	slog.Info("Built", slog.String("dbpath", dbpath), slog.Int("sources", len(report.Sources)))
 
 	return report, nil
 }
