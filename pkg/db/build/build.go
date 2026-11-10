@@ -298,7 +298,7 @@ func Build(lockPath string, opts ...Option) error {
 		}
 	}
 
-	slog.Info("Initialize DB", slog.String("dbpath", target))
+	slog.Info("Initialize DB", dbLogAttr(options.dbtype, target))
 	if err := dbInit.Init(dbInit.WithDBType(options.dbtype), dbInit.WithDBPath(target), dbInit.WithStorageOptions(options.storageopts), dbInit.WithDebug(options.debug)); err != nil {
 		return errors.Wrap(err, "init db")
 	}
@@ -433,9 +433,19 @@ func Build(lockPath string, opts ...Option) error {
 			return errors.Wrapf(err, "rename %s to %s", target, dbpath)
 		}
 	}
-	slog.Info("Built", slog.String("dbpath", dbpath), slog.Int("sources", len(report.Sources)))
+	slog.Info("Built", dbLogAttr(options.dbtype, dbpath), slog.Int("sources", len(report.Sources)))
 
 	return nil
+}
+
+// dbLogAttr names the db in a log line: the path of a boltdb file, or only
+// the type for the others, whose dbpath is a connection string that may
+// carry a password.
+func dbLogAttr(dbtype, dbpath string) slog.Attr {
+	if dbtype == "boltdb" {
+		return slog.String("dbpath", dbpath)
+	}
+	return slog.String("dbtype", dbtype)
 }
 
 // readLock reads and validates the lock at path, or from stdin for "-".
