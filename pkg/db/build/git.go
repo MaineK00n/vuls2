@@ -64,7 +64,11 @@ func isAncestor(dir, commit, ref string) (bool, error) {
 }
 
 func revParse(dir, rev string) (string, error) {
-	return git(dir, "rev-parse", "--verify", fmt.Sprintf("%s^{commit}", rev))
+	s, err := git(dir, "rev-parse", "--verify", fmt.Sprintf("%s^{commit}", rev))
+	if err != nil {
+		return "", errors.Wrapf(err, "rev-parse %s", rev)
+	}
+	return s, nil
 }
 
 // authorTime returns the author date of rev. The extracted datasource.json
@@ -73,7 +77,7 @@ func revParse(dir, rev string) (string, error) {
 func authorTime(dir, rev string) (time.Time, error) {
 	s, err := git(dir, "show", "-s", "--format=%at", rev)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, errors.Wrapf(err, "show author date of %s", rev)
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
@@ -87,7 +91,7 @@ func authorTime(dir, rev string) (time.Time, error) {
 func commitsAfter(dir, commit, ref string) ([]string, error) {
 	s, err := git(dir, "rev-list", "--reverse", fmt.Sprintf("%s..%s", commit, ref))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "rev-list %s..%s", commit, ref)
 	}
 	if s == "" {
 		return nil, nil
