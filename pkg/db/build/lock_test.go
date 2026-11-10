@@ -413,8 +413,30 @@ func TestReadLock(t *testing.T) {
 }
 
 func TestSource_Repository(t *testing.T) {
-	got := build.Source{Name: "alma-errata"}.Repository("ghcr.io/vulsio/vuls-data-db")
-	if want := "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"; got != want {
-		t.Errorf("Repository() = %q, want %q", got, want)
+	tests := []struct {
+		name     string
+		source   build.Source
+		registry string
+		want     string
+	}{
+		{
+			name:     "ghcr",
+			source:   build.Source{Name: "alma-errata"},
+			registry: "ghcr.io/vulsio/vuls-data-db",
+			want:     "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata",
+		},
+		{
+			name:     "registry with port",
+			source:   build.Source{Name: "redhat-vex-v1-rhel"},
+			registry: "127.0.0.1:5000/vulsio/vuls-data-db",
+			want:     "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.source.Repository(tt.registry); got != tt.want {
+				t.Errorf("Repository() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

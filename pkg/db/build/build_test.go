@@ -165,23 +165,35 @@ func TestBuild(t *testing.T) {
 		// Slots are handed out in lock order; with one slot and three
 		// sources a later source must not starve the one being waited on,
 		// for download slots and tree slots alike.
-		for _, c := range []struct{ download, restore int }{{1, 1}, {2, 1}, {1, 2}, {3, 3}} {
-			dbpath := filepath.Join(t.TempDir(), "vuls.db")
-			lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-				{Name: "alpha", Commit: alpha.nightly[1]},
-				{Name: "beta", Commit: beta.nightly[0]},
-				{Name: "gamma", Commit: gamma.nightly[0]},
-			}}
-			report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(c.download), build.WithRestoreConcurrency(c.restore), build.WithDir(filepath.Join(t.TempDir(), "work")))
-			if err != nil {
-				t.Fatalf("%+v: Build() error = %v", c, err)
-			}
-			if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
-				t.Errorf("%+v: order = %v", c, got)
-			}
-			if dss := datasources(t, dbpath); len(dss) != 3 {
-				t.Errorf("%+v: datasources = %d, want 3", c, len(dss))
-			}
+		tests := []struct {
+			name     string
+			download int
+			restore  int
+		}{
+			{name: "download 1, restore 1", download: 1, restore: 1},
+			{name: "download 2, restore 1", download: 2, restore: 1},
+			{name: "download 1, restore 2", download: 1, restore: 2},
+			{name: "download 3, restore 3", download: 3, restore: 3},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				dbpath := filepath.Join(t.TempDir(), "vuls.db")
+				lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+					{Name: "alpha", Commit: alpha.nightly[1]},
+					{Name: "beta", Commit: beta.nightly[0]},
+					{Name: "gamma", Commit: gamma.nightly[0]},
+				}}
+				report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(tt.download), build.WithRestoreConcurrency(tt.restore), build.WithDir(filepath.Join(t.TempDir(), "work")))
+				if err != nil {
+					t.Fatalf("Build() error = %v", err)
+				}
+				if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
+					t.Errorf("order = %v", got)
+				}
+				if dss := datasources(t, dbpath); len(dss) != 3 {
+					t.Errorf("datasources = %d, want 3", len(dss))
+				}
+			})
 		}
 	})
 
@@ -264,31 +276,41 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("commit outside the branch", func(t *testing.T) {
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.stray},
-		}}
-		_, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
-		if err == nil || !strings.Contains(err.Error(), "not an ancestor") {
-			t.Fatalf("Build() error = %v, want not an ancestor", err)
+	t.Run("lock the registry cannot satisfy", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			lock    build.Lock
+			wantErr string
+		}{
+			{
+				name: "commit outside the branch",
+				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+					{Name: "alpha", Commit: alpha.stray},
+				}},
+				wantErr: "not an ancestor",
+			},
+			{
+				name: "unknown branch",
+				lock: build.Lock{Branch: "release", Registry: registry, Sources: []build.Source{
+					{Name: "alpha", Commit: alpha.nightly[0]},
+				}},
+				wantErr: "branch release is not in",
+			},
+			{
+				name: "missing repository",
+				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+					{Name: "zeta", Commit: alpha.nightly[0]},
+				}},
+				wantErr: "pull",
+			},
 		}
-	})
-
-	t.Run("unknown branch", func(t *testing.T) {
-		lock := build.Lock{Branch: "release", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.nightly[0]},
-		}}
-		if _, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
-			t.Fatal("Build() error = nil, want unknown branch")
-		}
-	})
-
-	t.Run("missing repository", func(t *testing.T) {
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "zeta", Commit: alpha.nightly[0]},
-		}}
-		if _, err := runBuild(t, lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil {
-			t.Fatal("Build() error = nil, want pull failure")
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := runBuild(t, tt.lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Build() error = %v, want %q", err, tt.wantErr)
+				}
+			})
 		}
 	})
 
@@ -305,14 +327,23 @@ func TestBuild(t *testing.T) {
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		for _, report := range []string{dbpath, filepath.Join(dir, ".", "vuls.db"), link} {
-			if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
-				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
-			}
-			bs, err := os.ReadFile(dbpath)
-			if err != nil || string(bs) != "not a db" {
-				t.Errorf("report=%s: existing db changed: %q, %v", report, bs, err)
-			}
+		for _, tt := range []struct {
+			name   string
+			report string
+		}{
+			{name: "same path", report: dbpath},
+			{name: "same path with .", report: filepath.Join(dir, ".", "vuls.db")},
+			{name: "symlink to the db", report: link},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+					t.Errorf("Build() error = %v, want report path refused", err)
+				}
+				bs, err := os.ReadFile(dbpath)
+				if err != nil || string(bs) != "not a db" {
+					t.Errorf("existing db changed: %q, %v", bs, err)
+				}
+			})
 		}
 
 		// The db does not exist yet, so the alias has to be seen through
@@ -336,13 +367,22 @@ func TestBuild(t *testing.T) {
 		if err := os.Symlink(sub, alias2); err != nil {
 			t.Fatal(err)
 		}
-		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling, fmt.Sprintf("%s/../new.db", alias2)} {
-			if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
-				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
-			}
-			if _, err := os.Lstat(newdb); !os.IsNotExist(err) {
-				t.Errorf("report=%s: db written despite refused report path: %v", report, err)
-			}
+		for _, tt := range []struct {
+			name   string
+			report string
+		}{
+			{name: "through a symlinked parent", report: filepath.Join(aliasDir, "new.db")},
+			{name: "dangling symlink to the db", report: dangling},
+			{name: "symlink followed by ..", report: fmt.Sprintf("%s/../new.db", alias2)},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+					t.Errorf("Build() error = %v, want report path refused", err)
+				}
+				if _, err := os.Lstat(newdb); !os.IsNotExist(err) {
+					t.Errorf("db written despite refused report path: %v", err)
+				}
+			})
 		}
 	})
 }
