@@ -53,8 +53,10 @@ var nameRegexp = regexp.MustCompile(`^[A-Za-z0-9._-]{1,108}$`)
 // branch name, so that "refs/heads/<branch>" names a branch and not a
 // revision expression: "nightly~1" or "nightly^{commit}" would otherwise
 // resolve, and the build would pin to something other than a branch head.
+// "HEAD" is refused as git refuses it, and so is "@", which --branch would
+// expand to the current branch instead of taking as a name.
 func validBranchName(name string) bool {
-	if name == "" || name == "@" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
+	if name == "" || name == "@" || name == "HEAD" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
 		return false
 	}
 	if strings.Contains(name, "..") || strings.Contains(name, "@{") || strings.Contains(name, "//") || strings.Contains(name, "/.") || strings.HasPrefix(name, ".") {
