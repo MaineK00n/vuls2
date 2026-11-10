@@ -1,9 +1,6 @@
 package build
 
 import (
-	"io"
-	"log/slog"
-	"os"
 	"path/filepath"
 	"runtime"
 
@@ -25,7 +22,7 @@ func NewCmd() *cobra.Command {
 		downloadConcurrency int
 		restoreConcurrency  int
 		report              string
-		check               bool
+		validateOnly        bool
 		debug               bool
 	}{
 		dbtype:              utilflag.DBTypeBoltDB,
@@ -63,24 +60,15 @@ func NewCmd() *cobra.Command {
 		Example: heredoc.Doc(`
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db --download-concurrency 8 --restore-concurrency 1 --report report.json
-		$ vuls db build --lock db-nightly.lock.json --check
+		$ vuls db build --lock db-nightly.lock.json --validate-only
 		$ jq '.sources |= map(select(.name == "alma-errata"))' db-nightly.lock.json | vuls db build --lock - --dbpath ./mini.db
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			lock, err := readLock(options.lock)
-			if err != nil {
-				return errors.Wrapf(err, "read lock %s", options.lock)
-			}
-			if options.check {
-				slog.Info("Lock is valid", slog.String("branch", lock.Branch), slog.String("registry", lock.Registry), slog.Int("sources", len(lock.Sources)))
-				return nil
-			}
-
-			if _, err := db.Build(lock,
+			if err := db.Build(options.lock,
 				db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath),
 				db.WithDir(options.dir), db.WithDownloadConcurrency(options.downloadConcurrency), db.WithRestoreConcurrency(options.restoreConcurrency), db.WithReport(options.report),
-				db.WithDebug(options.debug),
+				db.WithValidateOnly(options.validateOnly), db.WithDebug(options.debug),
 			); err != nil {
 				return errors.Wrap(err, "db build")
 			}
@@ -97,21 +85,8 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&options.downloadConcurrency, "download-concurrency", "", options.downloadConcurrency, "dotgits pulled at once (network; .git only, so this does not grow the trees on disk)")
 	cmd.Flags().IntVarP(&options.restoreConcurrency, "restore-concurrency", "", options.restoreConcurrency, "sources restored ahead of the add; this many plus one extracted trees are on disk at most")
 	cmd.Flags().StringVarP(&options.report, "report", "", "", "write a JSON report of what was built (datasource ids, commits, how far behind the branch, seconds per stage) to this path")
-	cmd.Flags().BoolVarP(&options.check, "check", "", false, "validate the lock file and exit without building")
+	cmd.Flags().BoolVarP(&options.validateOnly, "validate-only", "", false, "validate the lock file and exit without building")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
-}
-
-func readLock(path string) (db.Lock, error) {
-	var r io.Reader = os.Stdin
-	if path != "-" {
-		f, err := os.Open(path)
-		if err != nil {
-			return db.Lock{}, errors.Wrapf(err, "open %s", path)
-		}
-		defer f.Close()
-		r = f
-	}
-	return db.ReadLock(r)
 }
