@@ -62,25 +62,22 @@ func TestBuild(t *testing.T) {
 		pushExtracted(t, registry, name, e.dir)
 	}
 
-	// build runs Build and fails the test if it does not return in time,
-	// so a scheduling bug shows up as a failure rather than a hung test.
-	runBuild := func(t *testing.T, lock build.Lock, opts ...build.Option) (*build.Report, error) {
+	// runBuild writes lock to a file, runs Build on it and fails the test if
+	// it does not return in time, so a scheduling bug shows up as a failure
+	// rather than a hung test.
+	runBuild := func(t *testing.T, lock build.Lock, opts ...build.Option) error {
 		t.Helper()
-		type result struct {
-			report *build.Report
-			err    error
-		}
-		ch := make(chan result, 1)
+		lockPath := writeLock(t, lock)
+		ch := make(chan error, 1)
 		go func() {
-			r, err := build.Build(lock, opts...)
-			ch <- result{r, err}
+			ch <- build.Build(lockPath, opts...)
 		}()
 		select {
-		case r := <-ch:
-			return r.report, r.err
+		case err := <-ch:
+			return err
 		case <-time.After(2 * time.Minute):
 			t.Fatal("Build() did not return in 2 minutes")
-			return nil, nil
+			return nil
 		}
 	}
 
@@ -92,8 +89,7 @@ func TestBuild(t *testing.T) {
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
 
-		report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work")))
-		if err != nil {
+		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
 
@@ -121,6 +117,10 @@ func TestBuild(t *testing.T) {
 			t.Errorf("beta commit = %s, want %s", got, beta.nightly[0])
 		}
 
+		report := readReport(t, reportPath)
+		if report.Branch != "nightly" || report.Registry != registry {
+			t.Errorf("report branch = %q registry = %q, want %q %q", report.Branch, report.Registry, "nightly", registry)
+		}
 		if len(report.Sources) != 2 {
 			t.Fatalf("report sources = %d, want 2", len(report.Sources))
 		}
@@ -146,25 +146,12 @@ func TestBuild(t *testing.T) {
 				t.Errorf("%s: stage timings not recorded: pull %v restore %v add %v", r.Name, r.PullSeconds, r.RestoreSeconds, r.AddSeconds)
 			}
 		}
-
-		f, err := os.Open(reportPath)
-		if err != nil {
-			t.Fatalf("open report: %v", err)
-		}
-		defer f.Close()
-		var written build.Report
-		if err := json.UnmarshalRead(f, &written); err != nil {
-			t.Fatalf("unmarshal report: %v", err)
-		}
-		if len(written.Sources) != 2 || written.Branch != "nightly" || written.Registry != registry {
-			t.Errorf("written report = %+v", written)
-		}
 	})
 
 	t.Run("more sources than slots", func(t *testing.T) {
-		// Slots are handed out in lock order; with one slot and three
-		// sources a later source must not starve the one being waited on,
-		// for download slots and tree slots alike.
+		// With fewer download or tree slots than sources, every source must
+		// still get through, and the report must still list the sources in
+		// lock order whatever order they were added in.
 		tests := []struct {
 			name     string
 			download int
@@ -178,15 +165,16 @@ func TestBuild(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				dbpath := filepath.Join(t.TempDir(), "vuls.db")
+				reportPath := filepath.Join(t.TempDir(), "report.json")
 				lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 					{Name: "alpha", Commit: alpha.nightly[1]},
 					{Name: "beta", Commit: beta.nightly[0]},
 					{Name: "gamma", Commit: gamma.nightly[0]},
 				}}
-				report, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(tt.download), build.WithRestoreConcurrency(tt.restore), build.WithDir(filepath.Join(t.TempDir(), "work")))
-				if err != nil {
+				if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(tt.download), build.WithRestoreConcurrency(tt.restore), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err != nil {
 					t.Fatalf("Build() error = %v", err)
 				}
+				report := readReport(t, reportPath)
 				if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
 					t.Errorf("order = %v", got)
 				}
@@ -206,7 +194,7 @@ func TestBuild(t *testing.T) {
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "alpha", Commit: strings.Repeat("0", 40)},
 		}}
-		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err == nil {
+		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err == nil {
 			t.Fatal("Build() error = nil, want commit not found")
 		}
 		bs, err := os.ReadFile(dbpath)
@@ -227,7 +215,7 @@ func TestBuild(t *testing.T) {
 			{Name: "delta", Commit: delta.nightly[0]},
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(3), build.WithRestoreConcurrency(2), build.WithDir(dir)); err == nil {
+		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(3), build.WithRestoreConcurrency(2), build.WithDir(dir)); err == nil {
 			t.Fatal("Build() error = nil, want duplicate datasource")
 		}
 		if _, err := os.Stat(dbpath); !os.IsNotExist(err) {
@@ -253,7 +241,7 @@ func TestBuild(t *testing.T) {
 		}}
 		dbpath := fmt.Sprintf("%s/../vuls.db", filepath.Join(root, "alias"))
 		dir := fmt.Sprintf("%s/../work", filepath.Join(root, "alias"))
-		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err != nil {
+		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
 
@@ -325,7 +313,7 @@ func TestBuild(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				_, err := runBuild(t, tt.lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
+				err := runBuild(t, tt.lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("Build() error = %v, want %q", err, tt.wantErr)
 				}
@@ -355,7 +343,7 @@ func TestBuild(t *testing.T) {
 			{name: "symlink to the db", report: link},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+				if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
 					t.Errorf("Build() error = %v, want report path refused", err)
 				}
 				bs, err := os.ReadFile(dbpath)
@@ -395,7 +383,7 @@ func TestBuild(t *testing.T) {
 			{name: "symlink followed by ..", report: fmt.Sprintf("%s/../new.db", alias2)},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
+				if err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
 					t.Errorf("Build() error = %v, want report path refused", err)
 				}
 				if _, err := os.Lstat(newdb); !os.IsNotExist(err) {
@@ -409,6 +397,86 @@ func TestBuild(t *testing.T) {
 // commitDate is the author date of the n-th commit newExtracted makes.
 func commitDate(n int) time.Time {
 	return time.Date(2026, 1, n, 0, 0, 0, 0, time.UTC)
+}
+
+func TestBuild_ValidateOnly(t *testing.T) {
+	tests := []struct {
+		name    string
+		lock    string
+		wantErr bool
+	}{
+		{
+			// The registry does not exist: validate-only must not reach it.
+			name: "valid lock",
+			lock: `{
+				"branch": "nightly",
+				"registry": "127.0.0.1:1/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+		},
+		{
+			name: "invalid lock",
+			lock: `{
+				"branch": "nightly~1",
+				"registry": "127.0.0.1:1/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lockPath := filepath.Join(t.TempDir(), "lock.json")
+			if err := os.WriteFile(lockPath, []byte(tt.lock), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			dbpath := filepath.Join(dir, "vuls.db")
+			if err := build.Build(lockPath, build.WithValidateOnly(true), build.WithDBPath(dbpath), build.WithDir(filepath.Join(dir, "work"))); (err != nil) != tt.wantErr {
+				t.Fatalf("Build() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) > 0 {
+				t.Errorf("validate-only created files: %v", entries)
+			}
+		})
+	}
+}
+
+// writeLock writes lock as JSON to a file and returns its path.
+func writeLock(t *testing.T, lock build.Lock) string {
+	t.Helper()
+	bs, err := json.Marshal(lock)
+	if err != nil {
+		t.Fatalf("marshal lock: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "lock.json")
+	if err := os.WriteFile(path, bs, 0o600); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	return path
+}
+
+// readReport reads the JSON report a build wrote to path.
+func readReport(t *testing.T, path string) build.Report {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open report: %v", err)
+	}
+	defer f.Close()
+	var r build.Report
+	if err := json.UnmarshalRead(f, &r); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+	return r
 }
 
 // assertNoScratch fails if a scratch db of dbpath was left behind.

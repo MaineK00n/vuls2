@@ -38,6 +38,7 @@ type options struct {
 	downloadConcurrency int
 	restoreConcurrency  int
 	report              string
+	validateOnly        bool
 
 	debug bool
 }
@@ -127,6 +128,17 @@ func WithReport(path string) Option {
 	return reportOption(path)
 }
 
+type validateOnlyOption bool
+
+func (o validateOnlyOption) apply(opts *options) {
+	opts.validateOnly = bool(o)
+}
+
+// WithValidateOnly reads and validates the lock and returns without building.
+func WithValidateOnly(validateOnly bool) Option {
+	return validateOnlyOption(validateOnly)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -171,15 +183,15 @@ type SourceReport struct {
 	AddSeconds     float64 `json:"add_seconds"`
 }
 
-// Build initializes a db and adds every source of the lock at its pinned
-// commit. Dotgits are pulled concurrently and trees restored ahead of the
+// Build reads the lock at lockPath ("-" reads stdin), initializes a db and
+// adds every source of the lock at its pinned commit. Dotgits are pulled concurrently and trees restored ahead of the
 // add; adds are serial, in the order the sources become ready.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed over it
 // only when every source has been added and verified, so a failed build
 // leaves no half-built db behind and never touches an existing one. Other db
 // types are built in place.
-func Build(lock Lock, opts ...Option) (*Report, error) {
+func Build(lockPath string, opts ...Option) error {
 	options := &options{
 		dbtype:              "boltdb",
 		dbpath:              filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -194,8 +206,13 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	options.downloadConcurrency = max(options.downloadConcurrency, 1)
 	options.restoreConcurrency = max(options.restoreConcurrency, 1)
 
-	if err := lock.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validate lock")
+	lock, err := readLock(lockPath)
+	if err != nil {
+		return errors.Wrap(err, "read lock")
+	}
+	if options.validateOnly {
+		slog.Info("Lock is valid", slog.String("branch", lock.Branch), slog.String("registry", lock.Registry), slog.Int("sources", len(lock.Sources)))
+		return nil
 	}
 
 	// Every invocation gets its own work directory, under options.dir when
@@ -203,12 +220,12 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 	// extracted trees behind.
 	if options.dir != "" {
 		if err := os.MkdirAll(options.dir, 0755); err != nil {
-			return nil, errors.Wrapf(err, "mkdir %s", options.dir)
+			return errors.Wrapf(err, "mkdir %s", options.dir)
 		}
 	}
 	created, err := os.MkdirTemp(options.dir, "vuls-db-build-*")
 	if err != nil {
-		return nil, errors.Wrap(err, "mkdir temp")
+		return errors.Wrap(err, "mkdir temp")
 	}
 	// The kernel resolves "alias/../work" through the symlink, while
 	// filepath.Join cleans it lexically to "work". Resolve the created
@@ -219,7 +236,7 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		if rerr := os.RemoveAll(created); rerr != nil {
 			slog.Warn("Failed to remove work directory", slog.String("dir", created), slog.String("err", rerr.Error()))
 		}
-		return nil, errors.Wrapf(err, "resolve %s", created)
+		return errors.Wrapf(err, "resolve %s", created)
 	}
 	defer func() {
 		if err := os.RemoveAll(workdir); err != nil {
@@ -241,21 +258,21 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 			dir = "."
 		}
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, errors.Wrapf(err, "mkdir %s", dir)
+			return errors.Wrapf(err, "mkdir %s", dir)
 		}
 		resolved, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			return nil, errors.Wrapf(err, "resolve %s", dir)
+			return errors.Wrapf(err, "resolve %s", dir)
 		}
 		dbpath = filepath.Join(resolved, base)
 
 		f, err := os.CreateTemp(resolved, fmt.Sprintf(".%s.build-*", base))
 		if err != nil {
-			return nil, errors.Wrapf(err, "create scratch db in %s", resolved)
+			return errors.Wrapf(err, "create scratch db in %s", resolved)
 		}
 		target = f.Name()
 		if err := f.Close(); err != nil {
-			return nil, errors.Wrapf(err, "close %s", target)
+			return errors.Wrapf(err, "close %s", target)
 		}
 		// The scratch db is renamed away on success; on any other exit it
 		// must not be left next to dbpath.
@@ -273,17 +290,17 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		for _, p := range []string{dbpath, target} {
 			same, err := samePath(options.report, p)
 			if err != nil {
-				return nil, errors.Wrapf(err, "compare report path %s with %s", options.report, p)
+				return errors.Wrapf(err, "compare report path %s with %s", options.report, p)
 			}
 			if same {
-				return nil, errors.Errorf("report path %s is the db path %s", options.report, p)
+				return errors.Errorf("report path %s is the db path %s", options.report, p)
 			}
 		}
 	}
 
 	slog.Info("Initialize DB", slog.String("dbpath", target))
 	if err := dbInit.Init(dbInit.WithDBType(options.dbtype), dbInit.WithDBPath(target), dbInit.WithStorageOptions(options.storageopts), dbInit.WithDebug(options.debug)); err != nil {
-		return nil, errors.Wrap(err, "init db")
+		return errors.Wrap(err, "init db")
 	}
 
 	report := &Report{
@@ -397,28 +414,49 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		}
 	}
 	if buildErr != nil {
-		return nil, buildErr
+		return buildErr
 	}
 
 	slog.Info("Verify datasources")
 	if err := verify(options, target, report); err != nil {
-		return nil, errors.Wrap(err, "verify")
+		return errors.Wrap(err, "verify")
 	}
 
 	if options.report != "" {
 		if err := writeReport(options.report, report); err != nil {
-			return nil, errors.Wrapf(err, "write report %s", options.report)
+			return errors.Wrapf(err, "write report %s", options.report)
 		}
 	}
 
 	if target != dbpath {
 		if err := os.Rename(target, dbpath); err != nil {
-			return nil, errors.Wrapf(err, "rename %s to %s", target, dbpath)
+			return errors.Wrapf(err, "rename %s to %s", target, dbpath)
 		}
 	}
 	slog.Info("Built", slog.String("dbpath", dbpath), slog.Int("sources", len(report.Sources)))
 
-	return report, nil
+	return nil
+}
+
+// readLock reads and validates the lock at path, or from stdin for "-".
+func readLock(path string) (Lock, error) {
+	if path == "-" {
+		l, err := ReadLock(os.Stdin)
+		if err != nil {
+			return Lock{}, errors.Wrap(err, "read stdin")
+		}
+		return l, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return Lock{}, errors.Wrapf(err, "open %s", path)
+	}
+	defer f.Close()
+	l, err := ReadLock(f)
+	if err != nil {
+		return Lock{}, errors.Wrapf(err, "read %s", path)
+	}
+	return l, nil
 }
 
 // download pulls one source's dotgit (its .git only, no worktree) into
