@@ -273,7 +273,7 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		for _, p := range []string{dbpath, target} {
 			same, err := samePath(options.report, p)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err, "compare report path %s with %s", options.report, p)
 			}
 			if same {
 				return nil, errors.Errorf("report path %s is the db path %s", options.report, p)
@@ -479,38 +479,38 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 	}
 	ok, err := commitExists(root, s.Commit)
 	if err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "check commit %s in %s", s.Commit, repository)
 	}
 	if !ok {
 		return "", SourceReport{}, errors.Errorf("commit %s is not in %s (history truncated or rewritten?)", s.Commit, repository)
 	}
 	ok, err = isAncestor(root, s.Commit, branch)
 	if err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "check %s is an ancestor of %s in %s", s.Commit, lock.Branch, repository)
 	}
 	if !ok {
 		return "", SourceReport{}, errors.Errorf("commit %s is not an ancestor of %s in %s", s.Commit, lock.Branch, repository)
 	}
 
 	if rep.CommitDate, err = authorTime(root, s.Commit); err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "author date of %s in %s", s.Commit, repository)
 	}
 	if rep.BranchHead, err = revParse(root, branch); err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "resolve %s in %s", lock.Branch, repository)
 	}
 	if rep.BranchHeadDate, err = authorTime(root, rep.BranchHead); err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "author date of %s head %s in %s", lock.Branch, rep.BranchHead, repository)
 	}
 	after, err := commitsAfter(root, s.Commit, branch)
 	if err != nil {
-		return "", SourceReport{}, err
+		return "", SourceReport{}, errors.Wrapf(err, "list commits after %s on %s in %s", s.Commit, lock.Branch, repository)
 	}
 	rep.Behind = len(after)
 	if len(after) > 0 {
 		rep.NextCommit = after[0]
 		t, err := authorTime(root, after[0])
 		if err != nil {
-			return "", SourceReport{}, err
+			return "", SourceReport{}, errors.Wrapf(err, "author date of %s in %s", after[0], repository)
 		}
 		rep.NextCommitDate = &t
 	}
@@ -525,11 +525,11 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 func restore(root string, s Source, rep SourceReport) (SourceReport, error) {
 	start := time.Now()
 	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
-		return SourceReport{}, err
+		return SourceReport{}, errors.Wrapf(err, "checkout %s", s.Commit)
 	}
 	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, rep.CommitDate)
 	if err != nil {
-		return SourceReport{}, err
+		return SourceReport{}, errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
 	}
 	rep.ID = id
 	rep.RestoreSeconds = time.Since(start).Seconds()
@@ -629,11 +629,11 @@ func verify(options *options, dbpath string, report *Report) error {
 func samePath(a, b string) (bool, error) {
 	ra, err := resolvePath(a)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "resolve %s", a)
 	}
 	rb, err := resolvePath(b)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "resolve %s", b)
 	}
 	if ra == rb {
 		return true, nil
@@ -664,7 +664,11 @@ func resolvePath(p string) (string, error) {
 		}
 		p = fmt.Sprintf("%s%c%s", wd, filepath.Separator, p)
 	}
-	return walkPath(p, 0)
+	r, err := walkPath(p, 0)
+	if err != nil {
+		return "", errors.Wrapf(err, "walk %s", p)
+	}
+	return r, nil
 }
 
 func walkPath(p string, depth int) (string, error) {
@@ -714,7 +718,11 @@ func walkPath(p string, depth int) (string, error) {
 		}
 		// Continue from the link target with the remaining components, so a
 		// ".." that follows the link applies to where the link points.
-		return walkPath(filepath.FromSlash(fmt.Sprintf("%s/%s", target, strings.Join(comps[i+1:], "/"))), depth+1)
+		r, err := walkPath(filepath.FromSlash(fmt.Sprintf("%s/%s", target, strings.Join(comps[i+1:], "/"))), depth+1)
+		if err != nil {
+			return "", errors.Wrapf(err, "follow %s", next)
+		}
+		return r, nil
 	}
 	return cur, nil
 }
