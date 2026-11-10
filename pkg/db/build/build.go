@@ -444,10 +444,14 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 	// rejected revision syntax, and this keeps a missing branch from being
 	// resolved as anything else by the revision-parsing commands below.
 	branch := fmt.Sprintf("refs/heads/%s", lock.Branch)
-	if _, err := git(root, "show-ref", "--verify", "--quiet", branch); err != nil {
+	ok, err := branchExists(root, branch)
+	if err != nil {
+		return "", SourceReport{}, errors.Wrapf(err, "check branch %s in %s", lock.Branch, repository)
+	}
+	if !ok {
 		return "", SourceReport{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
 	}
-	ok, err := commitExists(root, s.Commit)
+	ok, err = commitExists(root, s.Commit)
 	if err != nil {
 		return "", SourceReport{}, errors.Wrapf(err, "check commit %s in %s", s.Commit, repository)
 	}
