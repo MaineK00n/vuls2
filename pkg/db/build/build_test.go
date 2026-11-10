@@ -225,6 +225,45 @@ func TestBuild(t *testing.T) {
 		assertEmptyDir(t, dir)
 	})
 
+	t.Run("paths through a symlink and ..", func(t *testing.T) {
+		// alias points to real/sub, so the kernel resolves alias/../x to
+		// real/x while a lexical clean would give x next to alias.
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "real", "sub"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, "real", "sub"), filepath.Join(root, "alias")); err != nil {
+			t.Fatal(err)
+		}
+		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+			{Name: "alpha", Commit: alpha.nightly[0]},
+			{Name: "beta", Commit: beta.nightly[0]},
+		}}
+		dbpath := filepath.Join(root, "alias") + "/../vuls.db"
+		dir := filepath.Join(root, "alias") + "/../work"
+		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(root, "real", "vuls.db")); err != nil {
+			t.Errorf("db not at the resolved path: %v", err)
+		}
+		assertNoScratch(t, filepath.Join(root, "real", "vuls.db"))
+		assertEmptyDir(t, filepath.Join(root, "real", "work"))
+		for _, p := range []string{filepath.Join(root, "vuls.db"), filepath.Join(root, "work")} {
+			if _, err := os.Lstat(p); !os.IsNotExist(err) {
+				t.Errorf("%s created at the lexically cleaned path: %v", p, err)
+			}
+		}
+		matches, err := filepath.Glob(filepath.Join(root, ".vuls.db.build-*"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) > 0 {
+			t.Errorf("scratch db created at the lexically cleaned path: %v", matches)
+		}
+	})
+
 	t.Run("commit outside the branch", func(t *testing.T) {
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "alpha", Commit: alpha.stray},
