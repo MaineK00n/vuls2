@@ -168,6 +168,28 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "registry host ..",
+			in: `{
+				"branch": "nightly",
+				"registry": "../vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "registry host .",
+			in: `{
+				"branch": "nightly",
+				"registry": "./vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
 			name: "registry slash only",
 			in: `{
 				"branch": "nightly",

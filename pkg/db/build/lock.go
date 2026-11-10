@@ -106,6 +106,12 @@ func (l Lock) Validate() error {
 	if !found || host == "" || repository == "" || strings.Contains(l.Registry, "@") || strings.Contains(repository, ":") || strings.HasSuffix(repository, "/") {
 		return errors.Errorf("unexpected registry. expected: %q, actual: %q", "<host>/<repository> (no tag, no digest)", l.Registry)
 	}
+	// The host becomes a directory under the work directory, and the pull
+	// removes that directory before it fetches anything: "." or ".." would
+	// point it outside the work directory.
+	if host == "." || host == ".." {
+		return errors.Errorf("unexpected registry host. expected: %q, actual: %q", "<host> (not . or ..)", host)
+	}
 
 	if len(l.Sources) == 0 {
 		return errors.New("sources is empty")
