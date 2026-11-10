@@ -40,7 +40,7 @@ func NewCmd() *cobra.Command {
 		Short: "build vuls db from a lock file",
 		Long: heredoc.Doc(`
 		Build a vuls db from a lock file: the extracted dotgit of every data
-		source, pinned to one commit each, added in the order listed.
+		source, pinned to one commit each.
 
 		  {"branch": "nightly",
 		   "registry": "ghcr.io/vulsio/vuls-data-db",
@@ -55,7 +55,8 @@ func NewCmd() *cobra.Command {
 		only) are pulled --download-concurrency at a time for every source
 		ahead of the adds; trees are restored --restore-concurrency sources
 		ahead of the one being added, so that many plus one trees are on
-		disk at most; adds are serial, in lock order. A boltdb is written to
+		disk at most; adds are serial, in the order sources become ready
+		(the report lists them in lock order). A boltdb is written to
 		a scratch file and renamed over --dbpath only after every source has
 		been added and verified, so a failed build leaves nothing behind.
 		`),

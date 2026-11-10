@@ -12,8 +12,8 @@ import (
 )
 
 // Lock is the recipe a vuls db is built from: the extracted dotgit of every
-// data source in the db, each pinned to one commit. Sources are added in the
-// order they are listed.
+// data source in the db, each pinned to one commit. The db does not depend on
+// the order of the sources; the build report lists them in this order.
 //
 // A lock names data only. Which vuls binary builds it and where the result is
 // published are the caller's concern.
@@ -24,7 +24,7 @@ type Lock struct {
 	// Registry is the OCI repository the extracted dotgits are pulled from,
 	// without a tag (e.g. "ghcr.io/vulsio/vuls-data-db").
 	Registry string `json:"registry"`
-	// Sources lists the data sources in the order they are added.
+	// Sources lists the data sources of the db.
 	Sources []Source `json:"sources"`
 }
 

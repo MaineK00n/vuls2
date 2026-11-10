@@ -310,6 +310,18 @@ func TestBuild(t *testing.T) {
 				}},
 				wantErr: "pull",
 			},
+			{
+				// The other sources are cancelled by the failure; the error
+				// returned must be the failure, not their cancellation.
+				name: "missing repository among others",
+				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+					{Name: "alpha", Commit: alpha.nightly[0]},
+					{Name: "beta", Commit: beta.nightly[0]},
+					{Name: "zeta", Commit: alpha.nightly[0]},
+					{Name: "gamma", Commit: gamma.nightly[0]},
+				}},
+				wantErr: "download zeta",
+			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

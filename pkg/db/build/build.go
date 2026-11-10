@@ -172,8 +172,8 @@ type SourceReport struct {
 }
 
 // Build initializes a db and adds every source of the lock at its pinned
-// commit, in lock order. Dotgits are pulled concurrently and trees restored
-// ahead of the add; adds are serial.
+// commit. Dotgits are pulled concurrently and trees restored ahead of the
+// add; adds are serial, in the order the sources become ready.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed over it
 // only when every source has been added and verified, so a failed build
@@ -293,142 +293,112 @@ func Build(lock Lock, opts ...Option) (*Report, error) {
 		Sources:     make([]SourceReport, 0, len(lock.Sources)),
 	}
 
-	// Three stages. Downloads (the dotgit, i.e. the .git directory only)
-	// run ahead for every source, downloadConcurrency at a time, in lock
-	// order; they are small (about 1 GiB at most) so all of them may sit on
-	// disk. Restores write the extracted tree, which is large, so only
-	// restoreConcurrency sources are restored ahead of the one being added:
-	// restoreConcurrency+1 trees exist at most. Adds are serial, in lock
-	// order, because bbolt has a single writer.
+	// Three stages, each taking work as the previous one finishes it, so a
+	// slow source does not hold up the ones behind it in the lock. Downloads
+	// (the dotgit, i.e. the .git directory only) run ahead for every source,
+	// downloadConcurrency at a time; they are small (about 1 GiB at most) so
+	// all of them may sit on disk. Restores write the extracted tree, which
+	// is large, so a tree slot is taken before a restore and given back when
+	// the add has removed the tree: restoreConcurrency+1 trees exist at most.
+	// Adds are serial because bbolt has a single writer. The db does not
+	// depend on the add order; the report lists the sources in lock order.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	type staged struct {
-		root string
-		rep  SourceReport
-		err  error
+		index int
+		root  string
+		rep   SourceReport
+		err   error
 	}
-	downloaded := make([]chan staged, len(lock.Sources))
-	restored := make([]chan staged, len(lock.Sources))
-	for i := range lock.Sources {
-		downloaded[i] = make(chan staged, 1)
-		restored[i] = make(chan staged, 1)
-	}
-	var wg sync.WaitGroup
 
-	// Stage 1: downloads. One dispatcher admits the sources in lock order
-	// so an early source is never starved of a slot by later ones.
-	slots := make(chan struct{}, options.downloadConcurrency)
-	wg.Add(1)
+	// Stage 1: downloads. The channel is closed once every started download
+	// has finished; pull.Pull takes no context, so one already running goes
+	// on until it ends, and the work directory must not be removed under it.
+	downloaded := make(chan staged, len(lock.Sources))
 	go func() {
-		defer wg.Done()
+		defer close(downloaded)
+		var wg sync.WaitGroup
+		defer wg.Wait()
+		slots := make(chan struct{}, options.downloadConcurrency)
 		for i, s := range lock.Sources {
 			select {
 			case slots <- struct{}{}:
 			case <-ctx.Done():
-				for j := i; j < len(lock.Sources); j++ {
-					downloaded[j] <- staged{err: ctx.Err()}
-				}
 				return
 			}
-			wg.Add(1)
-			go func(i int, s Source) {
-				defer wg.Done()
+			wg.Go(func() {
 				defer func() { <-slots }()
 				root, rep, err := download(workdir, lock, s)
 				if err != nil {
 					cancel()
+					err = errors.Wrapf(err, "download %s", s.Name)
 				}
-				downloaded[i] <- staged{root: root, rep: rep, err: err}
-			}(i, s)
+				downloaded <- staged{index: i, root: root, rep: rep, err: err}
+			})
 		}
 	}()
 
-	// Stage 2: restores, restoreConcurrency sources ahead of the add. A
-	// tree slot is held from restore until the add has removed the tree, and
-	// is handed out in lock order like the download slots.
+	// Stage 2: restores, restoreConcurrency at a time.
+	restored := make(chan staged, len(lock.Sources))
 	trees := make(chan struct{}, options.restoreConcurrency+1)
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		for i, s := range lock.Sources {
-			select {
-			case trees <- struct{}{}:
-			case <-ctx.Done():
-				for j := i; j < len(lock.Sources); j++ {
-					restored[j] <- staged{err: ctx.Err()}
-				}
-				return
-			}
-			wg.Add(1)
-			go func(i int, s Source) {
-				defer wg.Done()
-				var d staged
-				select {
-				case d = <-downloaded[i]:
-				case <-ctx.Done():
-					d = staged{err: ctx.Err()}
-				}
-				if d.err == nil {
-					d.rep, d.err = restore(d.root, s, d.rep)
-					if d.err != nil {
-						cancel()
+		defer close(restored)
+		var wg sync.WaitGroup
+		defer wg.Wait()
+		for range options.restoreConcurrency {
+			wg.Go(func() {
+				for d := range downloaded {
+					if d.err == nil {
+						select {
+						case trees <- struct{}{}:
+						case <-ctx.Done():
+						}
+						if err := ctx.Err(); err != nil {
+							d.err = err
+						} else if d.rep, d.err = restore(d.root, lock.Sources[d.index], d.rep); d.err != nil {
+							cancel()
+							d.err = errors.Wrapf(d.err, "restore %s", lock.Sources[d.index].Name)
+						}
 					}
+					restored <- d
 				}
-				restored[i] <- d
-			}(i, s)
+			})
 		}
 	}()
 
-	// Stage 3: adds. On error the other stages are cancelled and waited
-	// for before returning: pull.Pull takes no context, so a download already
-	// running goes on until it finishes or the registry client times out,
-	// and the work directory must not be removed under it.
-	fail := func(err error) (*Report, error) {
-		cancel()
-		wg.Wait()
-		return nil, err
-	}
-	for i, s := range lock.Sources {
-		c := <-restored[i]
-		if c.err != nil {
-			if errors.Is(c.err, context.Canceled) {
-				// The real error is in the stage that cancelled; find it.
-				wg.Wait()
-				for j := range lock.Sources {
-					select {
-					case d := <-downloaded[j]:
-						if d.err != nil && !errors.Is(d.err, context.Canceled) {
-							return fail(errors.Wrapf(d.err, "download %s", lock.Sources[j].Name))
-						}
-					default:
-					}
-					select {
-					case d := <-restored[j]:
-						if d.err != nil && !errors.Is(d.err, context.Canceled) {
-							return fail(errors.Wrapf(d.err, "restore %s", lock.Sources[j].Name))
-						}
-					default:
-					}
+	// Stage 3: adds. After the first error the other stages are cancelled
+	// and the rest is drained, so that every goroutine has ended before the
+	// work directory is removed. An error caused by the cancel is replaced
+	// by the one that caused it.
+	report.Sources = make([]SourceReport, len(lock.Sources))
+	var buildErr error
+	for c := range restored {
+		if c.err == nil && buildErr == nil {
+			s := lock.Sources[c.index]
+			slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(c.rep.ID)), slog.String("commit", s.Commit))
+			addStart := time.Now()
+			if err := dbAdd.Add(c.root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
+				c.err = errors.Wrapf(err, "add %s", s.Name)
+			} else {
+				c.rep.AddSeconds = time.Since(addStart).Seconds()
+				slog.Info("Added", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(addStart).Round(time.Millisecond)))
+				if err := os.RemoveAll(c.root); err != nil {
+					c.err = errors.Wrapf(err, "remove %s", c.root)
+				} else {
+					<-trees
+					report.Sources[c.index] = c.rep
 				}
 			}
-			return fail(errors.Wrapf(c.err, "prepare %s", s.Name))
 		}
-
-		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(c.rep.ID)), slog.String("commit", s.Commit))
-		addStart := time.Now()
-		if err := dbAdd.Add(c.root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
-			return fail(errors.Wrapf(err, "add %s", s.Name))
+		if c.err != nil && (buildErr == nil || (errors.Is(buildErr, context.Canceled) && !errors.Is(c.err, context.Canceled))) {
+			buildErr = c.err
+			cancel()
 		}
-		c.rep.AddSeconds = time.Since(addStart).Seconds()
-		slog.Info("Added", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(addStart).Round(time.Millisecond)))
-		if err := os.RemoveAll(c.root); err != nil {
-			return fail(errors.Wrapf(err, "remove %s", c.root))
-		}
-		<-trees
-		report.Sources = append(report.Sources, c.rep)
 	}
-	wg.Wait()
+	if buildErr != nil {
+		return nil, buildErr
+	}
 
 	slog.Info("Verify datasources")
 	if err := verify(options, target, report); err != nil {
