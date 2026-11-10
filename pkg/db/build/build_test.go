@@ -290,6 +290,13 @@ func TestBuild(t *testing.T) {
 				wantErr: "not an ancestor",
 			},
 			{
+				name: "commit missing from the repository",
+				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
+					{Name: "alpha", Commit: "0123456789abcdef0123456789abcdef01234567"},
+				}},
+				wantErr: "history truncated or rewritten",
+			},
+			{
 				name: "unknown branch",
 				lock: build.Lock{Branch: "release", Registry: registry, Sources: []build.Source{
 					{Name: "alpha", Commit: alpha.nightly[0]},

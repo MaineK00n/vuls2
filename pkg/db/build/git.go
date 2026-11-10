@@ -10,9 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// git runs one git command in dir and returns its trimmed stdout. A non-zero
-// exit comes back as an error carrying stderr, so callers that need the exit
-// code use gitExit instead.
+// git runs one git command in dir and returns its trimmed stdout. Any
+// non-zero exit is an error carrying stderr.
 func git(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	bs, err := cmd.Output()
@@ -26,27 +25,42 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(bs)), nil
 }
 
-// gitExit runs one git command in dir and reports whether it exited 0. Exit
-// status 1 is a "no" answer (git's convention for merge-base --is-ancestor
-// and cat-file -e), anything else is an error.
-func gitExit(dir string, args ...string) (bool, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	if err := cmd.Run(); err != nil {
+// commitExists reports whether commit names a commit object in dir.
+// rev-parse --verify --quiet exits 1 when the name does not resolve to a
+// commit (missing, or an object of another type); any other failure is an
+// error. cat-file -e is not used: with ^{commit} it exits 128 for a missing
+// object, the same status as a broken repository.
+func commitExists(dir, commit string) (bool, error) {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", fmt.Sprintf("%s^{commit}", commit))
+	if _, err := cmd.Output(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) && ee.ExitCode() == 1 {
 			return false, nil
+		}
+		if errors.As(err, &ee) {
+			return false, errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
 		}
 		return false, errors.Wrapf(err, "exec %q", cmd.String())
 	}
 	return true, nil
 }
 
-func commitExists(dir, commit string) (bool, error) {
-	return gitExit(dir, "cat-file", "-e", fmt.Sprintf("%s^{commit}", commit))
-}
-
+// isAncestor reports whether commit is an ancestor of ref in dir.
+// merge-base --is-ancestor exits 0 for yes and 1 for no; any other status
+// (128 for a name that does not resolve) is an error.
 func isAncestor(dir, commit, ref string) (bool, error) {
-	return gitExit(dir, "merge-base", "--is-ancestor", commit, ref)
+	cmd := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", commit, ref)
+	if _, err := cmd.Output(); err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			return false, nil
+		}
+		if errors.As(err, &ee) {
+			return false, errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
+		}
+		return false, errors.Wrapf(err, "exec %q", cmd.String())
+	}
+	return true, nil
 }
 
 func revParse(dir, rev string) (string, error) {
