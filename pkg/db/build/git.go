@@ -17,10 +17,12 @@ func git(dir string, args ...string) (string, error) {
 	bs, err := cmd.Output()
 	if err != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		switch {
+		case !errors.As(err, &ee):
+			return "", errors.Wrapf(err, "exec %q", cmd.String())
+		default:
 			return "", errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
 		}
-		return "", errors.Wrapf(err, "exec %q", cmd.String())
 	}
 	return strings.TrimSpace(string(bs)), nil
 }
@@ -34,13 +36,14 @@ func commitExists(dir, commit string) (bool, error) {
 	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", fmt.Sprintf("%s^{commit}", commit))
 	if _, err := cmd.Output(); err != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		switch {
+		case !errors.As(err, &ee):
+			return false, errors.Wrapf(err, "exec %q", cmd.String())
+		case ee.ExitCode() == 1:
 			return false, nil
-		}
-		if errors.As(err, &ee) {
+		default:
 			return false, errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
 		}
-		return false, errors.Wrapf(err, "exec %q", cmd.String())
 	}
 	return true, nil
 }
@@ -52,13 +55,14 @@ func isAncestor(dir, commit, ref string) (bool, error) {
 	cmd := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", commit, ref)
 	if _, err := cmd.Output(); err != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		switch {
+		case !errors.As(err, &ee):
+			return false, errors.Wrapf(err, "exec %q", cmd.String())
+		case ee.ExitCode() == 1:
 			return false, nil
-		}
-		if errors.As(err, &ee) {
+		default:
 			return false, errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
 		}
-		return false, errors.Wrapf(err, "exec %q", cmd.String())
 	}
 	return true, nil
 }
