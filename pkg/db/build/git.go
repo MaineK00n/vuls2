@@ -1,6 +1,7 @@
 package build
 
 import (
+	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func gitExit(dir string, args ...string) (bool, error) {
 }
 
 func commitExists(dir, commit string) (bool, error) {
-	return gitExit(dir, "cat-file", "-e", commit+"^{commit}")
+	return gitExit(dir, "cat-file", "-e", fmt.Sprintf("%s^{commit}", commit))
 }
 
 func isAncestor(dir, commit, ref string) (bool, error) {
@@ -49,7 +50,7 @@ func isAncestor(dir, commit, ref string) (bool, error) {
 }
 
 func revParse(dir, rev string) (string, error) {
-	return git(dir, "rev-parse", "--verify", rev+"^{commit}")
+	return git(dir, "rev-parse", "--verify", fmt.Sprintf("%s^{commit}", rev))
 }
 
 // authorTime returns the author date of rev. The extracted datasource.json
@@ -70,7 +71,7 @@ func authorTime(dir, rev string) (time.Time, error) {
 // commitsAfter returns the commits reachable from ref but not from commit,
 // oldest first.
 func commitsAfter(dir, commit, ref string) ([]string, error) {
-	s, err := git(dir, "rev-list", "--reverse", commit+".."+ref)
+	s, err := git(dir, "rev-list", "--reverse", fmt.Sprintf("%s..%s", commit, ref))
 	if err != nil {
 		return nil, err
 	}

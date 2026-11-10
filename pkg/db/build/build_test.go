@@ -51,7 +51,7 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}
-	registry := u.Host + "/vulsio/vuls-data-db"
+	registry := fmt.Sprintf("%s/vulsio/vuls-data-db", u.Host)
 
 	alpha := newExtracted(t, "alpha", "alpha", 2)
 	beta := newExtracted(t, "beta", "beta", 1)
@@ -239,8 +239,8 @@ func TestBuild(t *testing.T) {
 			{Name: "alpha", Commit: alpha.nightly[0]},
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		dbpath := filepath.Join(root, "alias") + "/../vuls.db"
-		dir := filepath.Join(root, "alias") + "/../work"
+		dbpath := fmt.Sprintf("%s/../vuls.db", filepath.Join(root, "alias"))
+		dir := fmt.Sprintf("%s/../work", filepath.Join(root, "alias"))
 		if _, err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
@@ -336,7 +336,7 @@ func TestBuild(t *testing.T) {
 		if err := os.Symlink(sub, alias2); err != nil {
 			t.Fatal(err)
 		}
-		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling, alias2 + "/../new.db"} {
+		for _, report := range []string{filepath.Join(aliasDir, "new.db"), dangling, fmt.Sprintf("%s/../new.db", alias2)} {
 			if _, err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
 				t.Errorf("report=%s: Build() error = %v, want report path refused", report, err)
 			}
@@ -355,7 +355,7 @@ func commitDate(n int) time.Time {
 // assertNoScratch fails if a scratch db of dbpath was left behind.
 func assertNoScratch(t *testing.T, dbpath string) {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(dbpath), "."+filepath.Base(dbpath)+".build-*"))
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(dbpath), fmt.Sprintf(".%s.build-*", filepath.Base(dbpath))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,14 +386,14 @@ func assertEmptyDir(t *testing.T, dir string) {
 func newExtracted(t *testing.T, name, id string, n int) extracted {
 	t.Helper()
 
-	dir := filepath.Join(t.TempDir(), "vuls-data-extracted-"+name)
+	dir := filepath.Join(t.TempDir(), fmt.Sprintf("vuls-data-extracted-%s", name))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	run := func(date time.Time, args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE="+date.Format(time.RFC3339), "GIT_COMMITTER_DATE="+date.Format(time.RFC3339), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_AUTHOR_DATE=%s", date.Format(time.RFC3339)), fmt.Sprintf("GIT_COMMITTER_DATE=%s", date.Format(time.RFC3339)), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 		bs, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s: %v\n%s", cmd.String(), err, bs)
@@ -450,8 +450,8 @@ func newExtracted(t *testing.T, name, id string, n int) extracted {
 func pushExtracted(t *testing.T, registry, name, dir string) {
 	t.Helper()
 
-	dotgit := filepath.Join(t.TempDir(), "vuls-data-extracted-"+name+".tar.zst")
-	if err := compress.Compress(dir, dotgit, compress.WithRoot("vuls-data-extracted-"+name)); err != nil {
+	dotgit := filepath.Join(t.TempDir(), fmt.Sprintf("vuls-data-extracted-%s.tar.zst", name))
+	if err := compress.Compress(dir, dotgit, compress.WithRoot(fmt.Sprintf("vuls-data-extracted-%s", name))); err != nil {
 		t.Fatalf("compress %s: %v", name, err)
 	}
 	if err := registryPush.Push(fmt.Sprintf("%s:vuls-data-extracted-%s", registry, name), dotgit, "token", registryPush.WithForce(true)); err != nil {
