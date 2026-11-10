@@ -27,6 +27,24 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(bs)), nil
 }
 
+// branchExists reports whether ref (a full refs/heads/ name) exists in dir.
+// show-ref --verify --quiet exits 1 when the ref does not exist; any other
+// failure (no git, not a repository) is an error.
+func branchExists(dir, ref string) (bool, error) {
+	cmd := exec.Command("git", "-C", dir, "show-ref", "--verify", "--quiet", ref)
+	if _, err := cmd.Output(); err != nil {
+		switch ee, ok := stderrors.AsType[*exec.ExitError](err); {
+		case ok && ee.ExitCode() == 1:
+			return false, nil
+		case ok:
+			return false, errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
+		default:
+			return false, errors.Wrapf(err, "exec %q", cmd.String())
+		}
+	}
+	return true, nil
+}
+
 // commitExists reports whether commit names a commit object in dir.
 // rev-parse --verify --quiet exits 1 when the name does not resolve to a
 // commit (missing, or an object of another type); any other failure is an
