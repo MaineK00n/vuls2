@@ -1,6 +1,7 @@
 package build
 
 import (
+	stderrors "errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -16,9 +17,8 @@ func git(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	bs, err := cmd.Output()
 	if err != nil {
-		var ee *exec.ExitError
-		switch {
-		case !errors.As(err, &ee):
+		switch ee, ok := stderrors.AsType[*exec.ExitError](err); {
+		case !ok:
 			return "", errors.Wrapf(err, "exec %q", cmd.String())
 		default:
 			return "", errors.Wrapf(err, "exec %q: %s", cmd.String(), strings.TrimSpace(string(ee.Stderr)))
@@ -35,9 +35,8 @@ func git(dir string, args ...string) (string, error) {
 func commitExists(dir, commit string) (bool, error) {
 	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", fmt.Sprintf("%s^{commit}", commit))
 	if _, err := cmd.Output(); err != nil {
-		var ee *exec.ExitError
-		switch {
-		case !errors.As(err, &ee):
+		switch ee, ok := stderrors.AsType[*exec.ExitError](err); {
+		case !ok:
 			return false, errors.Wrapf(err, "exec %q", cmd.String())
 		case ee.ExitCode() == 1:
 			return false, nil
@@ -54,9 +53,8 @@ func commitExists(dir, commit string) (bool, error) {
 func isAncestor(dir, commit, ref string) (bool, error) {
 	cmd := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", commit, ref)
 	if _, err := cmd.Output(); err != nil {
-		var ee *exec.ExitError
-		switch {
-		case !errors.As(err, &ee):
+		switch ee, ok := stderrors.AsType[*exec.ExitError](err); {
+		case !ok:
 			return false, errors.Wrapf(err, "exec %q", cmd.String())
 		case ee.ExitCode() == 1:
 			return false, nil
