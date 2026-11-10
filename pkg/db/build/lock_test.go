@@ -1,6 +1,7 @@
 package build_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -320,24 +321,24 @@ func TestReadLock(t *testing.T) {
 		},
 		{
 			name: "name too long for a tag",
-			in: `{
+			in: fmt.Sprintf(`{
 				"branch": "nightly",
 				"registry": "ghcr.io/vulsio/vuls-data-db",
 				"sources": [
-					{"name": "` + strings.Repeat("a", 109) + `", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "%s", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
-			}`,
+			}`, strings.Repeat("a", 109)),
 			wantErr: true,
 		},
 		{
 			name: "name at the tag length limit",
-			in: `{
+			in: fmt.Sprintf(`{
 				"branch": "nightly",
 				"registry": "ghcr.io/vulsio/vuls-data-db",
 				"sources": [
-					{"name": "` + strings.Repeat("a", 108) + `", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "%s", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
-			}`,
+			}`, strings.Repeat("a", 108)),
 			want: build.Lock{
 				Branch:   "nightly",
 				Registry: "ghcr.io/vulsio/vuls-data-db",
