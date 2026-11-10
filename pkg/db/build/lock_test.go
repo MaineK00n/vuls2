@@ -20,7 +20,14 @@ func TestReadLock(t *testing.T) {
 	}{
 		{
 			name: "valid",
-			in:   `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}, {"name": "redhat-vex-v1-rhel", "commit": "` + commit + `"}]}`,
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "redhat-vex-v1-rhel", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			want: build.Lock{
 				Branch:   "nightly",
 				Registry: "ghcr.io/vulsio/vuls-data-db",
@@ -32,7 +39,13 @@ func TestReadLock(t *testing.T) {
 		},
 		{
 			name: "registry with port",
-			in:   `{"branch": "main", "registry": "127.0.0.1:5000/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			in: `{
+				"branch": "main",
+				"registry": "127.0.0.1:5000/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			want: build.Lock{
 				Branch:   "main",
 				Registry: "127.0.0.1:5000/vulsio/vuls-data-db",
@@ -41,7 +54,13 @@ func TestReadLock(t *testing.T) {
 		},
 		{
 			name: "branch with slash",
-			in:   `{"branch": "release/v1", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			in: `{
+				"branch": "release/v1",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			want: build.Lock{
 				Branch:   "release/v1",
 				Registry: "ghcr.io/vulsio/vuls-data-db",
@@ -49,128 +68,276 @@ func TestReadLock(t *testing.T) {
 			},
 		},
 		{
-			name:    "branch with revision suffix ~1",
-			in:      `{"branch": "nightly~1", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch with revision suffix ~1",
+			in: `{
+				"branch": "nightly~1",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch with revision suffix ^{commit}",
-			in:      `{"branch": "nightly^{commit}", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch with revision suffix ^{commit}",
+			in: `{
+				"branch": "nightly^{commit}",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch with range",
-			in:      `{"branch": "main..nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch with range",
+			in: `{
+				"branch": "main..nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch with reflog",
-			in:      `{"branch": "nightly@{1}", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch with reflog",
+			in: `{
+				"branch": "nightly@{1}",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch starting with dash",
-			in:      `{"branch": "-nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch starting with dash",
+			in: `{
+				"branch": "-nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch with space",
-			in:      `{"branch": "night ly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch with space",
+			in: `{
+				"branch": "night ly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch ending in .lock",
-			in:      `{"branch": "nightly.lock", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "branch ending in .lock",
+			in: `{
+				"branch": "nightly.lock",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry slash only",
-			in:      `{"branch": "nightly", "registry": "/", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry slash only",
+			in: `{
+				"branch": "nightly",
+				"registry": "/",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry host only",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry host only",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry without host",
-			in:      `{"branch": "nightly", "registry": "/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry without host",
+			in: `{
+				"branch": "nightly",
+				"registry": "/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry with uppercase repository path",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/Vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry with uppercase repository path",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/Vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry with empty path component",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio//vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry with empty path component",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio//vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry with trailing slash",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db/", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry with trailing slash",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db/",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "unknown member",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "vuls2": "nightly", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "unknown member",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"vuls2": "nightly",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "unknown source member",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `", "approved": {}}]}`,
+			name: "unknown source member",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "approved": {}}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "missing branch",
-			in:      `{"registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "missing branch",
+			in: `{
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry with tag",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry with tag",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry with digest",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db@sha256:0123", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry with digest",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db@sha256:0123",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "registry without repository",
-			in:      `{"branch": "nightly", "registry": "ghcr.io", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "registry without repository",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "no sources",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": []}`,
+			name: "no sources",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": []
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "empty name",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "", "commit": "` + commit + `"}]}`,
+			name: "empty name",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "name with prefix path",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "vulsio/vuls-data-db:alma-errata", "commit": "` + commit + `"}]}`,
+			name: "name with prefix path",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "vulsio/vuls-data-db:alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "name with tag-invalid character",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alpha[", "commit": "` + commit + `"}]}`,
+			name: "name with tag-invalid character",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alpha[", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "name too long for a tag",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "` + strings.Repeat("a", 109) + `", "commit": "` + commit + `"}]}`,
+			name: "name too long for a tag",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "` + strings.Repeat("a", 109) + `", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
 			name: "name at the tag length limit",
-			in:   `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "` + strings.Repeat("a", 108) + `", "commit": "` + commit + `"}]}`,
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "` + strings.Repeat("a", 108) + `", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			want: build.Lock{
 				Branch:   "nightly",
 				Registry: "ghcr.io/vulsio/vuls-data-db",
@@ -178,23 +345,48 @@ func TestReadLock(t *testing.T) {
 			},
 		},
 		{
-			name:    "duplicate name",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + commit + `"}, {"name": "alma-errata", "commit": "` + commit + `"}]}`,
+			name: "duplicate name",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "short commit",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "0123456"}]}`,
+			name: "short commit",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "uppercase commit",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "` + strings.ToUpper(commit) + `"}]}`,
+			name: "uppercase commit",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "0123456789ABCDEF0123456789ABCDEF01234567"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
-			name:    "branch name as commit",
-			in:      `{"branch": "nightly", "registry": "ghcr.io/vulsio/vuls-data-db", "sources": [{"name": "alma-errata", "commit": "nightly"}]}`,
+			name: "branch name as commit",
+			in: `{
+				"branch": "nightly",
+				"registry": "ghcr.io/vulsio/vuls-data-db",
+				"sources": [
+					{"name": "alma-errata", "commit": "nightly"}
+				]
+			}`,
 			wantErr: true,
 		},
 		{
