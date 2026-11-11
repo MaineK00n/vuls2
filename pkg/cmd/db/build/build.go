@@ -56,6 +56,7 @@ func NewCmd() *cobra.Command {
 		(the report lists them in lock order). A boltdb is written to
 		a scratch file and renamed over --dbpath only after every source has
 		been added and verified, so a failed build leaves nothing behind.
+		Neither --dbpath (for boltdb) nor --report may exist already.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
