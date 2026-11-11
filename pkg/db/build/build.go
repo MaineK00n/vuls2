@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -215,6 +214,23 @@ func Build(lockPath string, opts ...Option) error {
 		return nil
 	}
 
+	// Neither the boltdb file nor the report may exist yet. Nothing is then
+	// overwritten, and a report path that reaches the db by another route
+	// (a symlink, a symlinked parent, "..") cannot replace it: the db is
+	// renamed into place first and the report is then created exclusively,
+	// so it fails on the db that is already there. Lstat, so that a dangling
+	// symlink counts as existing.
+	for _, p := range []struct{ what, path string }{{"report", options.report}, {"db", options.dbpath}} {
+		if p.path == "" || (p.what == "db" && options.dbtype != "boltdb") {
+			continue
+		}
+		if _, err := os.Lstat(p.path); err == nil {
+			return errors.Errorf("%s %s already exists", p.what, p.path)
+		} else if !os.IsNotExist(err) {
+			return errors.Wrapf(err, "lstat %s", p.path)
+		}
+	}
+
 	// Every invocation gets its own work directory, under options.dir when
 	// given, and removes it however the build ends, so a failure cannot leave
 	// extracted trees behind.
@@ -251,8 +267,9 @@ func Build(lockPath string, opts ...Option) error {
 	if options.dbtype == "boltdb" {
 		// The scratch db must sit in the directory dbpath is renamed into,
 		// or the final rename can cross filesystems. filepath.Dir would clean
-		// "alias/../vuls.db" lexically to ".", so split without cleaning and
-		// resolve the parent as the kernel does.
+		// "alias/../vuls.db" lexically to "." while the kernel follows alias,
+		// so split without cleaning: CreateTemp and Rename hand the string to
+		// the kernel as is, and both land in the same directory.
 		dir, base := filepath.Split(options.dbpath)
 		if dir == "" {
 			dir = "."
@@ -260,15 +277,10 @@ func Build(lockPath string, opts ...Option) error {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return errors.Wrapf(err, "mkdir %s", dir)
 		}
-		resolved, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			return errors.Wrapf(err, "resolve %s", dir)
-		}
-		dbpath = filepath.Join(resolved, base)
 
-		f, err := os.CreateTemp(resolved, fmt.Sprintf(".%s.build-*", base))
+		f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.build-*", base))
 		if err != nil {
-			return errors.Wrapf(err, "create scratch db in %s", resolved)
+			return errors.Wrapf(err, "create scratch db in %s", dir)
 		}
 		target = f.Name()
 		if err := f.Close(); err != nil {
@@ -281,21 +293,6 @@ func Build(lockPath string, opts ...Option) error {
 				slog.Warn("Failed to remove scratch db", slog.String("dbpath", target), slog.String("err", err.Error()))
 			}
 		}()
-	}
-
-	// The report is written after the db has been verified, so a report
-	// path that is the db (or its scratch file) would replace a good db with
-	// JSON and still report success. Refuse that up front.
-	if options.report != "" {
-		for _, p := range []string{dbpath, target} {
-			same, err := samePath(options.report, p)
-			if err != nil {
-				return errors.Wrapf(err, "compare report path %s with %s", options.report, p)
-			}
-			if same {
-				return errors.Errorf("report path %s is the db path %s", options.report, p)
-			}
-		}
 	}
 
 	slog.Info("Initialize DB", dbLogAttr(options.dbtype, target))
@@ -422,18 +419,18 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrap(err, "verify")
 	}
 
-	if options.report != "" {
-		if err := writeReport(options.report, report); err != nil {
-			return errors.Wrapf(err, "write report %s", options.report)
-		}
-	}
-
 	if target != dbpath {
 		if err := os.Rename(target, dbpath); err != nil {
 			return errors.Wrapf(err, "rename %s to %s", target, dbpath)
 		}
 	}
 	slog.Info("Built", dbLogAttr(options.dbtype, dbpath), slog.Int("sources", len(report.Sources)))
+
+	if options.report != "" {
+		if err := writeReport(options.report, report); err != nil {
+			return errors.Wrapf(err, "write report %s", options.report)
+		}
+	}
 
 	return nil
 }
@@ -645,112 +642,10 @@ func verify(options *options, dbpath string, report *Report) error {
 	return nil
 }
 
-// samePath reports whether a and b name the same file: the same path once
-// symlinks are resolved (also through parents and dangling links of a file
-// that does not exist yet), or (when both exist) the same inode.
-func samePath(a, b string) (bool, error) {
-	ra, err := resolvePath(a)
-	if err != nil {
-		return false, errors.Wrapf(err, "resolve %s", a)
-	}
-	rb, err := resolvePath(b)
-	if err != nil {
-		return false, errors.Wrapf(err, "resolve %s", b)
-	}
-	if ra == rb {
-		return true, nil
-	}
-
-	fa, err := os.Stat(a)
-	if err != nil {
-		return false, nil
-	}
-	fb, err := os.Stat(b)
-	if err != nil {
-		return false, nil
-	}
-	return os.SameFile(fa, fb), nil
-}
-
-// resolvePath returns p as an absolute path with every symlink resolved,
-// including when p itself does not exist yet. The path is walked in
-// filesystem order: a symlink is followed where it is met and ".." applies
-// to the directory reached so far, so "alias/../x" with alias -> real/sub
-// resolves to real/x as the kernel would, not to the lexical parent of
-// alias. Once a component is missing, the rest is kept as written.
-func resolvePath(p string) (string, error) {
-	if !filepath.IsAbs(p) {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "", errors.Wrap(err, "getwd")
-		}
-		p = fmt.Sprintf("%s%c%s", wd, filepath.Separator, p)
-	}
-	r, err := walkPath(p, 0)
-	if err != nil {
-		return "", errors.Wrapf(err, "walk %s", p)
-	}
-	return r, nil
-}
-
-func walkPath(p string, depth int) (string, error) {
-	if depth > 40 {
-		return "", errors.Errorf("too many levels of symbolic links: %s", p)
-	}
-
-	// Start at the root of p's volume (empty on Unix; a drive or UNC share
-	// on Windows, which must not be split into components) and walk the
-	// rest with separators normalized.
-	vol := filepath.VolumeName(p)
-	cur := fmt.Sprintf("%s%c", vol, filepath.Separator)
-	comps := strings.Split(filepath.ToSlash(p[len(vol):]), "/")
-	missing := false
-	for i, c := range comps {
-		switch c {
-		case "", ".":
-			continue
-		case "..":
-			cur = filepath.Dir(cur)
-			continue
-		}
-		next := filepath.Join(cur, c)
-		if missing {
-			cur = next
-			continue
-		}
-		fi, err := os.Lstat(next)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return "", errors.Wrapf(err, "lstat %s", next)
-			}
-			missing = true
-			cur = next
-			continue
-		}
-		if fi.Mode()&os.ModeSymlink == 0 {
-			cur = next
-			continue
-		}
-		target, err := os.Readlink(next)
-		if err != nil {
-			return "", errors.Wrapf(err, "readlink %s", next)
-		}
-		if !filepath.IsAbs(target) {
-			target = fmt.Sprintf("%s%c%s", cur, filepath.Separator, target)
-		}
-		// Continue from the link target with the remaining components, so a
-		// ".." that follows the link applies to where the link points.
-		r, err := walkPath(filepath.FromSlash(fmt.Sprintf("%s/%s", target, strings.Join(comps[i+1:], "/"))), depth+1)
-		if err != nil {
-			return "", errors.Wrapf(err, "follow %s", next)
-		}
-		return r, nil
-	}
-	return cur, nil
-}
-
+// writeReport creates the report exclusively: it fails rather than replace
+// anything at path, including the db when path reaches it by another route.
 func writeReport(path string, report *Report) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return errors.Wrapf(err, "create %s", path)
 	}

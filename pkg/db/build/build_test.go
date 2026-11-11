@@ -185,24 +185,54 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("existing db is kept when the build fails", func(t *testing.T) {
-		dbpath := filepath.Join(t.TempDir(), "vuls.db")
-		if err := os.WriteFile(dbpath, []byte("not a db"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		dir := filepath.Join(t.TempDir(), "work")
+	t.Run("existing db or report is refused", func(t *testing.T) {
+		// Nothing is overwritten: a db or report path that already exists
+		// (also as a dangling symlink) stops the build before any work.
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: strings.Repeat("0", 40)},
+			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err == nil {
-			t.Fatal("Build() error = nil, want commit not found")
+		tests := []struct {
+			name     string
+			existing string
+			report   bool
+			symlink  bool
+		}{
+			{name: "db", existing: "vuls.db"},
+			{name: "report", existing: "report.json", report: true},
+			{name: "report as a dangling symlink", existing: "report.json", report: true, symlink: true},
 		}
-		bs, err := os.ReadFile(dbpath)
-		if err != nil || string(bs) != "not a db" {
-			t.Errorf("existing db changed: %q, %v", bs, err)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				dir := t.TempDir()
+				dbpath := filepath.Join(dir, "vuls.db")
+				reportPath := filepath.Join(dir, "report.json")
+				existing := filepath.Join(dir, tt.existing)
+				if tt.symlink {
+					if err := os.Symlink(filepath.Join(dir, "nowhere"), existing); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.WriteFile(existing, []byte("keep"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				work := filepath.Join(t.TempDir(), "work")
+
+				err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(reportPath), build.WithDir(work))
+				if err == nil || !strings.Contains(err.Error(), "already exists") {
+					t.Fatalf("Build() error = %v, want already exists", err)
+				}
+				if !tt.symlink {
+					if bs, err := os.ReadFile(existing); err != nil || string(bs) != "keep" {
+						t.Errorf("%s changed: %q, %v", existing, bs, err)
+					}
+				}
+				if !tt.report {
+					assertNoScratch(t, dbpath)
+				}
+				if _, err := os.Stat(work); !os.IsNotExist(err) {
+					t.Errorf("work directory created before the check: %v", err)
+				}
+			})
 		}
-		assertNoScratch(t, dbpath)
-		assertEmptyDir(t, dir)
 	})
 
 	t.Run("work directory is removed after a failed add", func(t *testing.T) {
@@ -321,73 +351,52 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("report must not be the db", func(t *testing.T) {
-		dir := t.TempDir()
-		dbpath := filepath.Join(dir, "vuls.db")
-		if err := os.WriteFile(dbpath, []byte("not a db"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		link := filepath.Join(dir, "link.db")
-		if err := os.Symlink(dbpath, link); err != nil {
-			t.Fatal(err)
-		}
+	t.Run("report that reaches the db is refused after the db is in place", func(t *testing.T) {
+		// Neither path exists at the start, so the existence check passes;
+		// the db is renamed into place first and the exclusive create of the
+		// report then fails on it, whatever route the report path takes.
 		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
 			{Name: "beta", Commit: beta.nightly[0]},
 		}}
-		for _, tt := range []struct {
+		tests := []struct {
 			name   string
-			report string
+			report func(dir string) string
 		}{
-			{name: "same path", report: dbpath},
-			{name: "same path with .", report: filepath.Join(dir, ".", "vuls.db")},
-			{name: "symlink to the db", report: link},
-		} {
+			{
+				name: "symlinked parent",
+				report: func(dir string) string {
+					alias := filepath.Join(t.TempDir(), "alias")
+					if err := os.Symlink(dir, alias); err != nil {
+						t.Fatal(err)
+					}
+					return filepath.Join(alias, "vuls.db")
+				},
+			},
+			{
+				name: "symlink followed by ..",
+				report: func(dir string) string {
+					sub := filepath.Join(dir, "sub")
+					if err := os.Mkdir(sub, 0o755); err != nil {
+						t.Fatal(err)
+					}
+					alias := filepath.Join(t.TempDir(), "alias")
+					if err := os.Symlink(sub, alias); err != nil {
+						t.Fatal(err)
+					}
+					return fmt.Sprintf("%s/../vuls.db", alias)
+				},
+			},
+		}
+		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
-					t.Errorf("Build() error = %v, want report path refused", err)
+				dir := t.TempDir()
+				dbpath := filepath.Join(dir, "vuls.db")
+				err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithReport(tt.report(dir)), build.WithDir(filepath.Join(t.TempDir(), "work")))
+				if err == nil || !strings.Contains(err.Error(), "write report") {
+					t.Fatalf("Build() error = %v, want write report refused", err)
 				}
-				bs, err := os.ReadFile(dbpath)
-				if err != nil || string(bs) != "not a db" {
-					t.Errorf("existing db changed: %q, %v", bs, err)
-				}
-			})
-		}
-
-		// The db does not exist yet, so the alias has to be seen through
-		// a symlinked parent directory and through a dangling symlink.
-		newdb := filepath.Join(dir, "new.db")
-		aliasDir := filepath.Join(t.TempDir(), "alias")
-		if err := os.Symlink(dir, aliasDir); err != nil {
-			t.Fatal(err)
-		}
-		dangling := filepath.Join(dir, "dangling.json")
-		if err := os.Symlink(newdb, dangling); err != nil {
-			t.Fatal(err)
-		}
-		// alias2 -> real/sub: "alias2/../new.db" is real/new.db on the
-		// filesystem, not the lexical parent of alias2.
-		sub := filepath.Join(dir, "sub")
-		if err := os.Mkdir(sub, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		alias2 := filepath.Join(t.TempDir(), "alias2")
-		if err := os.Symlink(sub, alias2); err != nil {
-			t.Fatal(err)
-		}
-		for _, tt := range []struct {
-			name   string
-			report string
-		}{
-			{name: "through a symlinked parent", report: filepath.Join(aliasDir, "new.db")},
-			{name: "dangling symlink to the db", report: dangling},
-			{name: "symlink followed by ..", report: fmt.Sprintf("%s/../new.db", alias2)},
-		} {
-			t.Run(tt.name, func(t *testing.T) {
-				if err := runBuild(t, lock, build.WithDBPath(newdb), build.WithReport(tt.report), build.WithDir(filepath.Join(t.TempDir(), "work"))); err == nil || !strings.Contains(err.Error(), "report path") {
-					t.Errorf("Build() error = %v, want report path refused", err)
-				}
-				if _, err := os.Lstat(newdb); !os.IsNotExist(err) {
-					t.Errorf("db written despite refused report path: %v", err)
+				if dss := datasources(t, dbpath); len(dss) != 1 {
+					t.Errorf("db at %s has %d datasources, want 1 (replaced by the report?)", dbpath, len(dss))
 				}
 			})
 		}
