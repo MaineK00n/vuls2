@@ -172,7 +172,7 @@ func Fetch(opts ...Option) error {
 	}
 	defer os.Remove(tmpdb) //nolint:errcheck
 
-	if err := options.finish(tmpdb, manifestDescriptor.Digest.String()); err != nil {
+	if err := options.finish(tmpdb, manifestDescriptor.Digest.String(), manifest.Annotations); err != nil {
 		return errors.Wrap(err, "finish db")
 	}
 
@@ -202,7 +202,7 @@ func (o *options) writeTempDB(d *zstd.Decoder) (string, error) {
 	return f.Name(), nil
 }
 
-func (o *options) finish(dbpath, digest string) error {
+func (o *options) finish(dbpath, digest string, annotations map[string]string) error {
 	if err := func() error {
 		s, err := (&session.Config{
 			Type:    "boltdb",
@@ -233,6 +233,10 @@ func (o *options) finish(dbpath, digest string) error {
 
 		meta.Digest = &digest
 		meta.Downloaded = new(time.Now().UTC())
+		// Snapshot of the fetched manifest's annotations (e.g. io.vuls.db.*),
+		// copied verbatim so the provenance of the artifact remains readable
+		// from the DB alone after download.
+		meta.Annotations = annotations
 
 		if err := s.Storage().PutMetadata(*meta); err != nil {
 			return errors.Wrap(err, "put metadata")
