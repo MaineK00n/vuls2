@@ -7,6 +7,7 @@ import (
 	detectCmd "github.com/MaineK00n/vuls2/pkg/cmd/detect"
 	diffCmd "github.com/MaineK00n/vuls2/pkg/cmd/diff"
 	scanCmd "github.com/MaineK00n/vuls2/pkg/cmd/scan"
+	validateCmd "github.com/MaineK00n/vuls2/pkg/cmd/validate"
 	versionCmd "github.com/MaineK00n/vuls2/pkg/cmd/version"
 )
 
@@ -24,6 +25,7 @@ func NewCmdRoot() *cobra.Command {
 		scanCmd.NewCmd(),
 		detectCmd.NewCmd(),
 		diffCmd.NewCmd(),
+		validateCmd.NewCmd(),
 		// reportCmd.NewCmd(),
 		versionCmd.NewCmd(),
 	)
