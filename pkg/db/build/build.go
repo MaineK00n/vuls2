@@ -411,7 +411,7 @@ func Build(lockPath string, opts ...Option) error {
 		}
 	}
 	if buildErr != nil {
-		return buildErr
+		return errors.Wrap(buildErr, "add sources")
 	}
 
 	slog.Info("Verify datasources")
