@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	containerregistry "github.com/google/go-containerregistry/pkg/registry"
 	bolt "go.etcd.io/bbolt"
 
@@ -34,162 +36,236 @@ type extracted struct {
 }
 
 func TestBuild(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
+	f := newFixture(t)
+
+	// The report entries the cases below expect: alpha pinned at its first
+	// commit (one behind nightly) or at its head, beta and gamma at their
+	// only commit.
+	repository := func(name string) string {
+		return fmt.Sprintf("%s:vuls-data-extracted-%s", f.registry, name)
+	}
+	alphaBehind := build.SourceReport{
+		Name: "alpha", ID: "alpha", Repository: repository("alpha"),
+		Commit: f.alpha.nightly[0], CommitDate: commitDate(1),
+		BranchHead: f.alpha.nightly[1], BranchHeadDate: commitDate(2),
+		Behind: 1, NextCommit: f.alpha.nightly[1], NextCommitDate: new(commitDate(2)),
+	}
+	alphaHead := build.SourceReport{
+		Name: "alpha", ID: "alpha", Repository: repository("alpha"),
+		Commit: f.alpha.nightly[1], CommitDate: commitDate(2),
+		BranchHead: f.alpha.nightly[1], BranchHeadDate: commitDate(2),
+	}
+	beta := build.SourceReport{
+		Name: "beta", ID: "beta", Repository: repository("beta"),
+		Commit: f.beta.nightly[0], CommitDate: commitDate(1),
+		BranchHead: f.beta.nightly[0], BranchHeadDate: commitDate(1),
+	}
+	gamma := build.SourceReport{
+		Name: "gamma", ID: "gamma", Repository: repository("gamma"),
+		Commit: f.gamma.nightly[0], CommitDate: commitDate(1),
+		BranchHead: f.gamma.nightly[0], BranchHeadDate: commitDate(1),
+	}
+	threeSources := []build.Source{
+		{Name: "alpha", Commit: f.alpha.nightly[1]},
+		{Name: "beta", Commit: f.beta.nightly[0]},
+		{Name: "gamma", Commit: f.gamma.nightly[0]},
 	}
 
-	ts := httptest.NewTLSServer(containerregistry.New())
-	defer ts.Close()
-
-	originalTransport := http.DefaultTransport
-	http.DefaultTransport = ts.Client().Transport
-	defer func() {
-		http.DefaultTransport = originalTransport
-	}()
-
-	u, err := url.Parse(ts.URL)
-	if err != nil {
-		t.Fatalf("parse url: %v", err)
-	}
-	registry := fmt.Sprintf("%s/vulsio/vuls-data-db", u.Host)
-
-	alpha := newExtracted(t, "alpha", "alpha", 2)
-	beta := newExtracted(t, "beta", "beta", 1)
-	gamma := newExtracted(t, "gamma", "gamma", 1)
-	// delta declares alpha's datasource id: adding both must fail.
-	delta := newExtracted(t, "delta", "alpha", 1)
-	for name, e := range map[string]extracted{"alpha": alpha, "beta": beta, "gamma": gamma, "delta": delta} {
-		pushExtracted(t, registry, name, e.dir)
-	}
-
-	// runBuild writes lock to a file, runs Build on it and fails the test if
-	// it does not return in time, so a scheduling bug shows up as a failure
-	// rather than a hung test.
-	runBuild := func(t *testing.T, lock build.Lock, opts ...build.Option) error {
-		t.Helper()
-		lockPath := writeLock(t, lock)
-		ch := make(chan error, 1)
-		go func() {
-			ch <- build.Build(lockPath, opts...)
-		}()
-		select {
-		case err := <-ch:
-			return err
-		case <-time.After(2 * time.Minute):
-			t.Fatal("Build() did not return in 2 minutes")
-			return nil
-		}
-	}
-
-	t.Run("build", func(t *testing.T) {
-		dbpath := filepath.Join(t.TempDir(), "vuls.db")
-		reportPath := filepath.Join(t.TempDir(), "report.json")
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.nightly[0]},
-			{Name: "beta", Commit: beta.nightly[0]},
-		}}
-
-		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(2), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err != nil {
-			t.Fatalf("Build() error = %v", err)
-		}
-
-		if _, err := os.Stat(dbpath); err != nil {
-			t.Errorf("db not built: %v", err)
-		}
-		assertNoScratch(t, dbpath)
-
-		dss := datasources(t, dbpath)
-		if len(dss) != 2 {
-			t.Fatalf("datasources = %d, want 2", len(dss))
-		}
-		if got := dss["alpha"].Extracted.Commit; got != alpha.nightly[0] {
-			t.Errorf("alpha commit = %s, want %s", got, alpha.nightly[0])
-		}
-		if got := dss["alpha"].Extracted.Date; got == nil || !got.Equal(commitDate(1)) {
-			t.Errorf("alpha date = %v, want %v", got, commitDate(1))
-		}
-		// alpha is pinned one commit behind nightly: the tree that was
-		// restored and added must be the pinned commit's, not the head's.
-		if got := dss["alpha"].Name; got == nil || *got != "alpha 1" {
-			t.Errorf("alpha name = %v, want %q (the pinned commit's datasource.json)", got, "alpha 1")
-		}
-		if got := dss["beta"].Extracted.Commit; got != beta.nightly[0] {
-			t.Errorf("beta commit = %s, want %s", got, beta.nightly[0])
-		}
-
-		report := readReport(t, reportPath)
-		if report.Branch != "nightly" || report.Registry != registry {
-			t.Errorf("report branch = %q registry = %q, want %q %q", report.Branch, report.Registry, "nightly", registry)
-		}
-		if len(report.Sources) != 2 {
-			t.Fatalf("report sources = %d, want 2", len(report.Sources))
-		}
-		a := report.Sources[0]
-		if a.Name != "alpha" || a.ID != sourceTypes.SourceID("alpha") || a.Commit != alpha.nightly[0] {
-			t.Errorf("report[0] = %+v", a)
-		}
-		if a.Behind != 1 || a.NextCommit != alpha.nightly[1] || a.BranchHead != alpha.nightly[1] {
-			t.Errorf("alpha behind = %d next = %s head = %s, want 1 %s %s", a.Behind, a.NextCommit, a.BranchHead, alpha.nightly[1], alpha.nightly[1])
-		}
-		if a.NextCommitDate == nil || !a.NextCommitDate.Equal(commitDate(2)) || !a.CommitDate.Equal(commitDate(1)) {
-			t.Errorf("alpha dates: commit %v next %v, want %v %v", a.CommitDate, a.NextCommitDate, commitDate(1), commitDate(2))
-		}
-		b := report.Sources[1]
-		if b.Name != "beta" || b.Behind != 0 || b.NextCommit != "" || b.NextCommitDate != nil || b.BranchHead != beta.nightly[0] {
-			t.Errorf("report[1] = %+v", b)
-		}
-		if !strings.HasPrefix(report.VulsVersion, "vuls ") {
-			t.Errorf("vuls version = %q", report.VulsVersion)
-		}
-		for _, r := range report.Sources {
-			if r.PullSeconds <= 0 || r.RestoreSeconds <= 0 || r.AddSeconds <= 0 {
-				t.Errorf("%s: stage timings not recorded: pull %v restore %v add %v", r.Name, r.PullSeconds, r.RestoreSeconds, r.AddSeconds)
-			}
-		}
-	})
-
-	t.Run("more sources than slots", func(t *testing.T) {
+	tests := []struct {
+		name     string
+		lock     build.Lock
+		download int
+		restore  int
+		want     []build.SourceReport
+		// wantTrees are the names of the datasources read back from the db,
+		// in lock order. newExtracted names the n-th commit's datasource
+		// "<source> <n>", so they tell which commit's tree was added.
+		wantTrees []string
+		wantErr   string
+	}{
+		{
+			// The tree added must be the pinned commit's, not the head's.
+			name: "source pinned behind the branch head",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: f.alpha.nightly[0]},
+				{Name: "beta", Commit: f.beta.nightly[0]},
+			}},
+			download:  2,
+			restore:   1,
+			want:      []build.SourceReport{alphaBehind, beta},
+			wantTrees: []string{"alpha 1", "beta 1"},
+		},
 		// With fewer download or tree slots than sources, every source must
 		// still get through, and the report must still list the sources in
 		// lock order whatever order they were added in.
-		tests := []struct {
-			name     string
-			download int
-			restore  int
-		}{
-			{name: "download 1, restore 1", download: 1, restore: 1},
-			{name: "download 2, restore 1", download: 2, restore: 1},
-			{name: "download 1, restore 2", download: 1, restore: 2},
-			{name: "download 3, restore 3", download: 3, restore: 3},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				dbpath := filepath.Join(t.TempDir(), "vuls.db")
-				reportPath := filepath.Join(t.TempDir(), "report.json")
-				lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-					{Name: "alpha", Commit: alpha.nightly[1]},
-					{Name: "beta", Commit: beta.nightly[0]},
-					{Name: "gamma", Commit: gamma.nightly[0]},
-				}}
-				if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(tt.download), build.WithRestoreConcurrency(tt.restore), build.WithReport(reportPath), build.WithDir(filepath.Join(t.TempDir(), "work"))); err != nil {
-					t.Fatalf("Build() error = %v", err)
+		{
+			name:      "download 1, restore 1",
+			lock:      build.Lock{Branch: "nightly", Registry: f.registry, Sources: threeSources},
+			download:  1,
+			restore:   1,
+			want:      []build.SourceReport{alphaHead, beta, gamma},
+			wantTrees: []string{"alpha 2", "beta 1", "gamma 1"},
+		},
+		{
+			name:      "download 2, restore 1",
+			lock:      build.Lock{Branch: "nightly", Registry: f.registry, Sources: threeSources},
+			download:  2,
+			restore:   1,
+			want:      []build.SourceReport{alphaHead, beta, gamma},
+			wantTrees: []string{"alpha 2", "beta 1", "gamma 1"},
+		},
+		{
+			name:      "download 1, restore 2",
+			lock:      build.Lock{Branch: "nightly", Registry: f.registry, Sources: threeSources},
+			download:  1,
+			restore:   2,
+			want:      []build.SourceReport{alphaHead, beta, gamma},
+			wantTrees: []string{"alpha 2", "beta 1", "gamma 1"},
+		},
+		{
+			name:      "download 3, restore 3",
+			lock:      build.Lock{Branch: "nightly", Registry: f.registry, Sources: threeSources},
+			download:  3,
+			restore:   3,
+			want:      []build.SourceReport{alphaHead, beta, gamma},
+			wantTrees: []string{"alpha 2", "beta 1", "gamma 1"},
+		},
+		{
+			name: "commit outside the branch",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: f.alpha.stray},
+			}},
+			download: 4,
+			restore:  1,
+			wantErr:  "not an ancestor",
+		},
+		{
+			name: "commit missing from the repository",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: "0123456789abcdef0123456789abcdef01234567"},
+			}},
+			download: 4,
+			restore:  1,
+			wantErr:  "history truncated or rewritten",
+		},
+		{
+			name: "unknown branch",
+			lock: build.Lock{Branch: "release", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: f.alpha.nightly[0]},
+			}},
+			download: 4,
+			restore:  1,
+			wantErr:  "branch release is not in",
+		},
+		{
+			name: "missing repository",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "zeta", Commit: f.alpha.nightly[0]},
+			}},
+			download: 4,
+			restore:  1,
+			wantErr:  "pull",
+		},
+		{
+			// The other sources are cancelled by the failure; the error
+			// returned must be the failure, not their cancellation.
+			name: "missing repository among others",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: f.alpha.nightly[0]},
+				{Name: "beta", Commit: f.beta.nightly[0]},
+				{Name: "zeta", Commit: f.alpha.nightly[0]},
+				{Name: "gamma", Commit: f.gamma.nightly[0]},
+			}},
+			download: 4,
+			restore:  1,
+			wantErr:  "download zeta",
+		},
+		{
+			// delta carries alpha's id. Adds run in the order the sources
+			// become ready, so whichever of the two is added second fails,
+			// after later sources may already have been pulled.
+			name: "duplicate datasource id",
+			lock: build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+				{Name: "alpha", Commit: f.alpha.nightly[1]},
+				{Name: "delta", Commit: f.delta.nightly[0]},
+				{Name: "beta", Commit: f.beta.nightly[0]},
+			}},
+			download: 3,
+			restore:  2,
+			wantErr:  `"datasource -> alpha" already exists`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dbpath := filepath.Join(t.TempDir(), "vuls.db")
+			reportPath := filepath.Join(t.TempDir(), "report.json")
+			work := filepath.Join(t.TempDir(), "work")
+
+			err := runBuild(t, tt.lock, build.WithDBPath(dbpath), build.WithReport(reportPath), build.WithDir(work), build.WithDownloadConcurrency(tt.download), build.WithRestoreConcurrency(tt.restore))
+
+			// However the build ends, no scratch db or extracted tree is
+			// left behind.
+			assertNoScratch(t, dbpath)
+			assertEmptyDir(t, work)
+
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Build() error = %v, want %q", err, tt.wantErr)
 				}
-				report := readReport(t, reportPath)
-				if got := []string{report.Sources[0].Name, report.Sources[1].Name, report.Sources[2].Name}; strings.Join(got, ",") != "alpha,beta,gamma" {
-					t.Errorf("order = %v", got)
+				for _, p := range []string{dbpath, reportPath} {
+					if _, err := os.Lstat(p); !os.IsNotExist(err) {
+						t.Errorf("%s written despite the failure: %v", p, err)
+					}
 				}
-				if dss := datasources(t, dbpath); len(dss) != 3 {
-					t.Errorf("datasources = %d, want 3", len(dss))
+				return
+			}
+			if err != nil {
+				t.Fatalf("Build() error = %v", err)
+			}
+
+			report := readReport(t, reportPath)
+			if report.Branch != tt.lock.Branch || report.Registry != tt.lock.Registry {
+				t.Errorf("report branch = %q registry = %q, want %q %q", report.Branch, report.Registry, tt.lock.Branch, tt.lock.Registry)
+			}
+			if !strings.HasPrefix(report.VulsVersion, "vuls ") {
+				t.Errorf("vuls version = %q", report.VulsVersion)
+			}
+			if diff := cmp.Diff(tt.want, report.Sources, cmpopts.IgnoreFields(build.SourceReport{}, "PullSeconds", "RestoreSeconds", "AddSeconds")); diff != "" {
+				t.Errorf("report sources (-want +got):\n%s", diff)
+			}
+			for _, r := range report.Sources {
+				if r.PullSeconds <= 0 || r.RestoreSeconds <= 0 || r.AddSeconds <= 0 {
+					t.Errorf("%s: stage timings not recorded: pull %v restore %v add %v", r.Name, r.PullSeconds, r.RestoreSeconds, r.AddSeconds)
 				}
-			})
-		}
-	})
+			}
+
+			dss := datasources(t, dbpath)
+			if len(dss) != len(tt.want) {
+				t.Errorf("datasources = %d, want %d", len(dss), len(tt.want))
+			}
+			for i, r := range tt.want {
+				ds, ok := dss[r.ID]
+				switch {
+				case !ok:
+					t.Errorf("%s: datasource %q is not in the db", r.Name, r.ID)
+				case ds.Extracted == nil || ds.Extracted.Commit != r.Commit || ds.Extracted.Date == nil || !ds.Extracted.Date.Equal(r.CommitDate):
+					t.Errorf("%s: extracted = %+v, want commit %s at %v", r.Name, ds.Extracted, r.Commit, r.CommitDate)
+				case ds.Name == nil || *ds.Name != tt.wantTrees[i]:
+					t.Errorf("%s: datasource name = %v, want %q (the pinned commit's datasource.json)", r.Name, ds.Name, tt.wantTrees[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBuild_Paths(t *testing.T) {
+	f := newFixture(t)
 
 	t.Run("existing db or report is refused", func(t *testing.T) {
 		// Nothing is overwritten: a db or report path that already exists
 		// (also as a dangling symlink) stops the build before any work.
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "beta", Commit: beta.nightly[0]},
+		lock := build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+			{Name: "beta", Commit: f.beta.nightly[0]},
 		}}
 		tests := []struct {
 			name     string
@@ -235,26 +311,6 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("work directory is removed after a failed add", func(t *testing.T) {
-		// delta carries alpha's id, so its add fails after alpha's succeeded
-		// and after later sources may already have been pulled.
-		dbpath := filepath.Join(t.TempDir(), "vuls.db")
-		dir := filepath.Join(t.TempDir(), "work")
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.nightly[1]},
-			{Name: "delta", Commit: delta.nightly[0]},
-			{Name: "beta", Commit: beta.nightly[0]},
-		}}
-		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDownloadConcurrency(3), build.WithRestoreConcurrency(2), build.WithDir(dir)); err == nil {
-			t.Fatal("Build() error = nil, want duplicate datasource")
-		}
-		if _, err := os.Stat(dbpath); !os.IsNotExist(err) {
-			t.Errorf("db written despite failure: %v", err)
-		}
-		assertNoScratch(t, dbpath)
-		assertEmptyDir(t, dir)
-	})
-
 	t.Run("paths through a symlink and ..", func(t *testing.T) {
 		// alias points to real/sub, so the kernel resolves alias/../x to
 		// real/x while a lexical clean would give x next to alias.
@@ -265,9 +321,9 @@ func TestBuild(t *testing.T) {
 		if err := os.Symlink(filepath.Join(root, "real", "sub"), filepath.Join(root, "alias")); err != nil {
 			t.Fatal(err)
 		}
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "alpha", Commit: alpha.nightly[0]},
-			{Name: "beta", Commit: beta.nightly[0]},
+		lock := build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+			{Name: "alpha", Commit: f.alpha.nightly[0]},
+			{Name: "beta", Commit: f.beta.nightly[0]},
 		}}
 		dbpath := fmt.Sprintf("%s/../vuls.db", filepath.Join(root, "alias"))
 		dir := fmt.Sprintf("%s/../work", filepath.Join(root, "alias"))
@@ -294,69 +350,12 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("lock the registry cannot satisfy", func(t *testing.T) {
-		tests := []struct {
-			name    string
-			lock    build.Lock
-			wantErr string
-		}{
-			{
-				name: "commit outside the branch",
-				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-					{Name: "alpha", Commit: alpha.stray},
-				}},
-				wantErr: "not an ancestor",
-			},
-			{
-				name: "commit missing from the repository",
-				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-					{Name: "alpha", Commit: "0123456789abcdef0123456789abcdef01234567"},
-				}},
-				wantErr: "history truncated or rewritten",
-			},
-			{
-				name: "unknown branch",
-				lock: build.Lock{Branch: "release", Registry: registry, Sources: []build.Source{
-					{Name: "alpha", Commit: alpha.nightly[0]},
-				}},
-				wantErr: "branch release is not in",
-			},
-			{
-				name: "missing repository",
-				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-					{Name: "zeta", Commit: alpha.nightly[0]},
-				}},
-				wantErr: "pull",
-			},
-			{
-				// The other sources are cancelled by the failure; the error
-				// returned must be the failure, not their cancellation.
-				name: "missing repository among others",
-				lock: build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-					{Name: "alpha", Commit: alpha.nightly[0]},
-					{Name: "beta", Commit: beta.nightly[0]},
-					{Name: "zeta", Commit: alpha.nightly[0]},
-					{Name: "gamma", Commit: gamma.nightly[0]},
-				}},
-				wantErr: "download zeta",
-			},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				err := runBuild(t, tt.lock, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")))
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("Build() error = %v, want %q", err, tt.wantErr)
-				}
-			})
-		}
-	})
-
 	t.Run("report that reaches the db is refused after the db is in place", func(t *testing.T) {
 		// Neither path exists at the start, so the existence check passes;
 		// the db is renamed into place first and the exclusive create of the
 		// report then fails on it, whatever route the report path takes.
-		lock := build.Lock{Branch: "nightly", Registry: registry, Sources: []build.Source{
-			{Name: "beta", Commit: beta.nightly[0]},
+		lock := build.Lock{Branch: "nightly", Registry: f.registry, Sources: []build.Source{
+			{Name: "beta", Commit: f.beta.nightly[0]},
 		}}
 		tests := []struct {
 			name   string
@@ -401,6 +400,70 @@ func TestBuild(t *testing.T) {
 			})
 		}
 	})
+}
+
+// fixture is a registry serving the extracted repositories the tests build
+// from: alpha with two commits on nightly, beta and gamma with one each, and
+// delta, which declares alpha's datasource id.
+type fixture struct {
+	registry                  string
+	alpha, beta, gamma, delta extracted
+}
+
+// newFixture starts the registry and pushes the repositories to it. The
+// registry is reached through http.DefaultTransport, which is swapped for
+// the test server's until cleanup, so tests using it must not run in
+// parallel.
+func newFixture(t *testing.T) fixture {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+
+	ts := httptest.NewTLSServer(containerregistry.New())
+	t.Cleanup(ts.Close)
+
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = ts.Client().Transport
+	t.Cleanup(func() {
+		http.DefaultTransport = originalTransport
+	})
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	f := fixture{
+		registry: fmt.Sprintf("%s/vulsio/vuls-data-db", u.Host),
+		alpha:    newExtracted(t, "alpha", "alpha", 2),
+		beta:     newExtracted(t, "beta", "beta", 1),
+		gamma:    newExtracted(t, "gamma", "gamma", 1),
+		delta:    newExtracted(t, "delta", "alpha", 1),
+	}
+	for name, e := range map[string]extracted{"alpha": f.alpha, "beta": f.beta, "gamma": f.gamma, "delta": f.delta} {
+		pushExtracted(t, f.registry, name, e.dir)
+	}
+	return f
+}
+
+// runBuild writes lock to a file, runs Build on it and fails the test if it
+// does not return in time, so a scheduling bug shows up as a failure rather
+// than a hung test.
+func runBuild(t *testing.T, lock build.Lock, opts ...build.Option) error {
+	t.Helper()
+	lockPath := writeLock(t, lock)
+	ch := make(chan error, 1)
+	go func() {
+		ch <- build.Build(lockPath, opts...)
+	}()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(2 * time.Minute):
+		t.Fatal("Build() did not return in 2 minutes")
+		return nil
+	}
 }
 
 // commitDate is the author date of the n-th commit newExtracted makes.
