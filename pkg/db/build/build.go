@@ -73,9 +73,10 @@ func (o dirOption) apply(opts *options) {
 	opts.dir = string(o)
 }
 
-// WithDir sets the directory the dotgits are pulled into. Each tree is
-// removed as soon as it has been added. Empty means a temporary directory
-// that is removed when the build ends.
+// WithDir sets the directory under which the build creates its own work
+// directory: the dotgits are pulled into it, each tree is removed as soon
+// as it has been added, and the work directory is removed when the build
+// ends. Empty means the system temporary directory.
 func WithDir(dir string) Option {
 	return dirOption(dir)
 }
