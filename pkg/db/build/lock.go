@@ -135,8 +135,8 @@ func (l Lock) Validate() error {
 		}
 
 		// The reference the build will pull must parse as the OCI client
-		// parses it (lowercase repository path, valid host), so that
-		// --check and the build agree on what a valid lock is.
+		// parses it (lowercase repository path, valid host), so that a bad
+		// reference fails when the lock is read, not partway through a build.
 		if _, err := remote.NewRepository(s.Repository(l.Registry)); err != nil {
 			return errors.Wrapf(err, "sources[%d] (%s): invalid OCI reference %q", i, s.Name, s.Repository(l.Registry))
 		}
