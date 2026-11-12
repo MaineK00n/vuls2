@@ -331,57 +331,6 @@ func commitDate(n int) time.Time {
 	return time.Date(2026, 1, n, 0, 0, 0, 0, time.UTC)
 }
 
-func TestBuild_ValidateOnly(t *testing.T) {
-	tests := []struct {
-		name    string
-		lock    string
-		wantErr bool
-	}{
-		{
-			// The registry does not exist: validate-only must not reach it.
-			name: "valid lock",
-			lock: `{
-				"branch": "nightly",
-				"registry": "127.0.0.1:1/vulsio/vuls-data-db",
-				"sources": [
-					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
-				]
-			}`,
-		},
-		{
-			name: "invalid lock",
-			lock: `{
-				"branch": "nightly~1",
-				"registry": "127.0.0.1:1/vulsio/vuls-data-db",
-				"sources": [
-					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
-				]
-			}`,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lockPath := filepath.Join(t.TempDir(), "lock.json")
-			if err := os.WriteFile(lockPath, []byte(tt.lock), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			dir := t.TempDir()
-			dbpath := filepath.Join(dir, "vuls.db")
-			if err := build.Build(lockPath, build.WithValidateOnly(true), build.WithDBPath(dbpath), build.WithDir(filepath.Join(dir, "work"))); (err != nil) != tt.wantErr {
-				t.Fatalf("Build() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(entries) > 0 {
-				t.Errorf("validate-only created files: %v", entries)
-			}
-		})
-	}
-}
-
 // writeLock writes lock as JSON to a file and returns its path.
 func writeLock(t *testing.T, lock build.Lock) string {
 	t.Helper()

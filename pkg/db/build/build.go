@@ -28,8 +28,7 @@ type options struct {
 	dbpath      string
 	storageopts session.StorageOptions
 
-	dir          string
-	validateOnly bool
+	dir string
 
 	debug bool
 }
@@ -81,17 +80,6 @@ func WithDir(dir string) Option {
 	return dirOption(dir)
 }
 
-type validateOnlyOption bool
-
-func (o validateOnlyOption) apply(opts *options) {
-	opts.validateOnly = bool(o)
-}
-
-// WithValidateOnly reads and validates the lock and returns without building.
-func WithValidateOnly(validateOnly bool) Option {
-	return validateOnlyOption(validateOnly)
-}
-
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -126,10 +114,6 @@ func Build(lockPath string, opts ...Option) error {
 	lock, err := readLock(lockPath)
 	if err != nil {
 		return errors.Wrap(err, "read lock")
-	}
-	if options.validateOnly {
-		slog.Info("Lock is valid", slog.String("branch", lock.Branch), slog.String("registry", lock.Registry), slog.Int("sources", len(lock.Sources)))
-		return nil
 	}
 
 	// The boltdb file must not exist yet, so that nothing is overwritten.

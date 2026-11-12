@@ -14,12 +14,11 @@ import (
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		lock         string
-		dbtype       utilflag.DBType
-		dbpath       string
-		dir          string
-		validateOnly bool
-		debug        bool
+		lock   string
+		dbtype utilflag.DBType
+		dbpath string
+		dir    string
+		debug  bool
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
@@ -51,15 +50,13 @@ func NewCmd() *cobra.Command {
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
-		$ vuls db build --lock db-nightly.lock.json --validate-only
 		$ jq '.sources |= map(select(.name == "alma-errata"))' db-nightly.lock.json | vuls db build --lock - --dbpath ./mini.db
 		`),
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := db.Build(options.lock,
 				db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath),
-				db.WithDir(options.dir),
-				db.WithValidateOnly(options.validateOnly), db.WithDebug(options.debug),
+				db.WithDir(options.dir), db.WithDebug(options.debug),
 			); err != nil {
 				return errors.Wrap(err, "db build")
 			}
@@ -73,7 +70,6 @@ func NewCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory under which this build's work directory is created and removed afterwards (default: the system temporary directory)")
-	cmd.Flags().BoolVarP(&options.validateOnly, "validate-only", "", false, "validate the lock file and exit without building")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
