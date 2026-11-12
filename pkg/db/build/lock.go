@@ -12,8 +12,9 @@ import (
 )
 
 // Lock is the recipe a vuls db is built from: the extracted dotgit of every
-// data source in the db, each pinned to one commit. The db does not depend on
-// the order of the sources; the build report lists them in this order.
+// data source in the db, each pinned to one commit. The sources are added in
+// the order listed, which the db reflects: a vulnerability root lists its
+// sources in the order they were added.
 //
 // A lock names data only. Which vuls binary builds it and where the result is
 // published are the caller's concern.
