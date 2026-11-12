@@ -1,15 +1,11 @@
 package build
 
 import (
-	"context"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,7 +21,6 @@ import (
 	dbInit "github.com/MaineK00n/vuls2/pkg/db/init"
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	utilos "github.com/MaineK00n/vuls2/pkg/util/os"
-	"github.com/MaineK00n/vuls2/pkg/version"
 )
 
 type options struct {
@@ -33,11 +28,8 @@ type options struct {
 	dbpath      string
 	storageopts session.StorageOptions
 
-	dir                 string
-	downloadConcurrency int
-	restoreConcurrency  int
-	report              string
-	validateOnly        bool
+	dir          string
+	validateOnly bool
 
 	debug bool
 }
@@ -89,44 +81,6 @@ func WithDir(dir string) Option {
 	return dirOption(dir)
 }
 
-type downloadConcurrencyOption int
-
-func (o downloadConcurrencyOption) apply(opts *options) {
-	opts.downloadConcurrency = int(o)
-}
-
-// WithDownloadConcurrency sets how many dotgits are pulled at once. A pulled
-// dotgit is the .git directory only, so this scales network use, not the
-// extracted trees on disk.
-func WithDownloadConcurrency(n int) Option {
-	return downloadConcurrencyOption(n)
-}
-
-type restoreConcurrencyOption int
-
-func (o restoreConcurrencyOption) apply(opts *options) {
-	opts.restoreConcurrency = int(o)
-}
-
-// WithRestoreConcurrency sets how many sources are restored (their tree
-// checked out) ahead of the add. Each restored tree stays on disk until it
-// has been added, so n+1 trees exist at most: n ahead plus the one being
-// added.
-func WithRestoreConcurrency(n int) Option {
-	return restoreConcurrencyOption(n)
-}
-
-type reportOption string
-
-func (o reportOption) apply(opts *options) {
-	opts.report = string(o)
-}
-
-// WithReport writes the Report as JSON to path once the build has succeeded.
-func WithReport(path string) Option {
-	return reportOption(path)
-}
-
 type validateOnlyOption bool
 
 func (o validateOnlyOption) apply(opts *options) {
@@ -148,62 +102,26 @@ func WithDebug(debug bool) Option {
 	return debugOption(debug)
 }
 
-// Report describes what a build put in the db and how far each source's lock
-// commit sits behind its branch.
-type Report struct {
-	VulsVersion string         `json:"vuls_version"`
-	Branch      string         `json:"branch"`
-	Registry    string         `json:"registry"`
-	Sources     []SourceReport `json:"sources"`
-}
-
-// SourceReport is the Report entry of one source.
-type SourceReport struct {
-	Name       string               `json:"name"`
-	ID         sourceTypes.SourceID `json:"id"`
-	Repository string               `json:"repository"`
-
-	Commit     string    `json:"commit"`
-	CommitDate time.Time `json:"commit_date"`
-
-	BranchHead     string    `json:"branch_head"`
-	BranchHeadDate time.Time `json:"branch_head_date"`
-
-	// Behind is how many commits the branch has after Commit. NextCommit is
-	// the first of them: its date is when the source started waiting.
-	Behind         int        `json:"behind"`
-	NextCommit     string     `json:"next_commit,omitempty"`
-	NextCommitDate *time.Time `json:"next_commit_date,omitempty"`
-
-	// How long each stage took for this source, in seconds: pulling the
-	// dotgit, restoring the tree, and adding it to the db.
-	PullSeconds    float64 `json:"pull_seconds"`
-	RestoreSeconds float64 `json:"restore_seconds"`
-	AddSeconds     float64 `json:"add_seconds"`
-}
-
 // Build reads the lock at lockPath ("-" reads stdin), initializes a db and
-// adds every source of the lock at its pinned commit. Dotgits are pulled concurrently and trees restored ahead of the
-// add; adds are serial, in the order the sources become ready.
+// adds every source of the lock at its pinned commit, one source at a time in
+// lock order: pull the dotgit, check that the commit belongs to the branch,
+// restore the tree at the commit, add it and remove it. Adding in lock order
+// makes the db the same for the same lock: a vulnerability root lists its
+// sources in the order they were added.
 //
-// A boltdb is built in a temporary file next to dbpath and renamed over it
+// A boltdb is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a failed build
-// leaves no half-built db behind and never touches an existing one. Other db
-// types are built in place.
+// leaves no half-built db behind. Other db types are built in place.
 func Build(lockPath string, opts ...Option) error {
 	options := &options{
-		dbtype:              "boltdb",
-		dbpath:              filepath.Join(utilos.UserCacheDir(), "vuls.db"),
-		storageopts:         session.StorageOptions{BoltDB: bolt.DefaultOptions},
-		downloadConcurrency: runtime.NumCPU(),
-		restoreConcurrency:  1,
-		debug:               false,
+		dbtype:      "boltdb",
+		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		debug:       false,
 	}
 	for _, o := range opts {
 		o.apply(options)
 	}
-	options.downloadConcurrency = max(options.downloadConcurrency, 1)
-	options.restoreConcurrency = max(options.restoreConcurrency, 1)
 
 	lock, err := readLock(lockPath)
 	if err != nil {
@@ -214,20 +132,13 @@ func Build(lockPath string, opts ...Option) error {
 		return nil
 	}
 
-	// Neither the boltdb file nor the report may exist yet. Nothing is then
-	// overwritten, and a report path that reaches the db by another route
-	// (a symlink, a symlinked parent, "..") cannot replace it: the db is
-	// renamed into place first and the report is then created exclusively,
-	// so it fails on the db that is already there. Lstat, so that a dangling
-	// symlink counts as existing.
-	for _, p := range []struct{ what, path string }{{"report", options.report}, {"db", options.dbpath}} {
-		if p.path == "" || (p.what == "db" && options.dbtype != "boltdb") {
-			continue
-		}
-		if _, err := os.Lstat(p.path); err == nil {
-			return errors.Errorf("%s %s already exists", p.what, p.path)
+	// The boltdb file must not exist yet, so that nothing is overwritten.
+	// Lstat, so that a dangling symlink counts as existing.
+	if options.dbtype == "boltdb" {
+		if _, err := os.Lstat(options.dbpath); err == nil {
+			return errors.Errorf("db %s already exists", options.dbpath)
 		} else if !os.IsNotExist(err) {
-			return errors.Wrapf(err, "lstat %s", p.path)
+			return errors.Wrapf(err, "lstat %s", options.dbpath)
 		}
 	}
 
@@ -300,122 +211,32 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrap(err, "init db")
 	}
 
-	report := &Report{
-		VulsVersion: version.String(),
-		Branch:      lock.Branch,
-		Registry:    lock.Registry,
-		Sources:     make([]SourceReport, 0, len(lock.Sources)),
-	}
-
-	// Three stages, each taking work as the previous one finishes it, so a
-	// slow source does not hold up the ones behind it in the lock. Downloads
-	// (the dotgit, i.e. the .git directory only) run ahead for every source,
-	// downloadConcurrency at a time; they are small (about 1 GiB at most) so
-	// all of them may sit on disk. Restores write the extracted tree, which
-	// is large, so a tree slot is taken before a restore and given back when
-	// the add has removed the tree: restoreConcurrency+1 trees exist at most.
-	// Adds are serial because bbolt has a single writer. The db does not
-	// depend on the add order; the report lists the sources in lock order.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	type staged struct {
-		index int
-		root  string
-		rep   SourceReport
-		err   error
-	}
-
-	// Stage 1: downloads. The channel is closed once every started download
-	// has finished; pull.Pull takes no context, so one already running goes
-	// on until it ends, and the work directory must not be removed under it.
-	downloaded := make(chan staged, len(lock.Sources))
-	go func() {
-		defer close(downloaded)
-		var wg sync.WaitGroup
-		defer wg.Wait()
-		slots := make(chan struct{}, options.downloadConcurrency)
-		for i, s := range lock.Sources {
-			select {
-			case slots <- struct{}{}:
-			case <-ctx.Done():
-				return
-			}
-			wg.Go(func() {
-				defer func() { <-slots }()
-				root, rep, err := download(workdir, lock, s)
-				if err != nil {
-					cancel()
-					err = errors.Wrapf(err, "download %s", s.Name)
-				}
-				downloaded <- staged{index: i, root: root, rep: rep, err: err}
-			})
+	ids := make([]sourceTypes.SourceID, len(lock.Sources))
+	for i, s := range lock.Sources {
+		root, date, err := download(workdir, lock, s)
+		if err != nil {
+			return errors.Wrapf(err, "download %s", s.Name)
 		}
-	}()
+		if ids[i], err = restore(root, s, date); err != nil {
+			return errors.Wrapf(err, "restore %s", s.Name)
+		}
 
-	// Stage 2: restores, restoreConcurrency at a time.
-	restored := make(chan staged, len(lock.Sources))
-	trees := make(chan struct{}, options.restoreConcurrency+1)
-	go func() {
-		defer close(restored)
-		var wg sync.WaitGroup
-		defer wg.Wait()
-		for range options.restoreConcurrency {
-			wg.Go(func() {
-				for d := range downloaded {
-					if d.err == nil {
-						select {
-						case trees <- struct{}{}:
-						case <-ctx.Done():
-						}
-						if err := ctx.Err(); err != nil {
-							d.err = err
-						} else if d.rep, d.err = restore(d.root, lock.Sources[d.index], d.rep); d.err != nil {
-							cancel()
-							d.err = errors.Wrapf(d.err, "restore %s", lock.Sources[d.index].Name)
-						}
-					}
-					restored <- d
-				}
-			})
+		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(ids[i])), slog.String("commit", s.Commit))
+		start := time.Now()
+		if err := dbAdd.Add(root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
+			return errors.Wrapf(err, "add %s", s.Name)
 		}
-	}()
+		slog.Info("Added", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
-	// Stage 3: adds. After the first error the other stages are cancelled
-	// and the rest is drained, so that every goroutine has ended before the
-	// work directory is removed. An error caused by the cancel is replaced
-	// by the one that caused it.
-	report.Sources = make([]SourceReport, len(lock.Sources))
-	var buildErr error
-	for c := range restored {
-		if c.err == nil && buildErr == nil {
-			s := lock.Sources[c.index]
-			slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(c.rep.ID)), slog.String("commit", s.Commit))
-			addStart := time.Now()
-			if err := dbAdd.Add(c.root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
-				c.err = errors.Wrapf(err, "add %s", s.Name)
-			} else {
-				c.rep.AddSeconds = time.Since(addStart).Seconds()
-				slog.Info("Added", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(addStart).Round(time.Millisecond)))
-				if err := os.RemoveAll(c.root); err != nil {
-					c.err = errors.Wrapf(err, "remove %s", c.root)
-				} else {
-					<-trees
-					report.Sources[c.index] = c.rep
-				}
-			}
+		// Removed before the next pull: one dotgit and one tree are on disk
+		// at a time.
+		if err := os.RemoveAll(root); err != nil {
+			return errors.Wrapf(err, "remove %s", root)
 		}
-		if c.err != nil && (buildErr == nil || (errors.Is(buildErr, context.Canceled) && !errors.Is(c.err, context.Canceled))) {
-			buildErr = c.err
-			cancel()
-		}
-	}
-	if buildErr != nil {
-		return errors.Wrap(buildErr, "add sources")
 	}
 
 	slog.Info("Verify datasources")
-	if err := verify(options, target, report); err != nil {
+	if err := verify(options, target, lock, ids); err != nil {
 		return errors.Wrap(err, "verify")
 	}
 
@@ -424,13 +245,7 @@ func Build(lockPath string, opts ...Option) error {
 			return errors.Wrapf(err, "rename %s to %s", target, dbpath)
 		}
 	}
-	slog.Info("Built", dbLogAttr(options.dbtype, dbpath), slog.Int("sources", len(report.Sources)))
-
-	if options.report != "" {
-		if err := writeReport(options.report, report); err != nil {
-			return errors.Wrapf(err, "write report %s", options.report)
-		}
-	}
+	slog.Info("Built", dbLogAttr(options.dbtype, dbpath), slog.Int("sources", len(lock.Sources)))
 
 	return nil
 }
@@ -467,22 +282,21 @@ func readLock(path string) (Lock, error) {
 }
 
 // download pulls one source's dotgit (its .git only, no worktree) into
-// workdir, checks that the lock commit belongs to the branch, and reads the
-// commit facts the report needs. It returns the repository root.
-func download(workdir string, lock Lock, s Source) (string, SourceReport, error) {
+// workdir and checks that the lock commit belongs to the branch. It returns
+// the repository root and the author date of the commit.
+func download(workdir string, lock Lock, s Source) (string, time.Time, error) {
 	repository := s.Repository(lock.Registry)
 	ref, err := remote.NewRepository(repository)
 	if err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "parse %s", repository)
+		return "", time.Time{}, errors.Wrapf(err, "parse %s", repository)
 	}
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
 	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", repository))
 	start := time.Now()
 	if err := pull.Pull(repository, pull.WithDir(workdir), pull.WithCheckout(""), pull.WithRestore(false)); err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "pull %s", repository)
+		return "", time.Time{}, errors.Wrapf(err, "pull %s", repository)
 	}
-	rep := SourceReport{Name: s.Name, Repository: repository, Commit: s.Commit, PullSeconds: time.Since(start).Seconds()}
 	slog.Info("Pulled", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
 	// The branch must exist as exactly this ref: the lock has already
@@ -491,69 +305,50 @@ func download(workdir string, lock Lock, s Source) (string, SourceReport, error)
 	branch := fmt.Sprintf("refs/heads/%s", lock.Branch)
 	ok, err := branchExists(root, branch)
 	if err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "check branch %s in %s", lock.Branch, repository)
+		return "", time.Time{}, errors.Wrapf(err, "check branch %s in %s", lock.Branch, repository)
 	}
 	if !ok {
-		return "", SourceReport{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
+		return "", time.Time{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
 	}
 	ok, err = commitExists(root, s.Commit)
 	if err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "check commit %s in %s", s.Commit, repository)
+		return "", time.Time{}, errors.Wrapf(err, "check commit %s in %s", s.Commit, repository)
 	}
 	if !ok {
-		return "", SourceReport{}, errors.Errorf("commit %s is not in %s (history truncated or rewritten?)", s.Commit, repository)
+		return "", time.Time{}, errors.Errorf("commit %s is not in %s (history truncated or rewritten?)", s.Commit, repository)
 	}
 	ok, err = isAncestor(root, s.Commit, branch)
 	if err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "check %s is an ancestor of %s in %s", s.Commit, lock.Branch, repository)
+		return "", time.Time{}, errors.Wrapf(err, "check %s is an ancestor of %s in %s", s.Commit, lock.Branch, repository)
 	}
 	if !ok {
-		return "", SourceReport{}, errors.Errorf("commit %s is not an ancestor of %s in %s", s.Commit, lock.Branch, repository)
+		return "", time.Time{}, errors.Errorf("commit %s is not an ancestor of %s in %s", s.Commit, lock.Branch, repository)
 	}
 
-	if rep.CommitDate, err = authorTime(root, s.Commit); err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "author date of %s in %s", s.Commit, repository)
-	}
-	if rep.BranchHead, err = revParse(root, branch); err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "resolve %s in %s", lock.Branch, repository)
-	}
-	if rep.BranchHeadDate, err = authorTime(root, rep.BranchHead); err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "author date of %s head %s in %s", lock.Branch, rep.BranchHead, repository)
-	}
-	after, err := commitsAfter(root, s.Commit, branch)
+	date, err := authorTime(root, s.Commit)
 	if err != nil {
-		return "", SourceReport{}, errors.Wrapf(err, "list commits after %s on %s in %s", s.Commit, lock.Branch, repository)
-	}
-	rep.Behind = len(after)
-	if len(after) > 0 {
-		rep.NextCommit = after[0]
-		t, err := authorTime(root, after[0])
-		if err != nil {
-			return "", SourceReport{}, errors.Wrapf(err, "author date of %s in %s", after[0], repository)
-		}
-		rep.NextCommitDate = &t
+		return "", time.Time{}, errors.Wrapf(err, "author date of %s in %s", s.Commit, repository)
 	}
 
-	return root, rep, nil
+	return root, date, nil
 }
 
 // restore writes the tree of the lock commit into the downloaded repository
-// and stamps datasource.json with the commit. The dotgit has no worktree,
-// and checkout --force both detaches at the commit and writes the files in
-// one step.
-func restore(root string, s Source, rep SourceReport) (SourceReport, error) {
+// and stamps datasource.json with the commit and its date. It returns the
+// source ID datasource.json declares. The dotgit has no worktree, and
+// checkout --force both detaches at the commit and writes the files in one
+// step.
+func restore(root string, s Source, date time.Time) (sourceTypes.SourceID, error) {
 	start := time.Now()
 	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
-		return SourceReport{}, errors.Wrapf(err, "checkout %s", s.Commit)
+		return "", errors.Wrapf(err, "checkout %s", s.Commit)
 	}
-	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, rep.CommitDate)
+	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, date)
 	if err != nil {
-		return SourceReport{}, errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
+		return "", errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
 	}
-	rep.ID = id
-	rep.RestoreSeconds = time.Since(start).Seconds()
 	slog.Info("Restored", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
-	return rep, nil
+	return id, nil
 }
 
 // stampDataSource records the checked-out commit and its date as the
@@ -589,9 +384,9 @@ func stampDataSource(path, commit string, date time.Time) (sourceTypes.SourceID,
 }
 
 // verify reads the datasources back from the db and checks them against the
-// report one by one: every source is there under the ID its datasource.json
-// declared, at the lock commit, and nothing else is.
-func verify(options *options, dbpath string, report *Report) error {
+// lock: every source is there under the ID its datasource.json declared
+// (ids, in lock order), at the lock commit, and nothing else is.
+func verify(options *options, dbpath string, lock Lock, ids []sourceTypes.SourceID) error {
 	s, err := (&session.Config{
 		Type:    options.dbtype,
 		Path:    dbpath,
@@ -615,43 +410,30 @@ func verify(options *options, dbpath string, report *Report) error {
 		byID[ds.ID] = ds
 	}
 
-	seen := make(map[sourceTypes.SourceID]string, len(report.Sources))
-	for _, r := range report.Sources {
-		if prev, ok := seen[r.ID]; ok {
-			return errors.Errorf("%s and %s both have datasource id %q", prev, r.Name, r.ID)
+	seen := make(map[sourceTypes.SourceID]string, len(lock.Sources))
+	for i, src := range lock.Sources {
+		id := ids[i]
+		if prev, ok := seen[id]; ok {
+			return errors.Errorf("%s and %s both have datasource id %q", prev, src.Name, id)
 		}
-		seen[r.ID] = r.Name
+		seen[id] = src.Name
 
-		ds, ok := byID[r.ID]
+		ds, ok := byID[id]
 		if !ok {
-			return errors.Errorf("%s: datasource %q is not in the db", r.Name, r.ID)
+			return errors.Errorf("%s: datasource %q is not in the db", src.Name, id)
 		}
-		if ds.Extracted == nil || ds.Extracted.Commit != r.Commit {
-			return errors.Errorf("%s: datasource %q has commit %q, lock has %q", r.Name, r.ID, func() string {
+		if ds.Extracted == nil || ds.Extracted.Commit != src.Commit {
+			return errors.Errorf("%s: datasource %q has commit %q, lock has %q", src.Name, id, func() string {
 				if ds.Extracted == nil {
 					return ""
 				}
 				return ds.Extracted.Commit
-			}(), r.Commit)
+			}(), src.Commit)
 		}
 	}
-	if len(byID) != len(report.Sources) {
-		return errors.Errorf("db has %d datasources, lock has %d", len(byID), len(report.Sources))
+	if len(byID) != len(lock.Sources) {
+		return errors.Errorf("db has %d datasources, lock has %d", len(byID), len(lock.Sources))
 	}
 
-	return nil
-}
-
-// writeReport creates the report exclusively: it fails rather than replace
-// anything at path, including the db when path reaches it by another route.
-func writeReport(path string, report *Report) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return errors.Wrapf(err, "create %s", path)
-	}
-	defer f.Close()
-	if err := json.MarshalWrite(f, report, jsontext.WithIndent("  ")); err != nil {
-		return errors.Wrap(err, "marshal report")
-	}
 	return nil
 }

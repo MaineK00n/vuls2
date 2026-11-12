@@ -83,14 +83,6 @@ func isAncestor(dir, commit, ref string) (bool, error) {
 	return true, nil
 }
 
-func revParse(dir, rev string) (string, error) {
-	s, err := git(dir, "rev-parse", "--verify", fmt.Sprintf("%s^{commit}", rev))
-	if err != nil {
-		return "", errors.Wrapf(err, "rev-parse %s", rev)
-	}
-	return s, nil
-}
-
 // authorTime returns the author date of rev. The extracted datasource.json
 // records the author date of the commit it was built from, which is what the
 // previous Makefile-driven build wrote (git show --format=%at).
@@ -104,17 +96,4 @@ func authorTime(dir, rev string) (time.Time, error) {
 		return time.Time{}, errors.Wrapf(err, "parse author time %q of %s", s, rev)
 	}
 	return time.Unix(n, 0).UTC(), nil
-}
-
-// commitsAfter returns the commits reachable from ref but not from commit,
-// oldest first.
-func commitsAfter(dir, commit, ref string) ([]string, error) {
-	s, err := git(dir, "rev-list", "--reverse", fmt.Sprintf("%s..%s", commit, ref))
-	if err != nil {
-		return nil, errors.Wrapf(err, "rev-list %s..%s", commit, ref)
-	}
-	if s == "" {
-		return nil, nil
-	}
-	return strings.Split(s, "\n"), nil
 }
