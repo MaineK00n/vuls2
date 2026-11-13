@@ -1,0 +1,10 @@
+{
+  "id": "CWE-200",
+  "kind": "weakness",
+  "name": "Exposure of Sensitive Information to an Unauthorized Actor",
+  "description": "The product exposes sensitive information to an actor that is not explicitly authorized to have access to that information.",
+  "weakness": {
+    "abstraction": "Class"
+  },
+  "data_source": {"id": "mitre-cwe"}
+}

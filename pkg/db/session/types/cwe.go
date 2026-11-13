@@ -1,7 +1,10 @@
 package types
 
 import (
+	"slices"
+
 	cweTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe"
+	groupingTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/grouping"
 	mappingnotesTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/mappingnotes"
 	memberTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/member"
 	noteTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/note"
@@ -10,6 +13,7 @@ import (
 	alternatetermTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/alternateterm"
 	applicableplatformTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/applicableplatform"
 	commonconsequenceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/commonconsequence"
+	customphaseTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/customphase"
 	demonstrativeexampleTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/demonstrativeexample"
 	detectionmethodTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/detectionmethod"
 	modeofintroductionTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/cwe/weakness/modeofintroduction"
@@ -32,17 +36,22 @@ type CWEData struct {
 
 // CWEContent is the per-source body of a CWE record. Mirrors
 // cweTypes.CWE with within-catalog ID references (Weakness.
-// RelatedWeaknesses / Category.Members / View.Members) replaced by
+// RelatedWeaknesses / Grouping.Members / View.Members) replaced by
 // CWERef. RelatedAttackPatterns stays as raw CAPEC IDs since it crosses
 // catalogs.
+//
+// The shape does not depend on whether the DB was built from data
+// extracted before or after vuls-data-update supported CWE 5.0: a
+// pre-CWE 5.0 "category" is output as a "grouping", and every mode of
+// introduction lists its phases in Phases.
 type CWEContent struct {
-	Kind        string `json:"kind,omitempty"`
+	Kind        string `json:"kind,omitempty"` // "weakness" | "grouping" | "view"
 	Name        string `json:"name,omitempty"`
 	Status      string `json:"status,omitempty"`
 	Description string `json:"description,omitempty"`
 
 	Weakness CWEContentWeakness `json:"weakness,omitzero"`
-	Category CWEContentCategory `json:"category,omitzero"`
+	Grouping CWEContentGrouping `json:"grouping,omitzero"`
 	View     CWEContentView     `json:"view,omitzero"`
 
 	References []referenceTypes.Reference `json:"references,omitempty"`
@@ -67,7 +76,7 @@ type CWEContentRelatedWeakness struct {
 	ChainID string `json:"chain_id,omitempty"`
 }
 
-// CWEContentMember mirrors a Category/View member with the referenced
+// CWEContentMember mirrors a Grouping/View member with the referenced
 // CWE expanded into a CWERef.
 type CWEContentMember struct {
 	CWE    CWERef `json:"cwe"`
@@ -81,7 +90,7 @@ type CWEContentWeakness struct {
 	ExtendedDescription   string                                           `json:"extended_description,omitempty"`
 	LikelihoodOfExploit   string                                           `json:"likelihood_of_exploit,omitempty"`
 	BackgroundDetails     []string                                         `json:"background_details,omitempty"`
-	ModesOfIntroduction   []modeofintroductionTypes.ModeOfIntroduction     `json:"modes_of_introduction,omitempty"`
+	ModesOfIntroduction   []CWEContentModeOfIntroduction                   `json:"modes_of_introduction,omitempty"`
 	RelatedWeaknesses     []CWEContentRelatedWeakness                      `json:"related_weaknesses,omitempty"`
 	RelatedAttackPatterns []string                                         `json:"related_attack_patterns,omitempty"`
 	WeaknessOrdinalities  []weaknessordinalityTypes.WeaknessOrdinality     `json:"weakness_ordinalities,omitempty"`
@@ -98,7 +107,20 @@ type CWEContentWeakness struct {
 	MappingNotes          mappingnotesTypes.MappingNotes                   `json:"mapping_notes,omitzero"`
 }
 
-type CWEContentCategory struct {
+// CWEContentModeOfIntroduction mirrors modeofintroductionTypes.
+// ModeOfIntroduction in its CWE 5.0 shape, which lists the phases in
+// Phases. The single Phase of data extracted before CWE 5.0 is moved
+// into Phases.
+type CWEContentModeOfIntroduction struct {
+	Phases       []string                       `json:"phases,omitempty"`
+	CustomPhases []customphaseTypes.CustomPhase `json:"custom_phases,omitempty"`
+	Notes        []string                       `json:"notes,omitempty"`
+}
+
+// CWEContentGrouping mirrors groupingTypes.Grouping with the members
+// expanded into CWERef. CWE 5.0 renamed categories to groupings; a
+// category of data extracted before that is output as a grouping too.
+type CWEContentGrouping struct {
 	Members          []CWEContentMember                     `json:"members,omitempty"`
 	TaxonomyMappings []taxonomymappingTypes.TaxonomyMapping `json:"taxonomy_mappings,omitempty"`
 	Notes            []noteTypes.Note                       `json:"notes,omitempty"`
@@ -147,8 +169,36 @@ func toCWEContentMembers(items []memberTypes.Member, cache map[string]cweTypes.C
 	return out
 }
 
+func toCWEContentModesOfIntroduction(items []modeofintroductionTypes.ModeOfIntroduction) []CWEContentModeOfIntroduction {
+	out := make([]CWEContentModeOfIntroduction, 0, len(items))
+	for _, m := range items {
+		phases := m.Phases
+		// Data extracted before CWE 5.0 has its phase in Phase, not Phases.
+		if p := m.Phase; p != "" && !slices.Contains(phases, p) { //nolint:staticcheck // SA1019: Phase is read to support DBs built from data extracted before CWE 5.0
+			phases = append(slices.Clone(phases), p)
+		}
+		out = append(out, CWEContentModeOfIntroduction{
+			Phases:       phases,
+			CustomPhases: m.CustomPhases,
+			Notes:        m.Notes,
+		})
+	}
+	return out
+}
+
+func toCWEContentGrouping(g groupingTypes.Grouping, cache map[string]cweTypes.CWE) CWEContentGrouping {
+	return CWEContentGrouping{
+		Members:          toCWEContentMembers(g.Members, cache),
+		TaxonomyMappings: g.TaxonomyMappings,
+		Notes:            g.Notes,
+		MappingNotes:     g.MappingNotes,
+	}
+}
+
 // ToCWEContent converts a per-source cweTypes.CWE into the embedded-refs
-// CWEContent view.
+// CWEContent view. Data extracted before CWE 5.0 is converted to the
+// CWE 5.0 shape: a "category" becomes a "grouping", and the Phase of a
+// mode of introduction moves into Phases.
 func ToCWEContent(c cweTypes.CWE, cache map[string]cweTypes.CWE) CWEContent {
 	r := CWEContent{
 		Kind:        c.Kind,
@@ -168,7 +218,7 @@ func ToCWEContent(c cweTypes.CWE, cache map[string]cweTypes.CWE) CWEContent {
 			ExtendedDescription:   w.ExtendedDescription,
 			LikelihoodOfExploit:   w.LikelihoodOfExploit,
 			BackgroundDetails:     w.BackgroundDetails,
-			ModesOfIntroduction:   w.ModesOfIntroduction,
+			ModesOfIntroduction:   toCWEContentModesOfIntroduction(w.ModesOfIntroduction),
 			RelatedWeaknesses:     toCWEContentRelatedWeaknesses(w.RelatedWeaknesses, cache),
 			RelatedAttackPatterns: w.RelatedAttackPatterns,
 			WeaknessOrdinalities:  w.WeaknessOrdinalities,
@@ -184,14 +234,13 @@ func ToCWEContent(c cweTypes.CWE, cache map[string]cweTypes.CWE) CWEContent {
 			Notes:                 w.Notes,
 			MappingNotes:          w.MappingNotes,
 		}
+	case "grouping":
+		r.Grouping = toCWEContentGrouping(c.Grouping, cache)
 	case "category":
-		cat := c.Category
-		r.Category = CWEContentCategory{
-			Members:          toCWEContentMembers(cat.Members, cache),
-			TaxonomyMappings: cat.TaxonomyMappings,
-			Notes:            cat.Notes,
-			MappingNotes:     cat.MappingNotes,
-		}
+		// CWE 5.0 renamed categories to groupings. A category has the
+		// same fields as a grouping, so convert it and output it as one.
+		r.Kind = "grouping"
+		r.Grouping = toCWEContentGrouping(groupingTypes.Grouping(c.Category), cache) //nolint:staticcheck // SA1019: Category is read to support DBs built from data extracted before CWE 5.0
 	case "view":
 		v := c.View
 		r.View = CWEContentView{

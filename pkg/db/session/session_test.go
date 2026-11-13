@@ -2245,7 +2245,7 @@ func TestSession_GetCWEData(t *testing.T) {
 			want: "testdata/golden/get-cwe-data/CWE-89.json",
 		},
 		{
-			name:    "happy category with Members ref",
+			name:    "happy pre-CWE 5.0 category with Members ref is output as a grouping",
 			fixture: "testdata/fixtures/get-cwe-data",
 			config: session.Config{
 				Type:    "boltdb",
@@ -2254,6 +2254,64 @@ func TestSession_GetCWEData(t *testing.T) {
 			},
 			id:   "CWE-707",
 			want: "testdata/golden/get-cwe-data/CWE-707.json",
+		},
+		// get-cwe-data and get-cwe-data-cwe5 hold the same entries as
+		// vuls-data-update extracted them before and after it supported
+		// CWE 5.0, so both must give the same output.
+		{
+			name:    "happy pre-CWE 5.0 category is output as a grouping",
+			fixture: "testdata/fixtures/get-cwe-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-1347",
+			want: "testdata/golden/get-cwe-data/CWE-1347.json",
+		},
+		{
+			name:    "happy CWE 5.0 grouping",
+			fixture: "testdata/fixtures/get-cwe-data-cwe5",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-1347",
+			want: "testdata/golden/get-cwe-data/CWE-1347.json",
+		},
+		{
+			name:    "happy pre-CWE 5.0 mode of introduction phase is output in phases",
+			fixture: "testdata/fixtures/get-cwe-data",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-1007",
+			want: "testdata/golden/get-cwe-data/CWE-1007.json",
+		},
+		{
+			name:    "happy CWE 5.0 mode of introduction phases",
+			fixture: "testdata/fixtures/get-cwe-data-cwe5",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-1007",
+			want: "testdata/golden/get-cwe-data/CWE-1007.json",
+		},
+		{
+			name:    "happy CWE 5.0 mode of introduction with several phases",
+			fixture: "testdata/fixtures/get-cwe-data-cwe5",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			id:   "CWE-215",
+			want: "testdata/golden/get-cwe-data/CWE-215.json",
 		},
 	}
 	for _, tt := range tests {
