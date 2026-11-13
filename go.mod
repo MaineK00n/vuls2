@@ -3,7 +3,7 @@ module github.com/MaineK00n/vuls2
 go 1.27.3
 
 require (
-	github.com/MaineK00n/vuls-data-update v0.0.0-20261108004038-681f47deed4d
+	github.com/MaineK00n/vuls-data-update v0.0.0-20261113024431-046620cdef6d
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/go-cmp v0.7.0
