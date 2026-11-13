@@ -1352,7 +1352,7 @@ func SearchCAPEC(queries []string, opts ...Option) error {
 }
 
 // SearchCWE delegates to Session.GetCWEData for each query.
-// Within-catalog references (Weakness.RelatedWeaknesses, Category/View
+// Within-catalog references (Weakness.RelatedWeaknesses, Grouping/View
 // Members) are embedded inline as CWERef; cross-catalog
 // RelatedAttackPatterns stays as raw CAPEC IDs.
 func SearchCWE(queries []string, opts ...Option) error {

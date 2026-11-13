@@ -2,11 +2,11 @@
   "id": "CWE-707",
   "contents": {
     "mitre-cwe": {
-      "kind": "category",
+      "kind": "grouping",
       "name": "Improper Neutralization",
       "status": "Incomplete",
       "description": "Weaknesses in this category occur when the product does not properly neutralize special elements within data.",
-      "category": {
+      "grouping": {
         "members": [
           {
             "cwe": {
