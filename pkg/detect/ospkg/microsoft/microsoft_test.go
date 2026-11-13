@@ -538,6 +538,94 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			name:    "detect CVE-2026-66323 by Microsoft Edge for Windows with package normalization",
+			fixture: "testdata/fixtures/microsoft-edge-for-windows",
+			config: session.Config{
+				Type:    "boltdb",
+				Path:    filepath.Join(t.TempDir(), "vuls.db"),
+				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
+			},
+			args: args{
+				ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+				sr: scanTypes.ScanResult{
+					Family: ecosystemTypes.EcosystemTypeMicrosoft,
+					OSPackages: []scanTypes.OSPackage{
+						{Name: "Microsoft Edge", Version: "152.0.4191.52"},
+					},
+				},
+				concurrency: 1,
+			},
+			// The fixture keeps the Windows and MAC products of the 2026-Aug
+			// platform split; only "Microsoft Edge for Windows" is matched.
+			want: map[dataTypes.RootID]detectTypes.VulnerabilityDataDetection{
+				"CVE-2026-66323": {
+					Ecosystem: ecosystemTypes.EcosystemTypeMicrosoft,
+					Contents: map[sourceTypes.SourceID][]conditionTypes.FilteredCondition{
+						"microsoft-cvrf": {
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "Microsoft Edge for MAC",
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeMicrosoftEdge,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "152.0.4191.53"}},
+														Fixed: []string{"152.0.4191.53"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{}},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Microsoft Edge for MAC"),
+							},
+							{
+								Criteria: criteriaTypes.FilteredCriteria{
+									Operator: criteriaTypes.CriteriaOperatorTypeOR,
+									Criterions: []criterionTypes.FilteredCriterion{
+										{
+											Criterion: criterionTypes.Criterion{
+												Type: criterionTypes.CriterionTypeVersion,
+												Version: &vcTypes.Criterion{
+													Vulnerable: true,
+													FixStatus:  &vcFixStatusTypes.FixStatus{Class: vcFixStatusTypes.ClassFixed},
+													Package: vcPackageTypes.Package{
+														Type: vcPackageTypes.PackageTypeBinary,
+														Binary: &vcBinaryPackageTypes.Package{
+															Name: "Microsoft Edge for Windows",
+														},
+													},
+													Affected: &vcAffectedTypes.Affected{
+														Type:  vcAffectedRangeTypes.RangeTypeMicrosoftEdge,
+														Range: []vcAffectedRangeTypes.Range{{LessThan: "152.0.4191.53"}},
+														Fixed: []string{"152.0.4191.53"},
+													},
+												},
+											},
+											Accepts: criterionTypes.AcceptQueries{Version: []int{0}},
+										},
+									},
+								},
+								Tag: segmentTypes.DetectionTag("Microsoft Edge for Windows"),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name:    "detect CVE-2022-21907 by Release and Kernel.Version",
 			fixture: "testdata/fixtures/microsoft-windows-version",
 			config: session.Config{
@@ -1573,6 +1661,7 @@ func Test_normalizeMicrosoftPackageName(t *testing.T) {
 			},
 			want: []string{
 				"Microsoft Edge (Chromium-based)",
+				"Microsoft Edge for Windows",
 			},
 		},
 		{
@@ -1583,6 +1672,7 @@ func Test_normalizeMicrosoftPackageName(t *testing.T) {
 			},
 			want: []string{
 				"Microsoft Edge (Chromium-based)",
+				"Microsoft Edge for Windows",
 				"Microsoft Edge (Chromium-based) in IE Mode on Windows 10 Version 1607 for x64-based Systems",
 				"Microsoft Edge (EdgeHTML-based) on Windows 10 Version 1607 for x64-based Systems",
 			},

@@ -625,8 +625,12 @@ var microsoftPackageNameRules = []normalizeRule{
 	{
 		pattern: regexp.MustCompile(`(?i)^Microsoft Edge$`),
 		normalize: func(_, release string) []string {
+			// CVRF lists the desktop browser as "Microsoft Edge (Chromium-based)",
+			// and from 2026-Aug also per platform; a Windows host runs
+			// "Microsoft Edge for Windows".
 			names := []string{
 				"Microsoft Edge (Chromium-based)",
+				"Microsoft Edge for Windows",
 			}
 			if release != "" {
 				names = append(names,
