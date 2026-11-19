@@ -1,0 +1,62 @@
+{
+    "id": "ROOT-MISSING",
+    "advisories": [
+        {
+            "content": {
+                "id": "ROOT-MISSING"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:invalid"
+                }
+            ]
+        }
+    ],
+    "vulnerabilities": [
+        {
+            "content": {
+                "id": "CVE-MISSING"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:invalid"
+                }
+            ]
+        }
+    ],
+    "detections": [
+        {
+            "ecosystem": "test:invalid",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "OR",
+                        "criterions": [
+                            {
+                                "type": "version",
+                                "version": {
+                                    "vulnerable": true,
+                                    "package": {
+                                        "type": "binary",
+                                        "binary": {
+                                            "name": "missing-pkg",
+                                            "architectures": [
+                                                "x86_64"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "id": "missing-datasource-json",
+        "raws": [
+            "missing-datasource-json/ROOT-MISSING.json"
+        ]
+    }
+}

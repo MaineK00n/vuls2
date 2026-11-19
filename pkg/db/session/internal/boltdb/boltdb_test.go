@@ -510,6 +510,91 @@ func TestConnection_Put(t *testing.T) {
 				"datasource -> nvd-feed-cve-v2":     []byte(`{"id":"nvd-feed-cve-v2","name":"NVD Feed CVE v2"}`),
 			},
 		},
+		{
+			// The second root is another extract of alma-errata, already in the
+			// db after the first Put. Put refuses it before its first batch, so
+			// the db stays as the first Put left it: no ALSA-2019:4001/4002 and
+			// no second copy of ALSA-2019:3708's advisory and vulnerabilities.
+			name: "datasource already exists",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db"), PutBatchSize: 2},
+			},
+			args: args{
+				roots: []string{
+					"testdata/fixtures/alma-small/alma-errata",
+					"testdata/fixtures/alma-batch/alma-errata",
+				},
+			},
+			want: map[string][]byte{
+				"metadata":              nil,
+				"metadata -> db":        fmt.Appendf(nil, `{"schema_version":0,"created_by":"vuls (devel)","last_modified":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano)),
+				"vulnerability":         nil,
+				"vulnerability -> root": nil,
+				"vulnerability -> root -> ALSA-2019:3708":         []byte(`{"id":"ALSA-2019:3708","advisories":["ALSA-2019:3708"],"vulnerabilities":["CVE-2019-2510","CVE-2019-2537"],"ecosystems":["alma:8"],"data_sources":["alma-errata"]}`),
+				"vulnerability -> advisory":                       nil,
+				"vulnerability -> advisory -> ALSA-2019:3708":     []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"ALSA-2019:3708"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability":                  nil,
+				"vulnerability -> vulnerability -> CVE-2019-2510": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2510"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"vulnerability -> vulnerability -> CVE-2019-2537": []byte(`{"alma-errata":{"ALSA-2019:3708":[{"content":{"id":"CVE-2019-2537"},"segments":[{"ecosystem":"alma:8"}]}]}}`),
+				"alma:8":                                      nil,
+				"alma:8 -> detection":                         nil,
+				"alma:8 -> detection -> ALSA-2019:3708":       []byte(`{"alma-errata":[{"criteria":{"operator":"OR","criterions":[{"type":"version","version":{"vulnerable":true,"package":{"type":"binary","binary":{"name":"mariadb-devel:10.3::Judy","architectures":["i686"]}}}}]}}]}`),
+				"alma:8 -> index":                             nil,
+				"alma:8 -> index -> mariadb-devel:10.3::Judy": []byte(`["ALSA-2019:3708"]`),
+				"datasource":                                  nil,
+				"attack":                                      nil,
+				"capec":                                       nil,
+				"cwe":                                         nil,
+				"datasource -> alma-errata":                   []byte(`{"id":"alma-errata","name":"AlmaLinux Errata","raw":[{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-raw-alma-errata","commit":"23144d94cd39ad0d4499ab3684749b4f8e5fb092","date":"2025-11-14T13:23:03Z"}],"extracted":{"url":"ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata"}}`),
+			},
+			wantErr: true,
+		},
+		{
+			// data/ is there but datasource.json is not: Put fails before
+			// writing any of data/, leaving the db as Initialize left it.
+			name: "datasource.json missing",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				roots: []string{"testdata/fixtures/invalid-datasource/missing-datasource-json"},
+			},
+			want: map[string][]byte{
+				"metadata":                       nil,
+				"vulnerability":                  nil,
+				"vulnerability -> root":          nil,
+				"vulnerability -> advisory":      nil,
+				"vulnerability -> vulnerability": nil,
+				"datasource":                     nil,
+				"attack":                         nil,
+				"capec":                          nil,
+				"cwe":                            nil,
+			},
+			wantErr: true,
+		},
+		{
+			// datasource.json has no id, which the datasource bucket cannot
+			// take as a key: Put fails before writing any of data/.
+			name: "datasource id empty",
+			fields: fields{
+				Config: &boltdb.Config{Path: filepath.Join(t.TempDir(), "vuls.db")},
+			},
+			args: args{
+				roots: []string{"testdata/fixtures/invalid-datasource/empty-datasource-id"},
+			},
+			want: map[string][]byte{
+				"metadata":                       nil,
+				"vulnerability":                  nil,
+				"vulnerability -> root":          nil,
+				"vulnerability -> advisory":      nil,
+				"vulnerability -> vulnerability": nil,
+				"datasource":                     nil,
+				"attack":                         nil,
+				"capec":                          nil,
+				"cwe":                            nil,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
