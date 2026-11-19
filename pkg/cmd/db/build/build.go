@@ -33,14 +33,17 @@ func NewCmd() *cobra.Command {
 		source, pinned to one commit each.
 
 		  {"branch": "nightly",
-		   "registry": "ghcr.io/vulsio/vuls-data-db",
 		   "sources": [
-		     {"name": "alma-errata", "commit": "<40 hex>"},
-		     {"name": "ubuntu-cve-tracker", "commit": "<40 hex>"}
+		     {"name": "alma-errata",
+		      "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata",
+		      "commit": "<40 hex>"},
+		     {"name": "ubuntu-cve-tracker",
+		      "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-ubuntu-cve-tracker",
+		      "commit": "<40 hex>"}
 		   ]}
 
 		Sources are built one at a time, in lock order: each is pulled from
-		<registry>:vuls-data-extracted-<name> (the .git only), restored at
+		its repository (the .git only), restored at
 		its commit (which must belong to the branch), stamped into
 		datasource.json, added, and removed before the next one, so one
 		dotgit and one tree are on disk at a time. A boltdb is written to a
