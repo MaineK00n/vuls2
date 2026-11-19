@@ -1,0 +1,10 @@
+{
+  "id": "CWE-451",
+  "kind": "weakness",
+  "name": "User Interface (UI) Misrepresentation of Critical Information",
+  "description": "The user interface (UI) does not properly represent critical information to the user, allowing the information - or its source - to be obscured or spoofed. This is often a component in phishing attacks.",
+  "weakness": {
+    "abstraction": "Class"
+  },
+  "data_source": {"id": "mitre-cwe"}
+}

@@ -1,0 +1,48 @@
+{
+  "id": "CWE-1347",
+  "contents": {
+    "mitre-cwe": {
+      "kind": "grouping",
+      "name": "OWASP Top Ten 2021 Category A03:2021 - Injection",
+      "status": "Incomplete",
+      "description": "Weaknesses in this category are related to the A03 category in the OWASP Top Ten 2021.",
+      "grouping": {
+        "members": [
+          {
+            "cwe": {
+              "id": "CWE-79",
+              "name": "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+              "description": "The product does not neutralize or incorrectly neutralizes user-controllable input before it is placed in output that is used as a web page that is served to other users."
+            },
+            "view_id": "CWE-1344"
+          }
+        ]
+      },
+      "references": [
+        {
+          "source": "cwe.mitre.org",
+          "url": "https://cwe.mitre.org/data/definitions/1347.html"
+        }
+      ],
+      "data_source": {
+        "id": "mitre-cwe"
+      }
+    }
+  },
+  "datasources": [
+    {
+      "id": "mitre-cwe",
+      "name": "MITRE CWE",
+      "raw": [
+        {
+          "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-raw-mitre-cwe",
+          "commit": "0000000000000000000000000000000000000000",
+          "date": "2026-04-01T00:00:00Z"
+        }
+      ],
+      "extracted": {
+        "url": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-mitre-cwe"
+      }
+    }
+  ]
+}

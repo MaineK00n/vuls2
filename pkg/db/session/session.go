@@ -649,7 +649,7 @@ func (s Session) GetCAPECData(id string) (dbTypes.CAPECData, error) {
 
 // GetCWEData fetches the per-source CWE record(s) for id and resolves
 // one level of within-catalog references (Weakness.RelatedWeaknesses
-// and Category/View.Members). RelatedAttackPatterns (CAPEC IDs) stays
+// and Grouping/View.Members). RelatedAttackPatterns (CAPEC IDs) stays
 // as raw ID strings since it crosses catalogs.
 func (s Session) GetCWEData(id string) (dbTypes.CWEData, error) {
 	d := dbTypes.CWEData{ID: id}
@@ -873,16 +873,18 @@ func collectCAPECRefs(c capecTypes.CAPEC) []string {
 }
 
 // collectCWERefs returns every CWE ID referenced by the record's
-// Weakness.RelatedWeaknesses, Category.Members and View.Members.
-// RelatedAttackPatterns (CAPEC IDs) is cross-catalog and not included.
+// Weakness.RelatedWeaknesses, Grouping.Members (Category.Members in data
+// extracted before CWE 5.0) and View.Members. RelatedAttackPatterns
+// (CAPEC IDs) is cross-catalog and not included.
 func collectCWERefs(c cweTypes.CWE) []string {
-	out := make([]string, 0, len(c.Weakness.RelatedWeaknesses)+len(c.Category.Members)+len(c.View.Members))
+	groupingMembers := slices.Concat(c.Grouping.Members, c.Category.Members) //nolint:staticcheck // SA1019: Category is read to support DBs built from data extracted before CWE 5.0
+	out := make([]string, 0, len(c.Weakness.RelatedWeaknesses)+len(groupingMembers)+len(c.View.Members))
 	for _, rw := range c.Weakness.RelatedWeaknesses {
 		if rw.CWEID != "" {
 			out = append(out, rw.CWEID)
 		}
 	}
-	for _, m := range c.Category.Members {
+	for _, m := range groupingMembers {
 		if m.CWEID != "" {
 			out = append(out, m.CWEID)
 		}
