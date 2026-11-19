@@ -270,7 +270,7 @@ func readLock(path string) (Lock, error) {
 // workdir and checks that the lock commit belongs to the branch. It returns
 // the repository root and the author date of the commit.
 func download(workdir string, lock Lock, s Source) (string, time.Time, error) {
-	repository := s.Repository(lock.Registry)
+	repository := s.Repository
 	ref, err := remote.NewRepository(repository)
 	if err != nil {
 		return "", time.Time{}, errors.Wrapf(err, "parse %s", repository)
