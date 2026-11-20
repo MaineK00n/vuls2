@@ -157,6 +157,10 @@ const defaultPutBatchSize = 1000
 type pkgIndex map[ecosystemTypes.Ecosystem]map[string]map[dataTypes.RootID]struct{}
 
 // Put walks the extracted data directory under root and stores all files into the database.
+// root's datasource.json is read and checked before anything is written: Put returns an error
+// and leaves the database untouched when it is missing or invalid, has an empty ID, or names a
+// data source the database already holds. A data source is added once; putting it again would
+// append duplicate advisories and vulnerabilities to the entries the earlier put left.
 // Writes are batched into transactions of up to Config.PutBatchSize files for memory efficiency.
 // If PutBatchSize is non-positive, the default (1000) is used.
 // Index entries are accumulated in memory across all data batches and flushed at the end,
@@ -167,6 +171,20 @@ func (c *Connection) Put(root string) error {
 	batchSize := c.Config.PutBatchSize
 	if batchSize <= 0 {
 		batchSize = defaultPutBatchSize
+	}
+
+	// datasource.json is stored in the final transaction, with the metadata,
+	// but it is read and checked here, before the first write: the batches
+	// below commit one by one, so a data source that cannot be stored must
+	// not be found out only after its data has been merged into the database.
+	datasource, err := readDataSourceFile(filepath.Join(root, "datasource.json"))
+	if err != nil {
+		return errors.Wrap(err, "read data source")
+	}
+	if err := c.conn.View(func(tx *bolt.Tx) error {
+		return checkDataSource(tx, datasource.ID)
+	}); err != nil {
+		return errors.Wrap(err, "check data source")
 	}
 
 	idx := make(pkgIndex)
@@ -228,7 +246,7 @@ func (c *Connection) Put(root string) error {
 	// Write datasource and metadata in a final transaction.
 	// Metadata acts as a completion marker.
 	if err := c.conn.Update(func(tx *bolt.Tx) error {
-		if err := putDataSourceFile(tx, filepath.Join(root, "datasource.json")); err != nil {
+		if err := putDataSource(tx, datasource); err != nil {
 			return errors.Wrap(err, "put data source")
 		}
 
@@ -596,25 +614,42 @@ func putRoot(tx *bolt.Tx, data dataTypes.Data) error {
 	return nil
 }
 
-func putDataSourceFile(tx *bolt.Tx, path string) error {
+func readDataSourceFile(path string) (datasourceTypes.DataSource, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return errors.Wrapf(err, "open %s", path)
+		return datasourceTypes.DataSource{}, errors.Wrapf(err, "open %s", path)
 	}
 	defer f.Close()
 
 	var datasource datasourceTypes.DataSource
 	if err := json.UnmarshalRead(f, &datasource); err != nil {
-		return errors.Wrapf(err, "unmarshal %s", path)
+		return datasourceTypes.DataSource{}, errors.Wrapf(err, "unmarshal %s", path)
+	}
+	if datasource.ID == "" {
+		return datasourceTypes.DataSource{}, errors.Errorf("datasource at %s has empty id", path)
 	}
 
+	return datasource, nil
+}
+
+// checkDataSource returns an error unless id can be put into the datasource
+// bucket, which holds each data source once.
+func checkDataSource(tx *bolt.Tx, id sourceTypes.SourceID) error {
 	sb := tx.Bucket([]byte("datasource"))
 	if sb == nil {
 		return errors.Errorf("%q is not exists", "datasource")
 	}
 
-	if sb.Get([]byte(datasource.ID)) != nil {
-		return errors.Errorf("%q already exists", fmt.Sprintf("datasource -> %s", datasource.ID))
+	if sb.Get([]byte(id)) != nil {
+		return errors.Errorf("%q already exists", fmt.Sprintf("datasource -> %s", id))
+	}
+
+	return nil
+}
+
+func putDataSource(tx *bolt.Tx, datasource datasourceTypes.DataSource) error {
+	if err := checkDataSource(tx, datasource.ID); err != nil {
+		return errors.Wrap(err, "check data source")
 	}
 
 	bs, err := util.Marshal(datasource)
@@ -622,7 +657,7 @@ func putDataSourceFile(tx *bolt.Tx, path string) error {
 		return errors.Wrap(err, "marshal datasource")
 	}
 
-	if err := sb.Put([]byte(datasource.ID), bs); err != nil {
+	if err := tx.Bucket([]byte("datasource")).Put([]byte(datasource.ID), bs); err != nil {
 		return errors.Wrapf(err, "put %q", fmt.Sprintf("datasource -> %q", datasource.ID))
 	}
 

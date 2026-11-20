@@ -1,0 +1,61 @@
+{
+    "id": "ROOT-EMPTY",
+    "advisories": [
+        {
+            "content": {
+                "id": "ROOT-EMPTY"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:invalid"
+                }
+            ]
+        }
+    ],
+    "vulnerabilities": [
+        {
+            "content": {
+                "id": "CVE-EMPTY"
+            },
+            "segments": [
+                {
+                    "ecosystem": "test:invalid"
+                }
+            ]
+        }
+    ],
+    "detections": [
+        {
+            "ecosystem": "test:invalid",
+            "conditions": [
+                {
+                    "criteria": {
+                        "operator": "OR",
+                        "criterions": [
+                            {
+                                "type": "version",
+                                "version": {
+                                    "vulnerable": true,
+                                    "package": {
+                                        "type": "binary",
+                                        "binary": {
+                                            "name": "empty-pkg",
+                                            "architectures": [
+                                                "x86_64"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "data_source": {
+        "raws": [
+            "empty-datasource-id/ROOT-EMPTY.json"
+        ]
+    }
+}
