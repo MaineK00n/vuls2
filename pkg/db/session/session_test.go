@@ -65,7 +65,7 @@ func TestConfig_New(t *testing.T) {
 			name: "sqlite3",
 			fields: fields{
 				Type: "sqlite3",
-				Path: filepath.Join(t.TempDir(), "vuls.sqlite3"),
+				Path: "vuls.sqlite3",
 			},
 			wantErr: true,
 		},
