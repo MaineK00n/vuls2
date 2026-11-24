@@ -83,21 +83,21 @@ func TestBuild(t *testing.T) {
 			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
 				f.source("alpha", f.alpha.stray),
 			}},
-			wantErr: "not an ancestor",
+			wantErr: "commit not reachable from branch",
 		},
 		{
 			name: "commit missing from the repository",
 			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
 				f.source("alpha", "0123456789abcdef0123456789abcdef01234567"),
 			}},
-			wantErr: "history truncated or rewritten",
+			wantErr: "whose history may have been truncated or rewritten",
 		},
 		{
 			name: "unknown branch",
 			lock: build.Lock{Branch: "release", Sources: []build.Source{
 				f.source("alpha", f.alpha.nightly[0]),
 			}},
-			wantErr: "branch release is not in",
+			wantErr: "check refs/heads/release exists: branch not found",
 		},
 		{
 			name: "missing repository",
@@ -116,7 +116,7 @@ func TestBuild(t *testing.T) {
 				f.source("zeta", f.alpha.nightly[0]),
 				f.source("gamma", f.gamma.nightly[0]),
 			}},
-			wantErr: "download zeta",
+			wantErr: "checkout zeta",
 		},
 		{
 			// delta carries alpha's id and comes after it in the lock.

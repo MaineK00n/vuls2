@@ -12,7 +12,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"oras.land/oras-go/v2/registry/remote"
 
+	"github.com/MaineK00n/vuls-data-update/pkg/dotgit/contains"
 	"github.com/MaineK00n/vuls-data-update/pkg/dotgit/pull"
+	"github.com/MaineK00n/vuls-data-update/pkg/dotgit/show"
 	datasourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource"
 	repositoryTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/datasource/repository"
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
@@ -93,10 +95,10 @@ func WithDebug(debug bool) Option {
 
 // Build reads the lock at lockPath ("-" reads stdin), initializes a db and
 // adds every source of the lock at its pinned commit, one source at a time in
-// lock order: pull the dotgit, check that the commit belongs to the branch,
-// restore the tree at the commit, add it and remove it. Adding in lock order
-// makes the db the same for the same lock: a vulnerability root lists its
-// sources in the order they were added.
+// lock order: pull the dotgit with the tree of the commit written out, check
+// that the commit belongs to the branch, add it and remove it. Adding in lock
+// order makes the db the same for the same lock: a vulnerability root lists
+// its sources in the order they were added.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a failed build
@@ -141,7 +143,7 @@ func Build(lockPath string, opts ...Option) error {
 	}
 	// The kernel resolves "alias/../work" through the symlink, while
 	// filepath.Join cleans it lexically to "work". Resolve the created
-	// directory once so that downloads, restores and the cleanup below all
+	// directory once so that the pulls and the cleanup below all
 	// use the directory that was actually created.
 	workdir, err := filepath.EvalSymlinks(created)
 	if err != nil {
@@ -198,13 +200,11 @@ func Build(lockPath string, opts ...Option) error {
 
 	ids := make([]sourceTypes.SourceID, len(lock.Sources))
 	for i, s := range lock.Sources {
-		root, date, err := download(workdir, lock, s)
+		root, id, err := checkout(workdir, lock, s)
 		if err != nil {
-			return errors.Wrapf(err, "download %s", s.Name)
+			return errors.Wrapf(err, "checkout %s", s.Name)
 		}
-		if ids[i], err = restore(root, s, date); err != nil {
-			return errors.Wrapf(err, "restore %s", s.Name)
-		}
+		ids[i] = id
 
 		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(ids[i])), slog.String("commit", s.Commit))
 		start := time.Now()
@@ -266,74 +266,41 @@ func readLock(path string) (Lock, error) {
 	return l, nil
 }
 
-// download pulls one source's dotgit (its .git only, no worktree) into
-// workdir and checks that the lock commit belongs to the branch. It returns
-// the repository root and the author date of the commit.
-func download(workdir string, lock Lock, s Source) (string, time.Time, error) {
-	repository := s.Repository
-	ref, err := remote.NewRepository(repository)
+// checkout pulls one source's dotgit into workdir with the tree of the lock
+// commit written out, checks that the commit is on the lock branch, and
+// stamps datasource.json with the commit and its author date. It returns the
+// repository root and the source ID datasource.json declares.
+//
+// The branch is checked after the tree is written, as pkg/dotgit checks a
+// commit out only as part of a pull. A commit that is not in the dotgit
+// already fails the pull, so only one that is there but off the branch
+// costs a tree write.
+func checkout(workdir string, lock Lock, s Source) (string, sourceTypes.SourceID, error) {
+	ref, err := remote.NewRepository(s.Repository)
 	if err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "parse %s", repository)
+		return "", "", errors.Wrapf(err, "parse %s", s.Repository)
 	}
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
-	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", repository))
+	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", s.Repository), slog.String("commit", s.Commit))
 	start := time.Now()
-	if err := pull.Pull(repository, pull.WithDir(workdir), pull.WithCheckout(""), pull.WithRestore(false)); err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "pull %s", repository)
+	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(s.Commit), pull.WithRestore(true)); err != nil {
+		return "", "", errors.Wrapf(err, "pull %s at %s", s.Repository, s.Commit)
 	}
-	slog.Info("Pulled", slog.String("name", s.Name), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
+	if err := contains.Contains(root, s.Commit, contains.WithBranch(lock.Branch)); err != nil {
+		return "", "", errors.Wrapf(err, "check %s is on %s in %s", s.Commit, lock.Branch, s.Repository)
+	}
+	c, err := show.Show(root, s.Commit)
+	if err != nil {
+		return "", "", errors.Wrapf(err, "show %s in %s", s.Commit, s.Repository)
+	}
+	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, c.AuthorTime)
+	if err != nil {
+		return "", "", errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
+	}
+	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
-	// The branch must exist as exactly this ref: the lock has already
-	// rejected revision syntax, and this keeps a missing branch from being
-	// resolved as anything else by the revision-parsing commands below.
-	branch := fmt.Sprintf("refs/heads/%s", lock.Branch)
-	ok, err := branchExists(root, branch)
-	if err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "check branch %s in %s", lock.Branch, repository)
-	}
-	if !ok {
-		return "", time.Time{}, errors.Errorf("branch %s is not in %s", lock.Branch, repository)
-	}
-	ok, err = commitExists(root, s.Commit)
-	if err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "check commit %s in %s", s.Commit, repository)
-	}
-	if !ok {
-		return "", time.Time{}, errors.Errorf("commit %s is not in %s (history truncated or rewritten?)", s.Commit, repository)
-	}
-	ok, err = isAncestor(root, s.Commit, branch)
-	if err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "check %s is an ancestor of %s in %s", s.Commit, lock.Branch, repository)
-	}
-	if !ok {
-		return "", time.Time{}, errors.Errorf("commit %s is not an ancestor of %s in %s", s.Commit, lock.Branch, repository)
-	}
-
-	date, err := authorTime(root, s.Commit)
-	if err != nil {
-		return "", time.Time{}, errors.Wrapf(err, "author date of %s in %s", s.Commit, repository)
-	}
-
-	return root, date, nil
-}
-
-// restore writes the tree of the lock commit into the downloaded repository
-// and stamps datasource.json with the commit and its date. It returns the
-// source ID datasource.json declares. The dotgit has no worktree, and
-// checkout --force both detaches at the commit and writes the files in one
-// step.
-func restore(root string, s Source, date time.Time) (sourceTypes.SourceID, error) {
-	start := time.Now()
-	if _, err := git(root, "checkout", "--force", "--detach", s.Commit); err != nil {
-		return "", errors.Wrapf(err, "checkout %s", s.Commit)
-	}
-	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, date)
-	if err != nil {
-		return "", errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
-	}
-	slog.Info("Restored", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
-	return id, nil
+	return root, id, nil
 }
 
 // stampDataSource records the checked-out commit and its date as the

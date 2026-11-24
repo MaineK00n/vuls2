@@ -43,8 +43,8 @@ func NewCmd() *cobra.Command {
 		   ]}
 
 		Sources are built one at a time, in lock order: each is pulled from
-		its repository (the .git only), restored at
-		its commit (which must belong to the branch), stamped into
+		its repository with the tree of its commit written out (the commit
+		must belong to the branch), stamped into
 		datasource.json, added, and removed before the next one, so one
 		dotgit and one tree are on disk at a time. A boltdb is written to a
 		scratch file and renamed to --dbpath only after every source has
