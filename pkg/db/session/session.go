@@ -6,9 +6,7 @@ import (
 	"slices"
 
 	"github.com/pkg/errors"
-	"github.com/redis/rueidis"
 	bolt "go.etcd.io/bbolt"
-	"gorm.io/gorm"
 
 	attackTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack"
 	kindTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/attack/kind"
@@ -26,8 +24,6 @@ import (
 	sourceTypes "github.com/MaineK00n/vuls-data-update/pkg/extract/types/source"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/cache"
-	"github.com/MaineK00n/vuls2/pkg/db/session/internal/rdb"
-	"github.com/MaineK00n/vuls2/pkg/db/session/internal/redis"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
 
@@ -66,8 +62,6 @@ type Config struct {
 
 type StorageOptions struct {
 	BoltDB *bolt.Options
-	Redis  *rueidis.ClientOption
-	RDB    []gorm.Option
 }
 
 type Session struct {
@@ -80,18 +74,6 @@ func (c Config) New() (*Session, error) {
 		switch c.Type {
 		case "boltdb":
 			return &boltdb.Connection{Config: &boltdb.Config{Path: c.Path, Options: c.Options.BoltDB}}, nil
-		case "redis":
-			conf := c.Options.Redis
-			if conf == nil {
-				c, err := rueidis.ParseURL(c.Path)
-				if err != nil {
-					return nil, errors.Wrap(err, "parse redis url")
-				}
-				conf = &c
-			}
-			return &redis.Connection{Config: conf}, nil
-		case "sqlite3", "mysql", "postgres":
-			return &rdb.Connection{Config: &rdb.Config{Type: c.Type, Path: c.Path, Options: c.Options.RDB}}, nil
 		default:
 			return nil, errors.Errorf("%s is not support dbtype", c.Type)
 		}
@@ -123,10 +105,6 @@ func SchemaVersion(t string) (uint, error) {
 	switch t {
 	case "boltdb":
 		return boltdb.SchemaVersion, nil
-	case "redis":
-		return redis.SchemaVersion, nil
-	case "sqlite3", "mysql", "postgres":
-		return rdb.SchemaVersion, nil
 	default:
 		return 0, errors.Errorf("%s is not support dbtype", t)
 	}
