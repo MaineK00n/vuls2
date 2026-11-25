@@ -44,12 +44,12 @@ func NewCmd() *cobra.Command {
 
 		Sources are built one at a time, in lock order: each is pulled from
 		its repository with the tree of its commit written out (the commit
-		must belong to the branch), stamped into
-		datasource.json, added, and removed before the next one, so one
-		dotgit and one tree are on disk at a time. A boltdb is written to a
-		scratch file and renamed to --dbpath only after every source has
-		been added and verified, so a failed build leaves nothing behind.
-		For boltdb, --dbpath must not exist already.
+		must belong to the branch), stamped into datasource.json, added, and
+		removed before the next one, so one dotgit and one tree are on disk
+		at a time. A boltdb is written to a scratch file and renamed to
+		--dbpath only after every source has been added and verified, so a
+		failed build leaves nothing behind. For boltdb, --dbpath must not
+		exist already.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
