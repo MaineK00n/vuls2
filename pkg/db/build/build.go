@@ -97,8 +97,9 @@ func WithDebug(debug bool) Option {
 // adds every source of the lock at its pinned commit, one source at a time in
 // lock order: pull the dotgit with the tree of the commit written out, check
 // that the commit belongs to the branch, add it and remove it. Adding in lock
-// order makes the db the same for the same lock: a vulnerability root lists
-// its sources in the order they were added.
+// order makes the data in the db the same for the same lock: a vulnerability
+// root lists its sources in the order they were added. The file itself is not
+// the same byte for byte, as LastModified and the page layout vary.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a build that returns
