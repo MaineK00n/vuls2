@@ -10,8 +10,6 @@ import (
 )
 
 func TestReadLock(t *testing.T) {
-	const commit = "0123456789abcdef0123456789abcdef01234567"
-
 	tests := []struct {
 		name    string
 		in      string
@@ -30,8 +28,8 @@ func TestReadLock(t *testing.T) {
 			want: build.Lock{
 				Branch: "nightly",
 				Sources: []build.Source{
-					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: commit},
-					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Commit: commit},
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Commit: "0123456789abcdef0123456789abcdef01234567"},
 				},
 			},
 		},
@@ -47,8 +45,8 @@ func TestReadLock(t *testing.T) {
 			want: build.Lock{
 				Branch: "main",
 				Sources: []build.Source{
-					{Name: "alma-errata", Repository: "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: commit},
-					{Name: "test", Repository: "ghcr.io/example/fork:test-tag", Commit: commit},
+					{Name: "alma-errata", Repository: "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "test", Repository: "ghcr.io/example/fork:test-tag", Commit: "0123456789abcdef0123456789abcdef01234567"},
 				},
 			},
 		},
@@ -62,7 +60,7 @@ func TestReadLock(t *testing.T) {
 			}`,
 			want: build.Lock{
 				Branch:  "release/v1",
-				Sources: []build.Source{{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: commit}},
+				Sources: []build.Source{{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"}},
 			},
 		},
 		{
