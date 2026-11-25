@@ -28,8 +28,6 @@ import (
 	"github.com/MaineK00n/vuls2/pkg/db/session"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/boltdb"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/cache"
-	"github.com/MaineK00n/vuls2/pkg/db/session/internal/rdb"
-	"github.com/MaineK00n/vuls2/pkg/db/session/internal/redis"
 	"github.com/MaineK00n/vuls2/pkg/db/session/internal/test"
 	dbTypes "github.com/MaineK00n/vuls2/pkg/db/session/types"
 )
@@ -55,6 +53,38 @@ func TestConfig_New(t *testing.T) {
 				Options: session.StorageOptions{BoltDB: bbolt.DefaultOptions},
 			},
 		},
+		{
+			name: "redis",
+			fields: fields{
+				Type: "redis",
+				Path: "redis://127.0.0.1:6379/0",
+			},
+			wantErr: true,
+		},
+		{
+			name: "sqlite3",
+			fields: fields{
+				Type: "sqlite3",
+				Path: "vuls.sqlite3",
+			},
+			wantErr: true,
+		},
+		{
+			name: "mysql",
+			fields: fields{
+				Type: "mysql",
+				Path: "vuls@tcp(127.0.0.1:3306)/vuls",
+			},
+			wantErr: true,
+		},
+		{
+			name: "postgres",
+			fields: fields{
+				Type: "postgres",
+				Path: "host=127.0.0.1 user=vuls dbname=vuls sslmode=disable",
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,6 +98,9 @@ func TestConfig_New(t *testing.T) {
 			got, err := c.New()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Config.New() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil {
 				return
 			}
 
@@ -178,28 +211,28 @@ func TestSchemaVersion(t *testing.T) {
 			args: args{
 				t: "redis",
 			},
-			want: redis.SchemaVersion,
+			wantErr: true,
 		},
 		{
 			name: "sqlite3",
 			args: args{
 				t: "sqlite3",
 			},
-			want: rdb.SchemaVersion,
+			wantErr: true,
 		},
 		{
 			name: "mysql",
 			args: args{
 				t: "mysql",
 			},
-			want: rdb.SchemaVersion,
+			wantErr: true,
 		},
 		{
 			name: "postgres",
 			args: args{
 				t: "postgres",
 			},
-			want: rdb.SchemaVersion,
+			wantErr: true,
 		},
 		{
 			name: "unknown",
