@@ -45,11 +45,11 @@ func NewCmd() *cobra.Command {
 		its repository with the tree of its commit written out (the commit
 		must belong to the branch), stamped into datasource.json, added, and
 		removed before the next one, so one dotgit and one tree are on disk
-		at a time. A boltdb is written to a scratch file and renamed to
+		at a time. The db is written to a scratch file and renamed to
 		--dbpath only after every source has been added and verified, so a
 		build that fails with an error leaves nothing behind (one killed by
-		a signal may leave its work directory and scratch file). For
-		boltdb, --dbpath must not exist already.
+		a signal may leave its work directory and scratch file). --dbpath
+		must not exist already.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build db-nightly.lock.json --dbpath ./vuls.db
@@ -67,7 +67,7 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
+	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
 	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory under which this build's work directory is created and removed afterwards (default: the system temporary directory)")

@@ -101,11 +101,10 @@ func WithDebug(debug bool) Option {
 // root lists its sources in the order they were added. The file itself is not
 // the same byte for byte, as LastModified and the page layout vary.
 //
-// A boltdb is built in a temporary file next to dbpath and renamed to dbpath
+// The db is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a build that returns
-// an error leaves no half-built db behind. Other db types are built in place.
-// A process killed by a signal skips that cleanup and may leave the work
-// directory and the scratch db behind.
+// an error leaves no half-built db behind. A process killed by a signal skips
+// that cleanup and may leave the work directory and the scratch db behind.
 func Build(lockPath string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -117,25 +116,27 @@ func Build(lockPath string, opts ...Option) error {
 		o.apply(options)
 	}
 
+	if options.dbtype != "boltdb" {
+		return errors.Errorf("unexpected dbtype. accepts: %q, actual: %q", []string{"boltdb"}, options.dbtype)
+	}
+
 	lock, err := readLock(lockPath)
 	if err != nil {
 		return errors.Wrap(err, "read lock")
 	}
 
-	// The boltdb file must not exist yet, so that nothing is overwritten.
-	// Lstat, so that a dangling symlink counts as existing.
-	if options.dbtype == "boltdb" {
-		// The scratch db is renamed to dbpath at the end, so dbpath must name
-		// a file: "out/" would only fail at that rename, after every source.
-		switch _, base := filepath.Split(options.dbpath); base {
-		case "", ".", "..":
-			return errors.Errorf("db %s does not name a file", options.dbpath)
-		}
-		if _, err := os.Lstat(options.dbpath); err == nil {
-			return errors.Errorf("db %s already exists", options.dbpath)
-		} else if !os.IsNotExist(err) {
-			return errors.Wrapf(err, "lstat %s", options.dbpath)
-		}
+	// The scratch db is renamed to dbpath at the end, so dbpath must name a
+	// file: "out/" would only fail at that rename, after every source.
+	switch _, base := filepath.Split(options.dbpath); base {
+	case "", ".", "..":
+		return errors.Errorf("db %s does not name a file", options.dbpath)
+	}
+	// The db file must not exist yet, so that nothing is overwritten. Lstat,
+	// so that a dangling symlink counts as existing.
+	if _, err := os.Lstat(options.dbpath); err == nil {
+		return errors.Errorf("db %s already exists", options.dbpath)
+	} else if !os.IsNotExist(err) {
+		return errors.Wrapf(err, "lstat %s", options.dbpath)
 	}
 
 	// Every invocation gets its own work directory, under options.dir when
@@ -167,42 +168,37 @@ func Build(lockPath string, opts ...Option) error {
 		}
 	}()
 
-	// The db is built at target; for boltdb that is a scratch file, unique
-	// to this invocation so concurrent builds of the same dbpath cannot
-	// touch each other's, renamed over dbpath at the end.
-	dbpath, target := options.dbpath, options.dbpath
-	if options.dbtype == "boltdb" {
-		// The scratch db must sit in the directory dbpath is renamed into,
-		// or the final rename can cross filesystems. filepath.Dir would clean
-		// "alias/../vuls.db" lexically to "." while the kernel follows alias,
-		// so split without cleaning: CreateTemp and Rename hand the string to
-		// the kernel as is, and both land in the same directory.
-		dir, base := filepath.Split(options.dbpath)
-		if dir == "" {
-			dir = "."
-		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return errors.Wrapf(err, "mkdir %s", dir)
-		}
-
-		f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.build-*", base))
-		if err != nil {
-			return errors.Wrapf(err, "create scratch db in %s", dir)
-		}
-		target = f.Name()
-		if err := f.Close(); err != nil {
-			return errors.Wrapf(err, "close %s", target)
-		}
-		// The scratch db is renamed away on success; on any other exit it
-		// must not be left next to dbpath.
-		defer func() {
-			if err := os.RemoveAll(target); err != nil && !os.IsNotExist(err) {
-				slog.Warn("Failed to remove scratch db", slog.String("dbpath", target), slog.String("err", err.Error()))
-			}
-		}()
+	// The db is built at target, a scratch file unique to this invocation so
+	// concurrent builds of the same dbpath cannot touch each other's, renamed
+	// over dbpath at the end. It must sit in the directory dbpath is renamed
+	// into, or the final rename can cross filesystems. filepath.Dir would
+	// clean "alias/../vuls.db" lexically to "." while the kernel follows
+	// alias, so split without cleaning: CreateTemp and Rename hand the string
+	// to the kernel as is, and both land in the same directory.
+	dir, base := filepath.Split(options.dbpath)
+	if dir == "" {
+		dir = "."
 	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return errors.Wrapf(err, "mkdir %s", dir)
+	}
+	f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.build-*", base))
+	if err != nil {
+		return errors.Wrapf(err, "create scratch db in %s", dir)
+	}
+	target := f.Name()
+	if err := f.Close(); err != nil {
+		return errors.Wrapf(err, "close %s", target)
+	}
+	// The scratch db is renamed away on success; on any other exit it must not
+	// be left next to dbpath.
+	defer func() {
+		if err := os.RemoveAll(target); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to remove scratch db", slog.String("dbpath", target), slog.String("err", err.Error()))
+		}
+	}()
 
-	slog.Info("Initialize DB", dbLogAttr(options.dbtype, target))
+	slog.Info("Initialize DB", slog.String("dbpath", target))
 	if err := dbInit.Init(dbInit.WithDBType(options.dbtype), dbInit.WithDBPath(target), dbInit.WithStorageOptions(options.storageopts), dbInit.WithDebug(options.debug)); err != nil {
 		return errors.Wrap(err, "init db")
 	}
@@ -234,24 +230,12 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrap(err, "verify")
 	}
 
-	if target != dbpath {
-		if err := os.Rename(target, dbpath); err != nil {
-			return errors.Wrapf(err, "rename %s to %s", target, dbpath)
-		}
+	if err := os.Rename(target, options.dbpath); err != nil {
+		return errors.Wrapf(err, "rename %s to %s", target, options.dbpath)
 	}
-	slog.Info("Built", dbLogAttr(options.dbtype, dbpath), slog.Int("sources", len(lock.Sources)))
+	slog.Info("Built", slog.String("dbpath", options.dbpath), slog.Int("sources", len(lock.Sources)))
 
 	return nil
-}
-
-// dbLogAttr names the db in a log line: the path of a boltdb file, or only
-// the type for the others, whose dbpath is a connection string that may
-// carry a password.
-func dbLogAttr(dbtype, dbpath string) slog.Attr {
-	if dbtype == "boltdb" {
-		return slog.String("dbpath", dbpath)
-	}
-	return slog.String("dbtype", dbtype)
 }
 
 // readLock reads and validates the lock at path, or from stdin for "-".

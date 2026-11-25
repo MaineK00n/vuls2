@@ -178,6 +178,33 @@ func TestBuild(t *testing.T) {
 func TestBuild_Paths(t *testing.T) {
 	f := newFixture(t)
 
+	t.Run("db type other than boltdb is refused", func(t *testing.T) {
+		// A connection string taken for a path would have its directory
+		// part created and a scratch file put there before the db init
+		// failed; the type is refused before anything touches the disk.
+		dir := t.TempDir()
+		t.Chdir(dir)
+		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
+			f.source("beta", f.beta.nightly[0]),
+		}}
+		work := filepath.Join(t.TempDir(), "work")
+
+		err := runBuild(t, lock, build.WithDBType("redis"), build.WithDBPath("redis://:secret@127.0.0.1:6379/0"), build.WithDir(work))
+		if err == nil || !strings.Contains(err.Error(), `unexpected dbtype. accepts: ["boltdb"], actual: "redis"`) {
+			t.Fatalf("Build() error = %v, want unexpected dbtype", err)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) > 0 {
+			t.Errorf("created in the working directory: %v", entries)
+		}
+		if _, err := os.Lstat(work); !os.IsNotExist(err) {
+			t.Errorf("work directory created before the check: %v", err)
+		}
+	})
+
 	t.Run("existing db is refused", func(t *testing.T) {
 		// Nothing is overwritten: a db path that already exists (also as a
 		// dangling symlink) stops the build before any work.
