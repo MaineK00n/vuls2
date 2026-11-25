@@ -124,6 +124,12 @@ func Build(lockPath string, opts ...Option) error {
 	// The boltdb file must not exist yet, so that nothing is overwritten.
 	// Lstat, so that a dangling symlink counts as existing.
 	if options.dbtype == "boltdb" {
+		// The scratch db is renamed to dbpath at the end, so dbpath must name
+		// a file: "out/" would only fail at that rename, after every source.
+		switch _, base := filepath.Split(options.dbpath); base {
+		case "", ".", "..":
+			return errors.Errorf("db %s does not name a file", options.dbpath)
+		}
 		if _, err := os.Lstat(options.dbpath); err == nil {
 			return errors.Errorf("db %s already exists", options.dbpath)
 		} else if !os.IsNotExist(err) {

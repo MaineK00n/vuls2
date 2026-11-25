@@ -221,6 +221,39 @@ func TestBuild_Paths(t *testing.T) {
 		}
 	})
 
+	t.Run("db path without a file name is refused", func(t *testing.T) {
+		// The scratch db is renamed to dbpath at the end; a path naming no
+		// file must stop the build before anything is pulled, not at that
+		// rename.
+		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
+			f.source("beta", f.beta.nightly[0]),
+		}}
+		tests := []struct {
+			name   string
+			suffix string
+		}{
+			{name: "trailing slash", suffix: "/"},
+			{name: "dot", suffix: "/."},
+			{name: "dot dot", suffix: "/.."},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				out := filepath.Join(t.TempDir(), "out")
+				work := filepath.Join(t.TempDir(), "work")
+
+				err := runBuild(t, lock, build.WithDBPath(fmt.Sprintf("%s%s", out, tt.suffix)), build.WithDir(work))
+				if err == nil || !strings.Contains(err.Error(), "does not name a file") {
+					t.Fatalf("Build() error = %v, want does not name a file", err)
+				}
+				for _, p := range []string{out, work} {
+					if _, err := os.Lstat(p); !os.IsNotExist(err) {
+						t.Errorf("%s created before the check: %v", p, err)
+					}
+				}
+			})
+		}
+	})
+
 	t.Run("paths through a symlink and ..", func(t *testing.T) {
 		// alias points to real/sub, so the kernel resolves alias/../x to
 		// real/x while a lexical clean would give x next to alias.
