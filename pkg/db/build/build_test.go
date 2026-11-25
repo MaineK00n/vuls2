@@ -104,7 +104,7 @@ func TestBuild(t *testing.T) {
 			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
 				f.source("zeta", f.alpha.nightly[0]),
 			}},
-			wantErr: "pull",
+			wantErr: "fetch manifest",
 		},
 		{
 			// The sources before the failure have been added to the scratch
