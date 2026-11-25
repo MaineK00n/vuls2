@@ -14,7 +14,6 @@ import (
 
 func NewCmd() *cobra.Command {
 	options := struct {
-		lock   string
 		dbtype utilflag.DBType
 		dbpath string
 		dir    string
@@ -26,11 +25,11 @@ func NewCmd() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "build",
+		Use:   "build <lock file>",
 		Short: "build vuls db from a lock file",
 		Long: heredoc.Doc(`
-		Build a vuls db from a lock file: the extracted dotgit of every data
-		source, pinned to one commit each.
+		Build a vuls db from a lock file ("-" reads stdin): the extracted
+		dotgit of every data source, pinned to one commit each.
 
 		  {"branch": "nightly",
 		   "sources": [
@@ -52,12 +51,12 @@ func NewCmd() *cobra.Command {
 		exist already.
 		`),
 		Example: heredoc.Doc(`
-		$ vuls db build --lock db-nightly.lock.json --dbpath ./vuls.db
-		$ jq '.sources |= map(select(.name == "alma-errata"))' db-nightly.lock.json | vuls db build --lock - --dbpath ./mini.db
+		$ vuls db build db-nightly.lock.json --dbpath ./vuls.db
+		$ jq '.sources |= map(select(.name == "alma-errata"))' db-nightly.lock.json | vuls db build - --dbpath ./mini.db
 		`),
-		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := db.Build(options.lock,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := db.Build(args[0],
 				db.WithDBType(options.dbtype.String()), db.WithDBPath(options.dbpath),
 				db.WithDir(options.dir), db.WithDebug(options.debug),
 			); err != nil {
@@ -67,8 +66,6 @@ func NewCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&options.lock, "lock", "", "", "lock file to build from (\"-\" reads stdin)")
-	_ = cmd.MarkFlagRequired("lock")
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb, redis, sqlite3, mysql, postgres])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
