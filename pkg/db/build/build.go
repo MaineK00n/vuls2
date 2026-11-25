@@ -305,7 +305,7 @@ func checkout(workdir string, lock Lock, s Source) (string, sourceTypes.SourceID
 	}
 	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, c.AuthorTime)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "stamp %s", filepath.Join(root, "datasource.json"))
+		return "", "", errors.Wrap(err, "stamp datasource.json")
 	}
 	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
