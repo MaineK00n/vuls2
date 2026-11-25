@@ -77,8 +77,8 @@ func (o dirOption) apply(opts *options) {
 
 // WithDir sets the directory under which the build creates its own work
 // directory: the dotgits are pulled into it, each tree is removed as soon
-// as it has been added, and the work directory is removed when the build
-// ends. Empty means the system temporary directory.
+// as it has been added, and the work directory is removed when Build
+// returns. Empty means the system temporary directory.
 func WithDir(dir string) Option {
 	return dirOption(dir)
 }
@@ -101,8 +101,10 @@ func WithDebug(debug bool) Option {
 // its sources in the order they were added.
 //
 // A boltdb is built in a temporary file next to dbpath and renamed to dbpath
-// only when every source has been added and verified, so a failed build
-// leaves no half-built db behind. Other db types are built in place.
+// only when every source has been added and verified, so a build that returns
+// an error leaves no half-built db behind. Other db types are built in place.
+// A process killed by a signal skips that cleanup and may leave the work
+// directory and the scratch db behind.
 func Build(lockPath string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -130,8 +132,8 @@ func Build(lockPath string, opts ...Option) error {
 	}
 
 	// Every invocation gets its own work directory, under options.dir when
-	// given, and removes it however the build ends, so a failure cannot leave
-	// extracted trees behind.
+	// given, and removes it when Build returns, error or not, so a failure
+	// cannot leave extracted trees behind.
 	if options.dir != "" {
 		if err := os.MkdirAll(options.dir, 0755); err != nil {
 			return errors.Wrapf(err, "mkdir %s", options.dir)

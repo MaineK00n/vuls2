@@ -47,8 +47,9 @@ func NewCmd() *cobra.Command {
 		removed before the next one, so one dotgit and one tree are on disk
 		at a time. A boltdb is written to a scratch file and renamed to
 		--dbpath only after every source has been added and verified, so a
-		failed build leaves nothing behind. For boltdb, --dbpath must not
-		exist already.
+		build that fails with an error leaves nothing behind (one killed by
+		a signal may leave its work directory and scratch file). For
+		boltdb, --dbpath must not exist already.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build db-nightly.lock.json --dbpath ./vuls.db
