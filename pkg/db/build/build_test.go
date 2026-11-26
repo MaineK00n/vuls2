@@ -295,28 +295,21 @@ func TestBuild_Paths(t *testing.T) {
 			f.source("alpha", f.alpha.nightly[0]),
 			f.source("beta", f.beta.nightly[0]),
 		}}
-		dbpath := fmt.Sprintf("%s/../vuls.db", filepath.Join(root, "alias"))
+		dbpath := fmt.Sprintf("%s/../new/vuls.db", filepath.Join(root, "alias"))
 		dir := fmt.Sprintf("%s/../work", filepath.Join(root, "alias"))
 		if err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(dir)); err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
 
-		if _, err := os.Stat(filepath.Join(root, "real", "vuls.db")); err != nil {
+		if _, err := os.Stat(filepath.Join(root, "real", "new", "vuls.db")); err != nil {
 			t.Errorf("db not at the resolved path: %v", err)
 		}
-		assertNoScratch(t, filepath.Join(root, "real", "vuls.db"))
+		assertNoScratch(t, filepath.Join(root, "real", "new", "vuls.db"))
 		assertEmptyDir(t, filepath.Join(root, "real", "work"))
-		for _, p := range []string{filepath.Join(root, "vuls.db"), filepath.Join(root, "work")} {
+		for _, p := range []string{filepath.Join(root, "new"), filepath.Join(root, "work")} {
 			if _, err := os.Lstat(p); !os.IsNotExist(err) {
 				t.Errorf("%s created at the lexically cleaned path: %v", p, err)
 			}
-		}
-		matches, err := filepath.Glob(filepath.Join(root, ".vuls.db.build-*"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(matches) > 0 {
-			t.Errorf("scratch db created at the lexically cleaned path: %v", matches)
 		}
 	})
 

@@ -173,14 +173,20 @@ func Build(lockPath string, opts ...Option) error {
 	// over dbpath at the end. It must sit in the directory dbpath is renamed
 	// into, or the final rename can cross filesystems. filepath.Dir would
 	// clean "alias/../vuls.db" lexically to "." while the kernel follows
-	// alias, so split without cleaning: CreateTemp and Rename hand the string
-	// to the kernel as is, and both land in the same directory.
+	// alias, so split without cleaning, and resolve the directory once it
+	// exists: the scratch db then sits where Rename lands, and the db init,
+	// which makes filepath.Dir of its path, finds that directory in place
+	// instead of making one next to alias.
 	dir, base := filepath.Split(options.dbpath)
 	if dir == "" {
 		dir = "."
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return errors.Wrapf(err, "mkdir %s", dir)
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return errors.Wrapf(err, "resolve the directory of %s", options.dbpath)
 	}
 	f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.build-*", base))
 	if err != nil {
