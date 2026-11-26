@@ -78,7 +78,10 @@ func (o dirOption) apply(opts *options) {
 // WithDir sets the directory under which the build creates its own work
 // directory: the dotgits are pulled into it, each tree is removed as soon
 // as it has been added, and the work directory is removed when Build
-// returns. Empty means the system temporary directory.
+// returns. It defaults to the vuls cache directory, where the db goes by
+// default, rather than the system temporary directory, which may be tmpfs
+// and would hold the largest trees in memory. Empty means the system
+// temporary directory.
 func WithDir(dir string) Option {
 	return dirOption(dir)
 }
@@ -110,6 +113,7 @@ func Build(lockPath string, opts ...Option) error {
 		dbtype:      "boltdb",
 		dbpath:      filepath.Join(utilos.UserCacheDir(), "vuls.db"),
 		storageopts: session.StorageOptions{BoltDB: bolt.DefaultOptions},
+		dir:         utilos.UserCacheDir(),
 		debug:       false,
 	}
 	for _, o := range opts {
@@ -139,9 +143,9 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrapf(err, "lstat %s", options.dbpath)
 	}
 
-	// Every invocation gets its own work directory, under options.dir when
-	// given, and removes it when Build returns, error or not, so a failure
-	// cannot leave extracted trees behind.
+	// Every invocation gets its own work directory, under options.dir (the
+	// system temporary directory when empty), and removes it when Build
+	// returns, error or not, so a failure cannot leave extracted trees behind.
 	if options.dir != "" {
 		if err := os.MkdirAll(options.dir, 0755); err != nil {
 			return errors.Wrapf(err, "mkdir %s", options.dir)

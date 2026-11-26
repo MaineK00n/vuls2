@@ -21,6 +21,7 @@ func NewCmd() *cobra.Command {
 	}{
 		dbtype: utilflag.DBTypeBoltDB,
 		dbpath: filepath.Join(utilos.UserCacheDir(), "vuls.db"),
+		dir:    utilos.UserCacheDir(),
 		debug:  false,
 	}
 
@@ -70,7 +71,7 @@ func NewCmd() *cobra.Command {
 	cmd.Flags().VarP(&options.dbtype, "dbtype", "", "vuls db type (default: boltdb, accepts: [boltdb])")
 	_ = cmd.RegisterFlagCompletionFunc("dbtype", utilflag.DBTypeCompletion)
 	cmd.Flags().StringVarP(&options.dbpath, "dbpath", "", options.dbpath, "vuls db path")
-	cmd.Flags().StringVarP(&options.dir, "dir", "", "", "directory under which this build's work directory is created and removed afterwards (default: the system temporary directory)")
+	cmd.Flags().StringVarP(&options.dir, "dir", "", options.dir, "directory under which this build's work directory is created and removed afterwards (the pulled dotgits and restored trees go there, so avoid a tmpfs)")
 	cmd.Flags().BoolVarP(&options.debug, "debug", "d", options.debug, "debug mode")
 
 	return cmd
