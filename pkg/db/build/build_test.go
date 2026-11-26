@@ -386,7 +386,9 @@ func runBuild(t *testing.T, lock build.Lock, opts ...build.Option) error {
 	}
 }
 
-// commitDate is the author date of the n-th commit newExtracted makes.
+// commitDate is the author date of the n-th commit newExtracted makes. Its
+// committer date is 12 hours later, so a build that read the committer date
+// would not match.
 func commitDate(n int) time.Time {
 	return time.Date(2026, 1, n, 0, 0, 0, 0, time.UTC)
 }
@@ -446,7 +448,7 @@ func newExtracted(t *testing.T, name, id string, n int) extracted {
 	run := func(date time.Time, args ...string) string {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"}, args...)...)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_AUTHOR_DATE=%s", date.Format(time.RFC3339)), fmt.Sprintf("GIT_COMMITTER_DATE=%s", date.Format(time.RFC3339)), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GIT_AUTHOR_DATE=%s", date.Format(time.RFC3339)), fmt.Sprintf("GIT_COMMITTER_DATE=%s", date.Add(12*time.Hour).Format(time.RFC3339)), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 		bs, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s: %v\n%s", cmd.String(), err, bs)
