@@ -193,16 +193,16 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrapf(err, "create scratch db in %s", dir)
 	}
 	target := f.Name()
-	if err := f.Close(); err != nil {
-		return errors.Wrapf(err, "close %s", target)
-	}
-	// The scratch db is renamed away on success; on any other exit it must not
-	// be left next to dbpath.
+	// The scratch db is renamed away on success; on any other exit, a failed
+	// close included, it must not be left next to dbpath.
 	defer func() {
 		if err := os.RemoveAll(target); err != nil && !os.IsNotExist(err) {
 			slog.Warn("Failed to remove scratch db", slog.String("dbpath", target), slog.String("err", err.Error()))
 		}
 	}()
+	if err := f.Close(); err != nil {
+		return errors.Wrapf(err, "close %s", target)
+	}
 
 	slog.Info("Initialize DB", slog.String("dbpath", target))
 	if err := dbInit.Init(dbInit.WithDBType(options.dbtype), dbInit.WithDBPath(target), dbInit.WithStorageOptions(options.storageopts), dbInit.WithDebug(options.debug)); err != nil {
