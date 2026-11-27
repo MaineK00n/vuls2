@@ -500,8 +500,13 @@ func TestBuild_WriteLock(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "checkout zeta") {
 			t.Fatalf("Build() error = %v, want checkout zeta", err)
 		}
-		if _, err := os.Lstat(out); !os.IsNotExist(err) {
-			t.Errorf("lock written despite the failure: %v", err)
+		// Neither the lock nor its scratch file is left.
+		entries, err := os.ReadDir(filepath.Dir(out))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) > 0 {
+			t.Errorf("left next to the lock despite the failure: %v", entries)
 		}
 	})
 
@@ -552,6 +557,19 @@ func TestBuild_WriteLock(t *testing.T) {
 					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "out")
 				},
 				wantErr: "is a directory",
+			},
+			{
+				name: "a named pipe",
+				paths: func(t *testing.T, dir string) (string, string) {
+					if _, err := exec.LookPath("mkfifo"); err != nil {
+						t.Skip("mkfifo is not installed")
+					}
+					if bs, err := exec.Command("mkfifo", filepath.Join(dir, "fifo")).CombinedOutput(); err != nil {
+						t.Fatalf("mkfifo: %v\n%s", err, bs)
+					}
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "fifo")
+				},
+				wantErr: "is not a regular file",
 			},
 			{
 				name: "trailing slash",
@@ -606,13 +624,13 @@ func TestBuild_WriteLock(t *testing.T) {
 	})
 
 	t.Run("into a directory made for it", func(t *testing.T) {
-		// The lock's directory is made, as the db's is.
+		// The lock's directory is made, as the db's is, apart from it.
 		lockPath := writeLock(t, build.Lock{Sources: []build.Source{
 			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly"},
 		}})
 		dir := t.TempDir()
 
-		if err := build.Build(lockPath, build.WithDBPath(filepath.Join(dir, "out", "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")), build.WithWriteLock(filepath.Join(dir, "out", "built.lock.json"))); err != nil {
+		if err := build.Build(lockPath, build.WithDBPath(filepath.Join(dir, "db", "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")), build.WithWriteLock(filepath.Join(dir, "out", "built.lock.json"))); err != nil {
 			t.Fatalf("Build() error = %v", err)
 		}
 
@@ -621,6 +639,35 @@ func TestBuild_WriteLock(t *testing.T) {
 		}}
 		if diff := cmp.Diff(want, readLockFile(t, filepath.Join(dir, "out", "built.lock.json"))); diff != "" {
 			t.Errorf("written lock (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("through a symlinked directory and ..", func(t *testing.T) {
+		// alias points to real/sub, so the kernel resolves alias/../x to
+		// real/x while a lexical clean would give x next to alias.
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "real", "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, "real", "sub"), filepath.Join(root, "alias")); err != nil {
+			t.Fatal(err)
+		}
+		lockPath := writeLock(t, build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly"},
+		}})
+
+		if err := build.Build(lockPath, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")), build.WithWriteLock(fmt.Sprintf("%s/../built.lock.json", filepath.Join(root, "alias")))); err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		want := build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly", Commit: f.alpha.nightly[1]},
+		}}
+		if diff := cmp.Diff(want, readLockFile(t, filepath.Join(root, "real", "built.lock.json"))); diff != "" {
+			t.Errorf("lock at the resolved path (-want +got):\n%s", diff)
+		}
+		if _, err := os.Lstat(filepath.Join(root, "built.lock.json")); !os.IsNotExist(err) {
+			t.Errorf("lock written at the lexically cleaned path: %v", err)
 		}
 	})
 

@@ -130,8 +130,8 @@ func WithDebug(debug bool) Option {
 // only when every source has been added and verified, so a build that returns
 // an error leaves no half-built db behind. A lock to write (WithWriteLock) is
 // written to a scratch file next to its path before that rename and renamed
-// over its path after it; only a failure of that last rename returns an error
-// with the db in place. A process killed by a signal skips that cleanup and
+// over its path after it; only a failure of that last rename, or of writing
+// the lock to stdout ("-"), returns an error with the db in place. A process killed by a signal skips that cleanup and
 // may leave the work directory and the scratch files behind.
 func Build(lockPath string, opts ...Option) error {
 	options := &options{
@@ -337,9 +337,10 @@ type lockOutput struct {
 // prepareLock settles where the lock given as path is written, and fails for
 // a place it cannot go to, so that this shows before the build rather than
 // after every source. The lock goes to path, or to the file a symlink at path
-// points to, so that a lock read through a symlink is updated where it lives.
-// Its directory is made, as the db's is. A directory is refused, and so is the
-// db path (compared after resolving both, so "./vuls.db", an absolute path or
+// points to, so that a lock read through a symlink is updated where it lives
+// (a dangling one is refused). Its directory is made, as the db's is. A
+// directory or another file that is not a regular one is refused, and so is
+// the db path (compared after resolving both, so "./vuls.db", an absolute path or
 // a symlinked directory cannot pass for another file). The scratch file is
 // created here, so a directory that cannot be written to fails here too. An
 // existing file keeps its mode; a new one gets 0644.
@@ -354,8 +355,11 @@ func prepareLock(path, dbpath string) (lockOutput, error) {
 				return lockOutput{}, errors.Wrapf(err, "stat %s", out.path)
 			}
 		}
-		if fi.IsDir() {
+		switch {
+		case fi.IsDir():
 			return lockOutput{}, errors.Errorf("%s is a directory", path)
+		case !fi.Mode().IsRegular():
+			return lockOutput{}, errors.Errorf("%s is not a regular file", path)
 		}
 		out.mode = fi.Mode().Perm()
 	} else if !os.IsNotExist(err) {
@@ -399,11 +403,19 @@ func prepareLock(path, dbpath string) (lockOutput, error) {
 	return out, nil
 }
 
-// realDir returns dir as an absolute path with every symlink resolved.
+// realDir returns dir as an absolute path with every symlink resolved. The
+// symlinks are resolved before the path is made absolute, which cleans it
+// lexically: "alias/.." is the parent of where alias points, as the kernel
+// takes it, not ".". The working directory Abs prepends may itself be reached
+// through a symlink, so the result is resolved once more.
 func realDir(dir string) (string, error) {
-	abs, err := filepath.Abs(dir)
+	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return "", errors.Wrapf(err, "abs %s", dir)
+		return "", errors.Wrapf(err, "resolve %s", dir)
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", errors.Wrapf(err, "abs %s", resolved)
 	}
 	return filepath.EvalSymlinks(abs)
 }
