@@ -99,10 +99,11 @@ func WithDebug(debug bool) Option {
 // Build reads the lock at lockPath ("-" reads stdin), initializes a db and
 // adds every source of the lock at its pinned commit, one source at a time in
 // lock order: pull the dotgit with the tree of the commit written out, check
-// that the commit belongs to the branch, add it and remove it. Adding in lock
-// order makes the data in the db the same for the same lock: a vulnerability
-// root lists its sources in the order they were added. The file itself is not
-// the same byte for byte, as LastModified and the page layout vary.
+// that the commit belongs to the source's branch, add it and remove it.
+// Adding in lock order makes the data in the db the same for the same lock: a
+// vulnerability root lists its sources in the order they were added. The file
+// itself is not the same byte for byte, as LastModified and the page layout
+// vary.
 //
 // The db is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a build that returns
@@ -215,7 +216,7 @@ func Build(lockPath string, opts ...Option) error {
 
 	ids := make([]sourceTypes.SourceID, len(lock.Sources))
 	for i, s := range lock.Sources {
-		root, id, err := checkout(workdir, lock, s)
+		root, id, err := checkout(workdir, s)
 		if err != nil {
 			return errors.Wrapf(err, "checkout %s", s.Name)
 		}
@@ -270,7 +271,7 @@ func readLock(path string) (Lock, error) {
 }
 
 // checkout pulls one source's dotgit into workdir with the tree of the lock
-// commit written out, checks that the commit is on the lock branch, and
+// commit written out, checks that the commit is on the source's branch, and
 // stamps datasource.json with the commit and its author date. It returns the
 // repository root and the source ID datasource.json declares.
 //
@@ -278,20 +279,20 @@ func readLock(path string) (Lock, error) {
 // commit out only as part of a pull. A commit that is not in the dotgit
 // already fails the pull, so only one that is there but off the branch
 // costs a tree write.
-func checkout(workdir string, lock Lock, s Source) (string, sourceTypes.SourceID, error) {
+func checkout(workdir string, s Source) (string, sourceTypes.SourceID, error) {
 	ref, err := remote.NewRepository(s.Repository)
 	if err != nil {
 		return "", "", errors.Wrapf(err, "parse %s", s.Repository)
 	}
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
-	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", s.Repository), slog.String("commit", s.Commit))
+	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", s.Repository), slog.String("branch", s.Branch), slog.String("commit", s.Commit))
 	start := time.Now()
 	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(s.Commit), pull.WithRestore(true)); err != nil {
 		return "", "", errors.Wrapf(err, "pull %s at %s", s.Repository, s.Commit)
 	}
-	if err := contains.Contains(root, s.Commit, contains.WithBranch(lock.Branch)); err != nil {
-		return "", "", errors.Wrapf(err, "check %s is on %s in %s", s.Commit, lock.Branch, s.Repository)
+	if err := contains.Contains(root, s.Commit, contains.WithBranch(s.Branch)); err != nil {
+		return "", "", errors.Wrapf(err, "check %s is on %s in %s", s.Commit, s.Branch, s.Repository)
 	}
 	c, err := show.Show(root, s.Commit)
 	if err != nil {

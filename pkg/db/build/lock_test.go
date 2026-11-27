@@ -19,75 +19,81 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "valid",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
-					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			want: build.Lock{
-				Branch: "nightly",
 				Sources: []build.Source{
-					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"},
-					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
 				},
 			},
 		},
 		{
 			name: "sources from different registries and tags",
 			in: `{
-				"branch": "main",
 				"sources": [
-					{"name": "alma-errata", "repository": "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
-					{"name": "test", "repository": "ghcr.io/example/fork:test-tag", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "main", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "test", "repository": "ghcr.io/example/fork:test-tag", "branch": "main", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			want: build.Lock{
-				Branch: "main",
 				Sources: []build.Source{
-					{Name: "alma-errata", Repository: "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"},
-					{Name: "test", Repository: "ghcr.io/example/fork:test-tag", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "alma-errata", Repository: "127.0.0.1:5000/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "main", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "test", Repository: "ghcr.io/example/fork:test-tag", Branch: "main", Commit: "0123456789abcdef0123456789abcdef01234567"},
+				},
+			},
+		},
+		{
+			name: "sources on different branches",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "branch": "main", "commit": "89abcdef0123456789abcdef0123456789abcdef"}
+				]
+			}`,
+			want: build.Lock{
+				Sources: []build.Source{
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Branch: "main", Commit: "89abcdef0123456789abcdef0123456789abcdef"},
 				},
 			},
 		},
 		{
 			name: "source with hold",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": true},
-					{"name": "alma-osv", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": false},
-					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": true},
+					{"name": "alma-osv", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": false},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			want: build.Lock{
-				Branch: "nightly",
 				Sources: []build.Source{
-					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567", Hold: true},
-					{Name: "alma-osv", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", Commit: "0123456789abcdef0123456789abcdef01234567"},
-					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567", Hold: true},
+					{Name: "alma-osv", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
 				},
 			},
 		},
 		{
 			name: "branch with slash",
 			in: `{
-				"branch": "release/v1",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "release/v1", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			want: build.Lock{
-				Branch:  "release/v1",
-				Sources: []build.Source{{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567"}},
+				Sources: []build.Source{{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "release/v1", Commit: "0123456789abcdef0123456789abcdef01234567"}},
 			},
 		},
 		{
 			name: "branch with revision suffix ~1",
 			in: `{
-				"branch": "nightly~1",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly~1", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -95,9 +101,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch with revision suffix ^{commit}",
 			in: `{
-				"branch": "nightly^{commit}",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly^{commit}", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -105,9 +110,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch with range",
 			in: `{
-				"branch": "main..nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "main..nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -115,9 +119,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch with reflog",
 			in: `{
-				"branch": "nightly@{1}",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly@{1}", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -125,9 +128,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch starting with dash",
 			in: `{
-				"branch": "-nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "-nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -135,9 +137,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch with space",
 			in: `{
-				"branch": "night ly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "night ly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -145,9 +146,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch ending in .lock",
 			in: `{
-				"branch": "nightly.lock",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly.lock", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -155,9 +155,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch HEAD",
 			in: `{
-				"branch": "HEAD",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "HEAD", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -165,7 +164,15 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch @",
 			in: `{
-				"branch": "@",
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "@", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "source without branch",
+			in: `{
 				"sources": [
 					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
@@ -173,10 +180,45 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing branch",
+			name: "empty branch",
 			in: `{
 				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			// Every source's branch is checked, not only the first one's.
+			name: "invalid branch on a later source",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "branch": "nightly~1", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			// The earlier format named one branch for the whole lock; it is
+			// refused rather than read with the branch dropped.
+			name: "branch on the lock",
+			in: `{
+				"branch": "nightly",
+				"sources": [
 					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			// A top-level branch is refused even with the branch on every
+			// row, rather than read and ignored.
+			name: "branch on the lock and on the source",
+			in: `{
+				"branch": "main",
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -184,10 +226,9 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "unknown member",
 			in: `{
-				"branch": "nightly",
 				"registry": "ghcr.io/vulsio/vuls-data-db",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -195,9 +236,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "unknown source member",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "approved": {}}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "approved": {}}
 				]
 			}`,
 			wantErr: true,
@@ -205,9 +245,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "hold is not a boolean",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": "true"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": "true"}
 				]
 			}`,
 			wantErr: true,
@@ -215,7 +254,6 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "no sources",
 			in: `{
-				"branch": "nightly",
 				"sources": [
 
 				]
@@ -225,9 +263,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "empty name",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -235,10 +272,9 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "duplicate name",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata-2", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata-2", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -246,9 +282,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "missing repository",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -256,9 +291,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository without tag",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -266,9 +300,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository with digest",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -276,9 +309,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository host ..",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "../vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "../vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -286,9 +318,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository host .",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "./vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "./vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -296,9 +327,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository without host",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -306,9 +336,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository host only",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -316,9 +345,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository with uppercase path",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/Vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/Vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -326,9 +354,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository with empty path component",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio//vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio//vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -336,9 +363,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "repository with invalid tag",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:alpha[", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:alpha[", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -346,9 +372,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "tag too long",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -356,10 +381,9 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "duplicate repository",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"},
-					{"name": "alma-errata-2", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"},
+					{"name": "alma-errata-2", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -367,9 +391,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "short commit",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456"}
 				]
 			}`,
 			wantErr: true,
@@ -377,9 +400,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "uppercase commit",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789ABCDEF0123456789ABCDEF01234567"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789ABCDEF0123456789ABCDEF01234567"}
 				]
 			}`,
 			wantErr: true,
@@ -387,9 +409,8 @@ func TestReadLock(t *testing.T) {
 		{
 			name: "branch name as commit",
 			in: `{
-				"branch": "nightly",
 				"sources": [
-					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "nightly"}
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "nightly"}
 				]
 			}`,
 			wantErr: true,

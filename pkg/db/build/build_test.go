@@ -27,7 +27,7 @@ import (
 )
 
 // extracted is a test extracted repository: commits on nightly oldest first,
-// plus one commit on another branch that nightly does not contain.
+// plus one commit on the branch stray that nightly does not contain.
 type extracted struct {
 	dir     string
 	nightly []string
@@ -56,9 +56,9 @@ func TestBuild(t *testing.T) {
 		{
 			// The tree added must be the pinned commit's, not the head's.
 			name: "source pinned behind the branch head",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", f.alpha.nightly[0]),
-				f.source("beta", f.beta.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.nightly[0]),
+				f.source("beta", "nightly", f.beta.nightly[0]),
 			}},
 			want: map[sourceTypes.SourceID]dataSource{
 				"alpha": {Commit: f.alpha.nightly[0], Date: commitDate(1), Name: "alpha 1"},
@@ -67,10 +67,10 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			name: "sources at the branch head",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", f.alpha.nightly[1]),
-				f.source("beta", f.beta.nightly[0]),
-				f.source("gamma", f.gamma.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.nightly[1]),
+				f.source("beta", "nightly", f.beta.nightly[0]),
+				f.source("gamma", "nightly", f.gamma.nightly[0]),
 			}},
 			want: map[sourceTypes.SourceID]dataSource{
 				"alpha": {Commit: f.alpha.nightly[1], Date: commitDate(2), Name: "alpha 2"},
@@ -82,13 +82,13 @@ func TestBuild(t *testing.T) {
 			// The build does not read hold: a held source is added at its
 			// commit like the others.
 			name: "held source",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
+			lock: build.Lock{Sources: []build.Source{
 				func() build.Source {
-					s := f.source("alpha", f.alpha.nightly[0])
+					s := f.source("alpha", "nightly", f.alpha.nightly[0])
 					s.Hold = true
 					return s
 				}(),
-				f.source("beta", f.beta.nightly[0]),
+				f.source("beta", "nightly", f.beta.nightly[0]),
 			}},
 			want: map[sourceTypes.SourceID]dataSource{
 				"alpha": {Commit: f.alpha.nightly[0], Date: commitDate(1), Name: "alpha 1"},
@@ -96,30 +96,45 @@ func TestBuild(t *testing.T) {
 			},
 		},
 		{
+			// Each source is checked against its own branch: alpha's second
+			// commit is on nightly but not on stray, and beta's stray commit
+			// is on stray but not on nightly, so taking either source's branch
+			// for both fails.
+			name: "sources on different branches",
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.nightly[1]),
+				f.source("beta", "stray", f.beta.stray),
+			}},
+			want: map[sourceTypes.SourceID]dataSource{
+				"alpha": {Commit: f.alpha.nightly[1], Date: commitDate(2), Name: "alpha 2"},
+				"beta":  {Commit: f.beta.stray, Date: commitDate(2), Name: "beta 1"},
+			},
+		},
+		{
 			name: "commit outside the branch",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", f.alpha.stray),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.stray),
 			}},
 			wantErr: "commit not reachable from branch",
 		},
 		{
 			name: "commit missing from the repository",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", "0123456789abcdef0123456789abcdef01234567"),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", "0123456789abcdef0123456789abcdef01234567"),
 			}},
 			wantErr: "whose history may have been truncated or rewritten",
 		},
 		{
 			name: "unknown branch",
-			lock: build.Lock{Branch: "release", Sources: []build.Source{
-				f.source("alpha", f.alpha.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "release", f.alpha.nightly[0]),
 			}},
 			wantErr: "check refs/heads/release exists: branch not found",
 		},
 		{
 			name: "missing repository",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("zeta", f.alpha.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("zeta", "nightly", f.alpha.nightly[0]),
 			}},
 			wantErr: "fetch manifest",
 		},
@@ -127,21 +142,21 @@ func TestBuild(t *testing.T) {
 			// The sources before the failure have been added to the scratch
 			// db; it must not end up at dbpath.
 			name: "missing repository after others",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", f.alpha.nightly[0]),
-				f.source("beta", f.beta.nightly[0]),
-				f.source("zeta", f.alpha.nightly[0]),
-				f.source("gamma", f.gamma.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.nightly[0]),
+				f.source("beta", "nightly", f.beta.nightly[0]),
+				f.source("zeta", "nightly", f.alpha.nightly[0]),
+				f.source("gamma", "nightly", f.gamma.nightly[0]),
 			}},
 			wantErr: "checkout zeta",
 		},
 		{
 			// delta carries alpha's id and comes after it in the lock.
 			name: "duplicate datasource id",
-			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
-				f.source("alpha", f.alpha.nightly[1]),
-				f.source("delta", f.delta.nightly[0]),
-				f.source("beta", f.beta.nightly[0]),
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.nightly[1]),
+				f.source("delta", "nightly", f.delta.nightly[0]),
+				f.source("beta", "nightly", f.beta.nightly[0]),
 			}},
 			wantErr: "add delta",
 		},
@@ -201,8 +216,8 @@ func TestBuild_Paths(t *testing.T) {
 		// failed; the type is refused before anything touches the disk.
 		dir := t.TempDir()
 		t.Chdir(dir)
-		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
-			f.source("beta", f.beta.nightly[0]),
+		lock := build.Lock{Sources: []build.Source{
+			f.source("beta", "nightly", f.beta.nightly[0]),
 		}}
 		work := filepath.Join(t.TempDir(), "work")
 
@@ -225,8 +240,8 @@ func TestBuild_Paths(t *testing.T) {
 	t.Run("existing db is refused", func(t *testing.T) {
 		// Nothing is overwritten: a db path that already exists (also as a
 		// dangling symlink) stops the build before any work.
-		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
-			f.source("beta", f.beta.nightly[0]),
+		lock := build.Lock{Sources: []build.Source{
+			f.source("beta", "nightly", f.beta.nightly[0]),
 		}}
 		tests := []struct {
 			name    string
@@ -269,8 +284,8 @@ func TestBuild_Paths(t *testing.T) {
 		// The scratch db is renamed to dbpath at the end; a path naming no
 		// file must stop the build before anything is pulled, not at that
 		// rename.
-		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
-			f.source("beta", f.beta.nightly[0]),
+		lock := build.Lock{Sources: []build.Source{
+			f.source("beta", "nightly", f.beta.nightly[0]),
 		}}
 		tests := []struct {
 			name   string
@@ -308,9 +323,9 @@ func TestBuild_Paths(t *testing.T) {
 		if err := os.Symlink(filepath.Join(root, "real", "sub"), filepath.Join(root, "alias")); err != nil {
 			t.Fatal(err)
 		}
-		lock := build.Lock{Branch: "nightly", Sources: []build.Source{
-			f.source("alpha", f.alpha.nightly[0]),
-			f.source("beta", f.beta.nightly[0]),
+		lock := build.Lock{Sources: []build.Source{
+			f.source("alpha", "nightly", f.alpha.nightly[0]),
+			f.source("beta", "nightly", f.beta.nightly[0]),
 		}}
 		dbpath := fmt.Sprintf("%s/../new/vuls.db", filepath.Join(root, "alias"))
 		dir := fmt.Sprintf("%s/../work", filepath.Join(root, "alias"))
@@ -512,8 +527,8 @@ func newExtracted(t *testing.T, name, id string, n int) extracted {
 
 // source is a lock row for the extracted repository name, as pushExtracted
 // publishes it.
-func (f fixture) source(name, commit string) build.Source {
-	return build.Source{Name: name, Repository: fmt.Sprintf("%s:vuls-data-extracted-%s", f.registry, name), Commit: commit}
+func (f fixture) source(name, branch, commit string) build.Source {
+	return build.Source{Name: name, Repository: fmt.Sprintf("%s:vuls-data-extracted-%s", f.registry, name), Branch: branch, Commit: commit}
 }
 
 // pushExtracted packs the repository's .git as a dotgit and pushes it to

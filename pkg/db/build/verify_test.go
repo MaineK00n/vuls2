@@ -38,7 +38,7 @@ func TestVerify(t *testing.T) {
 					"extracted": {"commit": "2222222222222222222222222222222222222222"}
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 				{Name: "beta", Commit: "2222222222222222222222222222222222222222"},
 			}},
@@ -52,7 +52,7 @@ func TestVerify(t *testing.T) {
 					"extracted": {"commit": "2222222222222222222222222222222222222222"}
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 			}},
 			ids:     []sourceTypes.SourceID{"alpha"},
@@ -65,7 +65,7 @@ func TestVerify(t *testing.T) {
 					"id": "alpha"
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 			}},
 			ids:     []sourceTypes.SourceID{"alpha"},
@@ -79,7 +79,7 @@ func TestVerify(t *testing.T) {
 					"extracted": {"commit": "1111111111111111111111111111111111111111"}
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 				{Name: "beta", Commit: "2222222222222222222222222222222222222222"},
 			}},
@@ -98,7 +98,7 @@ func TestVerify(t *testing.T) {
 					"extracted": {"commit": "2222222222222222222222222222222222222222"}
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 			}},
 			ids:     []sourceTypes.SourceID{"alpha"},
@@ -112,7 +112,7 @@ func TestVerify(t *testing.T) {
 					"extracted": {"commit": "1111111111111111111111111111111111111111"}
 				}`,
 			},
-			lock: Lock{Branch: "nightly", Sources: []Source{
+			lock: Lock{Sources: []Source{
 				{Name: "alpha", Commit: "1111111111111111111111111111111111111111"},
 				{Name: "delta", Commit: "1111111111111111111111111111111111111111"},
 			}},
