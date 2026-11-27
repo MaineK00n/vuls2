@@ -35,13 +35,17 @@ type Source struct {
 	// refused. Each source names its own, so one db can take a source from
 	// main and the others from nightly.
 	Branch string `json:"branch"`
-	// Commit is the full 40-hex SHA the source is checked out at.
-	Commit string `json:"commit"`
+	// Commit is the full 40-hex SHA the source is checked out at. Without
+	// one (omitted or empty), the source follows its branch: the build
+	// takes the head of the branch in the dotgit it pulls, so the same lock
+	// can build different data at different times. The build reports the
+	// commits it took (WithWriteLock).
+	Commit string `json:"commit,omitzero"`
 	// Hold tells whatever maintains the lock not to move this row: someone
-	// put the source at this commit on purpose. The build does not read it,
-	// and a held source is built at its commit like any other. It is part of
-	// the format so that a lock carrying it is not refused for an unknown
-	// member.
+	// put the source at this commit on purpose. It needs a commit. The build
+	// does not read it, and a held source is built at its commit like any
+	// other. It is part of the format so that a lock carrying it is not
+	// refused for an unknown member.
 	Hold bool `json:"hold,omitzero"`
 }
 
@@ -87,8 +91,8 @@ func ReadLock(r io.Reader) (Lock, error) {
 }
 
 // Validate checks that the lock can be built from: at least one source, each
-// with a unique name, a unique repository with a tag, a branch and a full
-// commit SHA.
+// with a unique name, a unique repository with a tag, a branch, and either a
+// full commit SHA or no commit (and then no hold).
 func (l Lock) Validate() error {
 	if len(l.Sources) == 0 {
 		return errors.New("sources is empty")
@@ -138,8 +142,16 @@ func (l Lock) Validate() error {
 			return errors.Errorf("sources[%d] (%s): unexpected branch. expected: %q, actual: %q", i, s.Name, "<branch name> (git check-ref-format --branch)", s.Branch)
 		}
 
+		if s.Commit == "" {
+			// A hold keeps a row at its commit; a row that follows its
+			// branch has none to keep.
+			if s.Hold {
+				return errors.Errorf("sources[%d] (%s): hold without a commit", i, s.Name)
+			}
+			continue
+		}
 		if !commitRegexp.MatchString(s.Commit) {
-			return errors.Errorf("sources[%d] (%s): unexpected commit. expected: %q, actual: %q", i, s.Name, "40 lowercase hex digits", s.Commit)
+			return errors.Errorf("sources[%d] (%s): unexpected commit. expected: %q, actual: %q", i, s.Name, "40 lowercase hex digits (or no commit to follow the branch)", s.Commit)
 		}
 	}
 

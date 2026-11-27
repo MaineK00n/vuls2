@@ -62,6 +62,36 @@ func TestReadLock(t *testing.T) {
 			},
 		},
 		{
+			// A source without a commit follows its branch; "" is read as no
+			// commit.
+			name: "sources without commit",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly"},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "branch": "main", "commit": ""},
+					{"name": "ubuntu-cve-tracker", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-ubuntu-cve-tracker", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			want: build.Lock{
+				Sources: []build.Source{
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Branch: "nightly"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Branch: "main"},
+					{Name: "ubuntu-cve-tracker", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-ubuntu-cve-tracker", Branch: "nightly", Commit: "0123456789abcdef0123456789abcdef01234567"},
+				},
+			},
+		},
+		{
+			// A hold keeps a row at its commit, so a row without one cannot
+			// carry it.
+			name: "hold without commit",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "hold": true}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
 			name: "source with hold",
 			in: `{
 				"sources": [

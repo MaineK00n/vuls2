@@ -1,11 +1,13 @@
 package build
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -31,6 +33,8 @@ type options struct {
 	storageopts session.StorageOptions
 
 	dir string
+
+	writeLock string
 
 	debug bool
 }
@@ -86,6 +90,21 @@ func WithDir(dir string) Option {
 	return dirOption(dir)
 }
 
+type writeLockOption string
+
+func (o writeLockOption) apply(opts *options) {
+	opts.writeLock = string(o)
+}
+
+// WithWriteLock makes Build write, once the db is in place, the lock it built
+// to path ("-" writes stdout): the same sources, with the commit each one was
+// built at filled in. A source that follows its branch thus gets the commit it
+// took, so the db can be built again. path may name the lock that was read, to
+// pin every following source at the head it took. Empty writes nothing.
+func WithWriteLock(path string) Option {
+	return writeLockOption(path)
+}
+
 type debugOption bool
 
 func (o debugOption) apply(opts *options) {
@@ -97,9 +116,10 @@ func WithDebug(debug bool) Option {
 }
 
 // Build reads the lock at lockPath ("-" reads stdin), initializes a db and
-// adds every source of the lock at its pinned commit, one source at a time in
-// lock order: pull the dotgit with the tree of the commit written out, check
-// that the commit belongs to the source's branch, add it and remove it.
+// adds every source of the lock at its commit, or at the head of its branch
+// for a source without one, one source at a time in lock order: pull the
+// dotgit with the tree of the commit written out, check that the commit
+// belongs to the source's branch, add it and remove it.
 // Adding in lock order makes the data in the db the same for the same lock: a
 // vulnerability root lists its sources in the order they were added. The file
 // itself is not the same byte for byte, as LastModified and the page layout
@@ -142,6 +162,28 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Errorf("db %s already exists", options.dbpath)
 	} else if !os.IsNotExist(err) {
 		return errors.Wrapf(err, "lstat %s", options.dbpath)
+	}
+	// The lock is written after every source has been added, so a path it
+	// cannot go to is refused before anything is pulled: one that names no
+	// file, one in a directory that does not exist, and the db path, which
+	// the lock would replace.
+	if options.writeLock != "" && options.writeLock != "-" {
+		dir, base := filepath.Split(options.writeLock)
+		switch base {
+		case "", ".", "..":
+			return errors.Errorf("lock %s does not name a file", options.writeLock)
+		}
+		if dir == "" {
+			dir = "."
+		}
+		if fi, err := os.Stat(dir); err != nil {
+			return errors.Wrapf(err, "stat the directory of %s", options.writeLock)
+		} else if !fi.IsDir() {
+			return errors.Errorf("lock %s: %s is not a directory", options.writeLock, dir)
+		}
+		if filepath.Clean(options.writeLock) == filepath.Clean(options.dbpath) {
+			return errors.Errorf("lock %s is the db path", options.writeLock)
+		}
 	}
 
 	// Every invocation gets its own work directory, under options.dir (the
@@ -214,15 +256,19 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrap(err, "init db")
 	}
 
+	// built is the lock with every source at the commit it was built at,
+	// which a source without a commit learns from its pull.
+	built := Lock{Sources: slices.Clone(lock.Sources)}
 	ids := make([]sourceTypes.SourceID, len(lock.Sources))
 	for i, s := range lock.Sources {
-		root, id, err := checkout(workdir, s)
+		root, id, commit, err := checkout(workdir, s)
 		if err != nil {
 			return errors.Wrapf(err, "checkout %s", s.Name)
 		}
 		ids[i] = id
+		built.Sources[i].Commit = commit
 
-		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(ids[i])), slog.String("commit", s.Commit))
+		slog.Info("Add", slog.String("name", s.Name), slog.String("id", string(ids[i])), slog.String("commit", commit))
 		start := time.Now()
 		if err := dbAdd.Add(root, dbAdd.WithDBType(options.dbtype), dbAdd.WithDBPath(target), dbAdd.WithStorageOptions(options.storageopts), dbAdd.WithDebug(options.debug)); err != nil {
 			return errors.Wrapf(err, "add %s", s.Name)
@@ -237,7 +283,7 @@ func Build(lockPath string, opts ...Option) error {
 	}
 
 	slog.Info("Verify datasources")
-	if err := verify(options, target, lock, ids); err != nil {
+	if err := verify(options, target, built, ids); err != nil {
 		return errors.Wrap(err, "verify")
 	}
 
@@ -246,6 +292,58 @@ func Build(lockPath string, opts ...Option) error {
 	}
 	slog.Info("Built", slog.String("dbpath", options.dbpath), slog.Int("sources", len(lock.Sources)))
 
+	if options.writeLock != "" {
+		if err := writeLock(options.writeLock, built); err != nil {
+			return errors.Wrapf(err, "write lock %s", options.writeLock)
+		}
+		slog.Info("Wrote lock", slog.String("path", options.writeLock))
+	}
+
+	return nil
+}
+
+// writeLock writes lock to path ("-" writes stdout) as indented JSON. It
+// writes a scratch file next to path and renames it over path, so path, which
+// may be the lock the build read, is either left as it was or replaced as a
+// whole.
+func writeLock(path string, lock Lock) error {
+	if path == "-" {
+		if err := json.MarshalWrite(os.Stdout, lock, jsontext.WithIndent("  ")); err != nil {
+			return errors.Wrap(err, "marshal lock")
+		}
+		if _, err := os.Stdout.WriteString("\n"); err != nil {
+			return errors.Wrap(err, "write stdout")
+		}
+		return nil
+	}
+
+	f, err := os.CreateTemp(filepath.Dir(path), fmt.Sprintf(".%s.*", filepath.Base(path)))
+	if err != nil {
+		return errors.Wrapf(err, "create scratch file next to %s", path)
+	}
+	defer func() {
+		if err := os.Remove(f.Name()); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to remove scratch lock", slog.String("path", f.Name()), slog.String("err", err.Error()))
+		}
+	}()
+
+	if err := json.MarshalWrite(f, lock, jsontext.WithIndent("  ")); err != nil {
+		_ = f.Close()
+		return errors.Wrap(err, "marshal lock")
+	}
+	if _, err := f.WriteString("\n"); err != nil {
+		_ = f.Close()
+		return errors.Wrapf(err, "write %s", f.Name())
+	}
+	if err := f.Close(); err != nil {
+		return errors.Wrapf(err, "close %s", f.Name())
+	}
+	if err := os.Chmod(f.Name(), 0o644); err != nil {
+		return errors.Wrapf(err, "chmod %s", f.Name())
+	}
+	if err := os.Rename(f.Name(), path); err != nil {
+		return errors.Wrapf(err, "rename %s to %s", f.Name(), path)
+	}
 	return nil
 }
 
@@ -272,39 +370,48 @@ func readLock(path string) (Lock, error) {
 
 // checkout pulls one source's dotgit into workdir with the tree of the lock
 // commit written out, checks that the commit is on the source's branch, and
-// stamps datasource.json with the commit and its author date. It returns the
-// repository root and the source ID datasource.json declares.
+// stamps datasource.json with the commit and its author date. A source
+// without a commit takes the head of its branch. It returns the repository
+// root, the source ID datasource.json declares and the commit.
 //
 // The branch is checked after the tree is written, as pkg/dotgit checks a
 // commit out only as part of a pull. A commit that is not in the dotgit
 // already fails the pull, so only one that is there but off the branch
 // costs a tree write.
-func checkout(workdir string, s Source) (string, sourceTypes.SourceID, error) {
+func checkout(workdir string, s Source) (string, sourceTypes.SourceID, string, error) {
 	ref, err := remote.NewRepository(s.Repository)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "parse %s", s.Repository)
+		return "", "", "", errors.Wrapf(err, "parse %s", s.Repository)
 	}
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
+	// A source without a commit is checked out at its branch by full ref
+	// name, so that a tag or a commit spelled like the branch cannot stand
+	// in for it, and the commit is read back from that ref.
+	revision, at := s.Commit, s.Commit
+	if revision == "" {
+		revision, at = fmt.Sprintf("refs/heads/%s", s.Branch), fmt.Sprintf("the head of branch %s", s.Branch)
+	}
+
 	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", s.Repository), slog.String("branch", s.Branch), slog.String("commit", s.Commit))
 	start := time.Now()
-	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(s.Commit), pull.WithRestore(true)); err != nil {
-		return "", "", errors.Wrapf(err, "pull %s at %s", s.Repository, s.Commit)
+	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(revision), pull.WithRestore(true)); err != nil {
+		return "", "", "", errors.Wrapf(err, "pull %s at %s", s.Repository, at)
 	}
-	if err := contains.Contains(root, s.Commit, contains.WithBranch(s.Branch)); err != nil {
-		return "", "", errors.Wrapf(err, "check %s is on %s in %s", s.Commit, s.Branch, s.Repository)
-	}
-	c, err := show.Show(root, s.Commit)
+	c, err := show.Show(root, revision)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "show %s in %s", s.Commit, s.Repository)
+		return "", "", "", errors.Wrapf(err, "show %s in %s", revision, s.Repository)
 	}
-	id, err := stampDataSource(filepath.Join(root, "datasource.json"), s.Commit, c.AuthorTime)
+	if err := contains.Contains(root, c.Hash, contains.WithBranch(s.Branch)); err != nil {
+		return "", "", "", errors.Wrapf(err, "check %s is on %s in %s", c.Hash, s.Branch, s.Repository)
+	}
+	id, err := stampDataSource(filepath.Join(root, "datasource.json"), c.Hash, c.AuthorTime)
 	if err != nil {
-		return "", "", errors.Wrap(err, "stamp datasource.json")
+		return "", "", "", errors.Wrap(err, "stamp datasource.json")
 	}
-	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
+	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.String("commit", c.Hash), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
-	return root, id, nil
+	return root, id, c.Hash, nil
 }
 
 // stampDataSource records the checked-out commit and its date as the
