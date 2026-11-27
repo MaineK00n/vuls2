@@ -35,6 +35,12 @@ type Source struct {
 	Repository string `json:"repository"`
 	// Commit is the full 40-hex SHA the source is checked out at.
 	Commit string `json:"commit"`
+	// Hold tells whatever maintains the lock not to move this row: someone
+	// put the source at this commit on purpose. The build does not read it,
+	// and a held source is built at its commit like any other. It is part of
+	// the format so that a lock carrying it is not refused for an unknown
+	// member.
+	Hold bool `json:"hold,omitzero"`
 }
 
 var commitRegexp = regexp.MustCompile(`^[0-9a-f]{40}$`)

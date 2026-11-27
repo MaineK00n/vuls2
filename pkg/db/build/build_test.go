@@ -79,6 +79,23 @@ func TestBuild(t *testing.T) {
 			},
 		},
 		{
+			// The build does not read hold: a held source is added at its
+			// commit like the others.
+			name: "held source",
+			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
+				func() build.Source {
+					s := f.source("alpha", f.alpha.nightly[0])
+					s.Hold = true
+					return s
+				}(),
+				f.source("beta", f.beta.nightly[0]),
+			}},
+			want: map[sourceTypes.SourceID]dataSource{
+				"alpha": {Commit: f.alpha.nightly[0], Date: commitDate(1), Name: "alpha 1"},
+				"beta":  {Commit: f.beta.nightly[0], Date: commitDate(1), Name: "beta 1"},
+			},
+		},
+		{
 			name: "commit outside the branch",
 			lock: build.Lock{Branch: "nightly", Sources: []build.Source{
 				f.source("alpha", f.alpha.stray),

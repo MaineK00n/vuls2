@@ -42,6 +42,9 @@ func NewCmd() *cobra.Command {
 		      "commit": "<40 hex>"}
 		   ]}
 
+		A source may also carry "hold": true. It tells whatever maintains the
+		lock not to move that row; the build does not read it.
+
 		Sources are built one at a time, in lock order: each is pulled from
 		its repository with the tree of its commit written out (the commit
 		must belong to the branch), stamped into datasource.json, added, and
