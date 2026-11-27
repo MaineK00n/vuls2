@@ -18,9 +18,6 @@ import (
 // A lock names data only. Which vuls binary builds it and where the result is
 // published are the caller's concern.
 type Lock struct {
-	// Branch is the extracted branch every commit must belong to (e.g. "main"
-	// or "nightly"). A commit that is not an ancestor of the branch is refused.
-	Branch string `json:"branch"`
 	// Sources lists the data sources of the db.
 	Sources []Source `json:"sources"`
 }
@@ -33,6 +30,11 @@ type Source struct {
 	// dotgit is pulled from (e.g.
 	// "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata").
 	Repository string `json:"repository"`
+	// Branch is the extracted branch the commit must belong to (e.g. "main"
+	// or "nightly"). A commit that is not an ancestor of the branch is
+	// refused. Each source names its own, so one db can take a source from
+	// main and the others from nightly.
+	Branch string `json:"branch"`
 	// Commit is the full 40-hex SHA the source is checked out at.
 	Commit string `json:"commit"`
 	// Hold tells whatever maintains the lock not to move this row: someone
@@ -84,17 +86,10 @@ func ReadLock(r io.Reader) (Lock, error) {
 	return l, nil
 }
 
-// Validate checks that the lock can be built from: a branch, and at least
-// one source with a unique name, a unique repository with a tag and a full
+// Validate checks that the lock can be built from: at least one source, each
+// with a unique name, a unique repository with a tag, a branch and a full
 // commit SHA.
 func (l Lock) Validate() error {
-	if l.Branch == "" {
-		return errors.New("branch is empty")
-	}
-	if !validBranchName(l.Branch) {
-		return errors.Errorf("unexpected branch. expected: %q, actual: %q", "<branch name> (git check-ref-format --branch)", l.Branch)
-	}
-
 	if len(l.Sources) == 0 {
 		return errors.New("sources is empty")
 	}
@@ -135,6 +130,13 @@ func (l Lock) Validate() error {
 			return errors.Errorf("sources[%d] (%s): duplicate repository %q", i, s.Name, s.Repository)
 		}
 		repositories[s.Repository] = struct{}{}
+
+		if s.Branch == "" {
+			return errors.Errorf("sources[%d] (%s): branch is empty", i, s.Name)
+		}
+		if !validBranchName(s.Branch) {
+			return errors.Errorf("sources[%d] (%s): unexpected branch. expected: %q, actual: %q", i, s.Name, "<branch name> (git check-ref-format --branch)", s.Branch)
+		}
 
 		if !commitRegexp.MatchString(s.Commit) {
 			return errors.Errorf("sources[%d] (%s): unexpected commit. expected: %q, actual: %q", i, s.Name, "40 lowercase hex digits", s.Commit)
