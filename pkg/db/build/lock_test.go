@@ -51,6 +51,25 @@ func TestReadLock(t *testing.T) {
 			},
 		},
 		{
+			name: "source with hold",
+			in: `{
+				"branch": "nightly",
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": true},
+					{"name": "alma-osv", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": false},
+					{"name": "redhat-vex-v1-rhel", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			want: build.Lock{
+				Branch: "nightly",
+				Sources: []build.Source{
+					{Name: "alma-errata", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", Commit: "0123456789abcdef0123456789abcdef01234567", Hold: true},
+					{Name: "alma-osv", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-osv", Commit: "0123456789abcdef0123456789abcdef01234567"},
+					{Name: "redhat-vex-v1-rhel", Repository: "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-redhat-vex-v1-rhel", Commit: "0123456789abcdef0123456789abcdef01234567"},
+				},
+			},
+		},
+		{
 			name: "branch with slash",
 			in: `{
 				"branch": "release/v1",
@@ -179,6 +198,16 @@ func TestReadLock(t *testing.T) {
 				"branch": "nightly",
 				"sources": [
 					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "approved": {}}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "hold is not a boolean",
+			in: `{
+				"branch": "nightly",
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": "true"}
 				]
 			}`,
 			wantErr: true,
