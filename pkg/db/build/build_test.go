@@ -96,16 +96,18 @@ func TestBuild(t *testing.T) {
 			},
 		},
 		{
-			// Each source is checked against its own branch: alpha's stray
-			// commit is on stray, not on nightly.
+			// Each source is checked against its own branch: alpha's second
+			// commit is on nightly but not on stray, and beta's stray commit
+			// is on stray but not on nightly, so taking either source's branch
+			// for both fails.
 			name: "sources on different branches",
 			lock: build.Lock{Sources: []build.Source{
-				f.source("alpha", "stray", f.alpha.stray),
-				f.source("beta", "nightly", f.beta.nightly[0]),
+				f.source("alpha", "nightly", f.alpha.nightly[1]),
+				f.source("beta", "stray", f.beta.stray),
 			}},
 			want: map[sourceTypes.SourceID]dataSource{
-				"alpha": {Commit: f.alpha.stray, Date: commitDate(3), Name: "alpha 1"},
-				"beta":  {Commit: f.beta.nightly[0], Date: commitDate(1), Name: "beta 1"},
+				"alpha": {Commit: f.alpha.nightly[1], Date: commitDate(2), Name: "alpha 2"},
+				"beta":  {Commit: f.beta.stray, Date: commitDate(2), Name: "beta 1"},
 			},
 		},
 		{

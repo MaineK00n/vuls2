@@ -212,6 +212,18 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// A top-level branch is refused even with the branch on every
+			// row, rather than read and ignored.
+			name: "branch on the lock and on the source",
+			in: `{
+				"branch": "main",
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567"}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
 			name: "unknown member",
 			in: `{
 				"registry": "ghcr.io/vulsio/vuls-data-db",
