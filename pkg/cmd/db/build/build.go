@@ -63,7 +63,9 @@ func NewCmd() *cobra.Command {
 		renamed to --dbpath only after every source has been added and
 		verified, so a build that fails with an error leaves nothing behind
 		(one killed by a signal may leave its work directory and scratch
-		file). --dbpath must not exist already.
+		files). --dbpath must not exist already. --write-lock is checked
+		before anything is pulled, written next to its path before the db is
+		renamed into place, and renamed over its path right after.
 		`),
 		Example: heredoc.Doc(`
 		$ vuls db build db-nightly.lock.json --dbpath ./vuls.db

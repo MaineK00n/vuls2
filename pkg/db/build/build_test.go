@@ -27,11 +27,14 @@ import (
 )
 
 // extracted is a test extracted repository: commits on nightly oldest first,
-// plus one commit on the branch stray that nightly does not contain.
+// plus one commit on the branch stray that nightly does not contain, and the
+// annotated tag v1 on the first commit.
 type extracted struct {
 	dir     string
 	nightly []string
 	stray   string
+	// tag is the hash of the tag object v1, not of the commit it points to.
+	tag string
 }
 
 func TestBuild(t *testing.T) {
@@ -124,6 +127,24 @@ func TestBuild(t *testing.T) {
 				"beta":  {Commit: f.beta.stray, Date: commitDate(2), Name: "beta 1"},
 				"gamma": {Commit: f.gamma.nightly[0], Date: commitDate(1), Name: "gamma 1"},
 			},
+		},
+		{
+			// A tag is not a branch: pull falls back to the tag v1 when
+			// there is no branch v1, and refs/heads/v1 does not resolve.
+			name: "tag as the branch of a source without a commit",
+			lock: build.Lock{Sources: []build.Source{
+				{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "v1"},
+			}},
+			wantErr: `"refs/heads/v1" does not name a commit`,
+		},
+		{
+			// The hash of an annotated tag resolves to a commit on nightly,
+			// but is refused rather than built at that commit.
+			name: "annotated tag's hash as the commit",
+			lock: build.Lock{Sources: []build.Source{
+				f.source("alpha", "nightly", f.alpha.tag),
+			}},
+			wantErr: "is not a commit's own full hash",
 		},
 		{
 			name: "unknown branch without a commit",
@@ -392,6 +413,21 @@ func TestBuild_WriteLock(t *testing.T) {
 		if diff := cmp.Diff(want, readLockFile(t, out)); diff != "" {
 			t.Errorf("written lock (-want +got):\n%s", diff)
 		}
+		// A new file gets 0644 and ends with a newline.
+		fi, err := os.Stat(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o644 {
+			t.Errorf("mode of %s: %v, want 0644", out, fi.Mode().Perm())
+		}
+		bs, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasSuffix(string(bs), "}\n") {
+			t.Errorf("%s does not end with a newline: %q", out, bs)
+		}
 	})
 
 	t.Run("over the lock read", func(t *testing.T) {
@@ -476,43 +512,155 @@ func TestBuild_WriteLock(t *testing.T) {
 			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly"},
 		}}
 		tests := []struct {
-			name      string
-			writeLock func(dir, dbpath string) string
-			wantErr   string
+			name string
+			// paths returns the db path and the lock path in dir, making
+			// whatever the case needs there.
+			paths   func(t *testing.T, dir string) (string, string)
+			wantErr string
 		}{
 			{
-				name:      "the db path",
-				writeLock: func(_, dbpath string) string { return dbpath },
-				wantErr:   "is the db path",
+				name: "the db path",
+				paths: func(_ *testing.T, dir string) (string, string) {
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "vuls.db")
+				},
+				wantErr: "is the db path",
 			},
 			{
-				name:      "missing directory",
-				writeLock: func(dir, _ string) string { return filepath.Join(dir, "missing", "built.lock.json") },
-				wantErr:   "stat the directory of",
+				name: "the db path, absolute against relative",
+				paths: func(t *testing.T, dir string) (string, string) {
+					t.Chdir(dir)
+					return "vuls.db", filepath.Join(dir, "vuls.db")
+				},
+				wantErr: "is the db path",
 			},
 			{
-				name:      "trailing slash",
-				writeLock: func(dir, _ string) string { return fmt.Sprintf("%s/", filepath.Join(dir, "out")) },
-				wantErr:   "does not name a file",
+				name: "the db path through a symlinked directory",
+				paths: func(t *testing.T, dir string) (string, string) {
+					if err := os.Symlink(dir, filepath.Join(dir, "alias")); err != nil {
+						t.Fatal(err)
+					}
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "alias", "vuls.db")
+				},
+				wantErr: "is the db path",
+			},
+			{
+				name: "a directory",
+				paths: func(t *testing.T, dir string) (string, string) {
+					if err := os.Mkdir(filepath.Join(dir, "out"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "out")
+				},
+				wantErr: "is a directory",
+			},
+			{
+				name: "trailing slash",
+				paths: func(_ *testing.T, dir string) (string, string) {
+					return filepath.Join(dir, "vuls.db"), fmt.Sprintf("%s/", filepath.Join(dir, "out"))
+				},
+				wantErr: "does not name a file",
+			},
+			{
+				name: "under a file",
+				paths: func(t *testing.T, dir string) (string, string) {
+					if err := os.WriteFile(filepath.Join(dir, "file"), []byte("keep"), 0o644); err != nil {
+						t.Fatal(err)
+					}
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "file", "built.lock.json")
+				},
+				wantErr: "not a directory",
+			},
+			{
+				name: "a directory that cannot be written to",
+				paths: func(t *testing.T, dir string) (string, string) {
+					if os.Geteuid() == 0 {
+						t.Skip("root writes to any directory")
+					}
+					if err := os.Mkdir(filepath.Join(dir, "ro"), 0o555); err != nil {
+						t.Fatal(err)
+					}
+					return filepath.Join(dir, "vuls.db"), filepath.Join(dir, "ro", "built.lock.json")
+				},
+				wantErr: "create scratch file",
 			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				dir := t.TempDir()
-				dbpath := filepath.Join(dir, "vuls.db")
+				dbpath, writeLock := tt.paths(t, dir)
 				work := filepath.Join(t.TempDir(), "work")
 
-				err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(work), build.WithWriteLock(tt.writeLock(dir, dbpath)))
+				err := runBuild(t, lock, build.WithDBPath(dbpath), build.WithDir(work), build.WithWriteLock(writeLock))
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("Build() error = %v, want %q", err, tt.wantErr)
 				}
 				if _, err := os.Lstat(work); !os.IsNotExist(err) {
 					t.Errorf("work directory created before the check: %v", err)
 				}
-				if _, err := os.Lstat(dbpath); !os.IsNotExist(err) {
+				if _, err := os.Lstat(filepath.Join(dir, "vuls.db")); !os.IsNotExist(err) {
 					t.Errorf("db written: %v", err)
 				}
+				assertNoScratch(t, filepath.Join(dir, "vuls.db"))
 			})
+		}
+	})
+
+	t.Run("into a directory made for it", func(t *testing.T) {
+		// The lock's directory is made, as the db's is.
+		lockPath := writeLock(t, build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly"},
+		}})
+		dir := t.TempDir()
+
+		if err := build.Build(lockPath, build.WithDBPath(filepath.Join(dir, "out", "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")), build.WithWriteLock(filepath.Join(dir, "out", "built.lock.json"))); err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		want := build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly", Commit: f.alpha.nightly[1]},
+		}}
+		if diff := cmp.Diff(want, readLockFile(t, filepath.Join(dir, "out", "built.lock.json"))); diff != "" {
+			t.Errorf("written lock (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("through a symlink", func(t *testing.T) {
+		// The file the symlink points to is replaced, with its mode, and
+		// the symlink stays.
+		dir := t.TempDir()
+		real := filepath.Join(dir, "real.lock.json")
+		bs, err := json.Marshal(build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly"},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(real, bs, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(real, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link.lock.json")
+		if err := os.Symlink(real, link); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := build.Build(link, build.WithDBPath(filepath.Join(t.TempDir(), "vuls.db")), build.WithDir(filepath.Join(t.TempDir(), "work")), build.WithWriteLock(link)); err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		want := build.Lock{Sources: []build.Source{
+			{Name: "alpha", Repository: fmt.Sprintf("%s:vuls-data-extracted-alpha", f.registry), Branch: "nightly", Commit: f.alpha.nightly[1]},
+		}}
+		if diff := cmp.Diff(want, readLockFile(t, real)); diff != "" {
+			t.Errorf("lock behind the symlink (-want +got):\n%s", diff)
+		}
+		if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("%s is no longer a symlink: %v, %v", link, fi, err)
+		}
+		if fi, err := os.Stat(real); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("mode of %s: %v, %v, want 0600", real, fi, err)
 		}
 	})
 }
@@ -647,7 +795,8 @@ func assertEmptyDir(t *testing.T, dir string) {
 
 // newExtracted makes a repository shaped like vuls-data-extracted-<name>:
 // datasource.json at the root declaring id, n commits on nightly (main at
-// the same tip), and one stray commit on another branch.
+// the same tip), one stray commit on another branch, and the annotated tag v1
+// on the first commit.
 func newExtracted(t *testing.T, name, id string, n int) extracted {
 	t.Helper()
 
@@ -697,6 +846,8 @@ func newExtracted(t *testing.T, name, id string, n int) extracted {
 		e.nightly = append(e.nightly, run(commitDate(i), "rev-parse", "HEAD"))
 	}
 	run(commitDate(n), "branch", "main")
+	run(commitDate(n), "tag", "-a", "-m", "v1", "v1", e.nightly[0])
+	e.tag = run(commitDate(n), "rev-parse", "v1")
 
 	run(commitDate(n+1), "switch", "-q", "-c", "stray", e.nightly[0])
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("stray\n"), 0o644); err != nil {

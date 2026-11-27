@@ -96,11 +96,12 @@ func (o writeLockOption) apply(opts *options) {
 	opts.writeLock = string(o)
 }
 
-// WithWriteLock makes Build write, once the db is in place, the lock it built
-// to path ("-" writes stdout): the same sources, with the commit each one was
-// built at filled in. A source that follows its branch thus gets the commit it
-// took, so the db can be built again. path may name the lock that was read, to
-// pin every following source at the head it took. Empty writes nothing.
+// WithWriteLock makes Build write the lock it built to path ("-" writes
+// stdout): the same sources, with the commit each one was built at filled in.
+// A source that follows its branch thus gets the commit it took, so the db can
+// be built again. path may name the lock that was read, to pin every following
+// source at the head it took. A symlink at path is followed, an existing file
+// keeps its mode, and path's directory is made. Empty writes nothing.
 func WithWriteLock(path string) Option {
 	return writeLockOption(path)
 }
@@ -127,8 +128,11 @@ func WithDebug(debug bool) Option {
 //
 // The db is built in a temporary file next to dbpath and renamed to dbpath
 // only when every source has been added and verified, so a build that returns
-// an error leaves no half-built db behind. A process killed by a signal skips
-// that cleanup and may leave the work directory and the scratch db behind.
+// an error leaves no half-built db behind. A lock to write (WithWriteLock) is
+// written to a scratch file next to its path before that rename and renamed
+// over its path after it; only a failure of that last rename returns an error
+// with the db in place. A process killed by a signal skips that cleanup and
+// may leave the work directory and the scratch files behind.
 func Build(lockPath string, opts ...Option) error {
 	options := &options{
 		dbtype:      "boltdb",
@@ -163,27 +167,48 @@ func Build(lockPath string, opts ...Option) error {
 	} else if !os.IsNotExist(err) {
 		return errors.Wrapf(err, "lstat %s", options.dbpath)
 	}
-	// The lock is written after every source has been added, so a path it
-	// cannot go to is refused before anything is pulled: one that names no
-	// file, one in a directory that does not exist, and the db path, which
-	// the lock would replace.
+	// Likewise the lock written at the end must name a file.
 	if options.writeLock != "" && options.writeLock != "-" {
-		dir, base := filepath.Split(options.writeLock)
-		switch base {
+		switch _, base := filepath.Split(options.writeLock); base {
 		case "", ".", "..":
 			return errors.Errorf("lock %s does not name a file", options.writeLock)
 		}
-		if dir == "" {
-			dir = "."
+	}
+
+	// The db is built at target, a scratch file unique to this invocation so
+	// concurrent builds of the same dbpath cannot touch each other's, renamed
+	// over dbpath at the end. It must sit in the directory dbpath is renamed
+	// into, or the final rename can cross filesystems. filepath.Dir would
+	// clean "alias/../vuls.db" lexically to "." while the kernel follows
+	// alias, so split without cleaning, and resolve the directory once it
+	// exists: the scratch db then sits where Rename lands, and the db init,
+	// which makes filepath.Dir of its path, finds that directory in place
+	// instead of making one next to alias.
+	dir, base := filepath.Split(options.dbpath)
+	if dir == "" {
+		dir = "."
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return errors.Wrapf(err, "mkdir %s", dir)
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return errors.Wrapf(err, "resolve the directory of %s", options.dbpath)
+	}
+
+	// The lock is written once every source has been added, so where it goes
+	// is settled now, before anything is pulled (prepareLock).
+	var out lockOutput
+	if options.writeLock != "" && options.writeLock != "-" {
+		out, err = prepareLock(options.writeLock, filepath.Join(dir, base))
+		if err != nil {
+			return errors.Wrapf(err, "write lock %s", options.writeLock)
 		}
-		if fi, err := os.Stat(dir); err != nil {
-			return errors.Wrapf(err, "stat the directory of %s", options.writeLock)
-		} else if !fi.IsDir() {
-			return errors.Errorf("lock %s: %s is not a directory", options.writeLock, dir)
-		}
-		if filepath.Clean(options.writeLock) == filepath.Clean(options.dbpath) {
-			return errors.Errorf("lock %s is the db path", options.writeLock)
-		}
+		defer func() {
+			if err := os.Remove(out.scratch); err != nil && !os.IsNotExist(err) {
+				slog.Warn("Failed to remove scratch lock", slog.String("path", out.scratch), slog.String("err", err.Error()))
+			}
+		}()
 	}
 
 	// Every invocation gets its own work directory, under options.dir (the
@@ -215,26 +240,6 @@ func Build(lockPath string, opts ...Option) error {
 		}
 	}()
 
-	// The db is built at target, a scratch file unique to this invocation so
-	// concurrent builds of the same dbpath cannot touch each other's, renamed
-	// over dbpath at the end. It must sit in the directory dbpath is renamed
-	// into, or the final rename can cross filesystems. filepath.Dir would
-	// clean "alias/../vuls.db" lexically to "." while the kernel follows
-	// alias, so split without cleaning, and resolve the directory once it
-	// exists: the scratch db then sits where Rename lands, and the db init,
-	// which makes filepath.Dir of its path, finds that directory in place
-	// instead of making one next to alias.
-	dir, base := filepath.Split(options.dbpath)
-	if dir == "" {
-		dir = "."
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return errors.Wrapf(err, "mkdir %s", dir)
-	}
-	dir, err = filepath.EvalSymlinks(dir)
-	if err != nil {
-		return errors.Wrapf(err, "resolve the directory of %s", options.dbpath)
-	}
 	f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.build-*", base))
 	if err != nil {
 		return errors.Wrapf(err, "create scratch db in %s", dir)
@@ -287,62 +292,145 @@ func Build(lockPath string, opts ...Option) error {
 		return errors.Wrap(err, "verify")
 	}
 
+	// The lock is written out before the db is renamed into place, so a
+	// lock that cannot be written stops the build with nothing at dbpath;
+	// only its rename comes after the db's.
+	if out.scratch != "" {
+		if err := out.write(built); err != nil {
+			return errors.Wrapf(err, "write lock %s", options.writeLock)
+		}
+	}
+
 	if err := os.Rename(target, options.dbpath); err != nil {
 		return errors.Wrapf(err, "rename %s to %s", target, options.dbpath)
 	}
 	slog.Info("Built", slog.String("dbpath", options.dbpath), slog.Int("sources", len(lock.Sources)))
 
-	if options.writeLock != "" {
-		if err := writeLock(options.writeLock, built); err != nil {
-			return errors.Wrapf(err, "write lock %s", options.writeLock)
+	switch options.writeLock {
+	case "":
+	case "-":
+		if err := json.MarshalWrite(os.Stdout, built, jsontext.WithIndent("  ")); err != nil {
+			return errors.Wrap(err, "write lock to stdout")
 		}
-		slog.Info("Wrote lock", slog.String("path", options.writeLock))
+		if _, err := os.Stdout.WriteString("\n"); err != nil {
+			return errors.Wrap(err, "write lock to stdout")
+		}
+	default:
+		if err := os.Rename(out.scratch, out.path); err != nil {
+			return errors.Wrapf(err, "db %s is in place, but rename %s to %s", options.dbpath, out.scratch, out.path)
+		}
+		slog.Info("Wrote lock", slog.String("path", out.path))
 	}
 
 	return nil
 }
 
-// writeLock writes lock to path ("-" writes stdout) as indented JSON. It
-// writes a scratch file next to path and renames it over path, so path, which
-// may be the lock the build read, is either left as it was or replaced as a
-// whole.
-func writeLock(path string, lock Lock) error {
-	if path == "-" {
-		if err := json.MarshalWrite(os.Stdout, lock, jsontext.WithIndent("  ")); err != nil {
-			return errors.Wrap(err, "marshal lock")
+// lockOutput is where WithWriteLock's lock goes: a scratch file next to path,
+// renamed over path once the db is in place, so path is either left as it was
+// or replaced as a whole.
+type lockOutput struct {
+	path    string
+	scratch string
+	mode    os.FileMode
+}
+
+// prepareLock settles where the lock given as path is written, and fails for
+// a place it cannot go to, so that this shows before the build rather than
+// after every source. The lock goes to path, or to the file a symlink at path
+// points to, so that a lock read through a symlink is updated where it lives.
+// Its directory is made, as the db's is. A directory is refused, and so is the
+// db path (compared after resolving both, so "./vuls.db", an absolute path or
+// a symlinked directory cannot pass for another file). The scratch file is
+// created here, so a directory that cannot be written to fails here too. An
+// existing file keeps its mode; a new one gets 0644.
+func prepareLock(path, dbpath string) (lockOutput, error) {
+	out := lockOutput{path: path, mode: 0o644}
+	if fi, err := os.Lstat(path); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			if out.path, err = filepath.EvalSymlinks(path); err != nil {
+				return lockOutput{}, errors.Wrapf(err, "resolve %s", path)
+			}
+			if fi, err = os.Stat(out.path); err != nil {
+				return lockOutput{}, errors.Wrapf(err, "stat %s", out.path)
+			}
 		}
-		if _, err := os.Stdout.WriteString("\n"); err != nil {
-			return errors.Wrap(err, "write stdout")
+		if fi.IsDir() {
+			return lockOutput{}, errors.Errorf("%s is a directory", path)
 		}
-		return nil
+		out.mode = fi.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return lockOutput{}, errors.Wrapf(err, "lstat %s", path)
 	}
 
-	f, err := os.CreateTemp(filepath.Dir(path), fmt.Sprintf(".%s.*", filepath.Base(path)))
+	dir, base := filepath.Split(out.path)
+	if dir == "" {
+		dir = "."
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return lockOutput{}, errors.Wrapf(err, "mkdir %s", dir)
+	}
+	dir, err := realDir(dir)
 	if err != nil {
-		return errors.Wrapf(err, "create scratch file next to %s", path)
+		return lockOutput{}, errors.Wrapf(err, "resolve the directory of %s", path)
 	}
-	defer func() {
-		if err := os.Remove(f.Name()); err != nil && !os.IsNotExist(err) {
-			slog.Warn("Failed to remove scratch lock", slog.String("path", f.Name()), slog.String("err", err.Error()))
-		}
-	}()
+	out.path = filepath.Join(dir, base)
+	dbdir, dbbase := filepath.Split(dbpath)
+	if dbdir == "" {
+		dbdir = "."
+	}
+	if dbdir, err = realDir(dbdir); err != nil {
+		return lockOutput{}, errors.Wrapf(err, "resolve the directory of %s", dbpath)
+	}
+	if out.path == filepath.Join(dbdir, dbbase) {
+		return lockOutput{}, errors.Errorf("%s is the db path", path)
+	}
 
+	f, err := os.CreateTemp(dir, fmt.Sprintf(".%s.*", base))
+	if err != nil {
+		return lockOutput{}, errors.Wrapf(err, "create scratch file in %s", dir)
+	}
+	if err := f.Close(); err != nil {
+		if rerr := os.Remove(f.Name()); rerr != nil {
+			slog.Warn("Failed to remove scratch lock", slog.String("path", f.Name()), slog.String("err", rerr.Error()))
+		}
+		return lockOutput{}, errors.Wrapf(err, "close %s", f.Name())
+	}
+	out.scratch = f.Name()
+	return out, nil
+}
+
+// realDir returns dir as an absolute path with every symlink resolved.
+func realDir(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", errors.Wrapf(err, "abs %s", dir)
+	}
+	return filepath.EvalSymlinks(abs)
+}
+
+// write writes lock to the scratch file as indented JSON and syncs it.
+func (o lockOutput) write(lock Lock) error {
+	f, err := os.OpenFile(o.scratch, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return errors.Wrapf(err, "open %s", o.scratch)
+	}
 	if err := json.MarshalWrite(f, lock, jsontext.WithIndent("  ")); err != nil {
 		_ = f.Close()
 		return errors.Wrap(err, "marshal lock")
 	}
 	if _, err := f.WriteString("\n"); err != nil {
 		_ = f.Close()
-		return errors.Wrapf(err, "write %s", f.Name())
+		return errors.Wrapf(err, "write %s", o.scratch)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return errors.Wrapf(err, "sync %s", o.scratch)
 	}
 	if err := f.Close(); err != nil {
-		return errors.Wrapf(err, "close %s", f.Name())
+		return errors.Wrapf(err, "close %s", o.scratch)
 	}
-	if err := os.Chmod(f.Name(), 0o644); err != nil {
-		return errors.Wrapf(err, "chmod %s", f.Name())
-	}
-	if err := os.Rename(f.Name(), path); err != nil {
-		return errors.Wrapf(err, "rename %s to %s", f.Name(), path)
+	if err := os.Chmod(o.scratch, o.mode); err != nil {
+		return errors.Wrapf(err, "chmod %s", o.scratch)
 	}
 	return nil
 }
@@ -385,33 +473,41 @@ func checkout(workdir string, s Source) (string, sourceTypes.SourceID, string, e
 	}
 	root := filepath.Join(workdir, ref.Reference.Registry, ref.Reference.Repository, ref.Reference.Reference)
 
-	// A source without a commit is checked out at its branch by full ref
-	// name, so that a tag or a commit spelled like the branch cannot stand
-	// in for it, and the commit is read back from that ref.
-	revision, at := s.Commit, s.Commit
-	if revision == "" {
-		revision, at = fmt.Sprintf("refs/heads/%s", s.Branch), fmt.Sprintf("the head of branch %s", s.Branch)
+	// A source without a commit is checked out at its branch, which pull
+	// switches to when refs/heads/<branch> exists, and its commit is read
+	// back from that ref. When the branch is missing, pull falls back to a
+	// tag or a commit of that name, which the ref does not resolve to.
+	checkoutAt, revision, at := s.Commit, s.Commit, s.Commit
+	if s.Commit == "" {
+		checkoutAt, revision, at = s.Branch, fmt.Sprintf("refs/heads/%s", s.Branch), fmt.Sprintf("the head of branch %s", s.Branch)
 	}
 
 	slog.Info("Pull", slog.String("name", s.Name), slog.String("repository", s.Repository), slog.String("branch", s.Branch), slog.String("commit", s.Commit))
 	start := time.Now()
-	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(revision), pull.WithRestore(true)); err != nil {
+	if err := pull.Pull(s.Repository, pull.WithDir(workdir), pull.WithCheckout(checkoutAt), pull.WithRestore(true)); err != nil {
 		return "", "", "", errors.Wrapf(err, "pull %s at %s", s.Repository, at)
 	}
 	c, err := show.Show(root, revision)
 	if err != nil {
 		return "", "", "", errors.Wrapf(err, "show %s in %s", revision, s.Repository)
 	}
-	if err := contains.Contains(root, c.Hash, contains.WithBranch(s.Branch)); err != nil {
-		return "", "", "", errors.Wrapf(err, "check %s is on %s in %s", c.Hash, s.Branch, s.Repository)
+	// A pinned commit is checked as the lock spells it, so that a hash
+	// which only resolves to a commit, such as an annotated tag's, is
+	// refused rather than built at that commit.
+	commit := s.Commit
+	if commit == "" {
+		commit = c.Hash
 	}
-	id, err := stampDataSource(filepath.Join(root, "datasource.json"), c.Hash, c.AuthorTime)
+	if err := contains.Contains(root, commit, contains.WithBranch(s.Branch)); err != nil {
+		return "", "", "", errors.Wrapf(err, "check %s is on %s in %s", commit, s.Branch, s.Repository)
+	}
+	id, err := stampDataSource(filepath.Join(root, "datasource.json"), commit, c.AuthorTime)
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "stamp datasource.json")
 	}
-	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.String("commit", c.Hash), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
+	slog.Info("Pulled", slog.String("name", s.Name), slog.String("id", string(id)), slog.String("commit", commit), slog.Duration("elapsed", time.Since(start).Round(time.Millisecond)))
 
-	return root, id, c.Hash, nil
+	return root, id, commit, nil
 }
 
 // stampDataSource records the checked-out commit and its date as the
