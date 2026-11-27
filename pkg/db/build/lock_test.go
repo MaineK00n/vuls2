@@ -282,6 +282,24 @@ func TestReadLock(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "hold in another case",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "Hold": true}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
+			name: "duplicate hold",
+			in: `{
+				"sources": [
+					{"name": "alma-errata", "repository": "ghcr.io/vulsio/vuls-data-db:vuls-data-extracted-alma-errata", "branch": "nightly", "commit": "0123456789abcdef0123456789abcdef01234567", "hold": true, "hold": false}
+				]
+			}`,
+			wantErr: true,
+		},
+		{
 			name: "no sources",
 			in: `{
 				"sources": [
